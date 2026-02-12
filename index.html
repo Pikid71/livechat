@@ -14,12 +14,99 @@
             align-items: center;
             padding: 20px;
             min-height: 100vh;
-            animation: bgGlow 15s ease-in-out infinite;
+            transition: all 0.5s ease;
         }
-
-        @keyframes bgGlow {
-            0%, 100% { background: linear-gradient(135deg, #0a0a0a 0%, #1a0a2e 100%); }
-            50% { background: linear-gradient(135deg, #0f0f1e 0%, #2a0a3e 100%); }
+        
+        /* EFFECT STYLES */
+        body.glitch {
+            animation: glitch 0.3s infinite;
+        }
+        
+        @keyframes glitch {
+            0% { transform: translate(0); filter: hue-rotate(0deg); }
+            20% { transform: translate(-5px, 3px); filter: hue-rotate(90deg); }
+            40% { transform: translate(5px, -3px); filter: hue-rotate(180deg); }
+            60% { transform: translate(-3px, 5px); filter: hue-rotate(270deg); }
+            80% { transform: translate(3px, -5px); filter: hue-rotate(360deg); }
+            100% { transform: translate(0); filter: hue-rotate(0deg); }
+        }
+        
+        body.flashbang {
+            background: white !important;
+            transition: background 0.1s;
+        }
+        
+        body.flashbang #chat-container,
+        body.flashbang .header,
+        body.flashbang #input-area {
+            background: white !important;
+            color: black !important;
+            border-color: black !important;
+        }
+        
+        body.black {
+            background: black !important;
+        }
+        
+        body.black #chat-container {
+            opacity: 0.8;
+        }
+        
+        body.firework {
+            position: relative;
+        }
+        
+        body.firework::after {
+            content: "🎆 🎇 ✨";
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 100px;
+            animation: firework 2s ease-out;
+            pointer-events: none;
+        }
+        
+        @keyframes firework {
+            0% { opacity: 0; transform: translate(-50%, -50%) scale(0.1); }
+            50% { opacity: 1; transform: translate(-50%, -50%) scale(1.5); }
+            100% { opacity: 0; transform: translate(-50%, -50%) scale(2); }
+        }
+        
+        body.gameroom {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        }
+        
+        body.gameroom #chat-container {
+            border: 4px solid #ffd700;
+            box-shadow: 0 0 30px #ffd700;
+        }
+        
+        .confetti {
+            position: fixed;
+            width: 10px;
+            height: 10px;
+            background: #ffd700;
+            position: fixed;
+            animation: confetti-fall 3s ease-out forwards;
+            pointer-events: none;
+            z-index: 9999;
+        }
+        
+        @keyframes confetti-fall {
+            0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+        }
+        
+        .admin-badge {
+            background: #ffd700;
+            color: #000;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: bold;
+            margin-left: 8px;
+            display: inline-block;
         }
         
         #chat-container { 
@@ -34,6 +121,7 @@
             display: flex;
             flex-direction: column;
             animation: slideUp 0.6s ease-out;
+            transition: all 0.3s ease;
         }
 
         @keyframes slideUp {
@@ -97,7 +185,6 @@
             flex-direction: column;
             align-items: flex-start;
             width: 100%;
-            transition: color 0.2s;
         }
 
         .msg-wrapper.mine {
@@ -127,6 +214,29 @@
             border: 1px solid rgba(100, 100, 120, 0.3);
             transition: all 0.2s;
             color: #e0e0e0;
+            position: relative;
+        }
+
+        .msg.admin-message {
+            border: 2px solid #ffd700;
+            background: #5a4a7e;
+        }
+
+        .msg.admin-message::before {
+            content: "👑";
+            position: absolute;
+            top: -10px;
+            left: -10px;
+            font-size: 16px;
+            background: #ffd700;
+            color: black;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid white;
         }
 
         .msg:hover { 
@@ -258,12 +368,6 @@
             border-radius: 8px;
             transition: all 0.2s;
             text-align: center;
-            animation: fadeIn 0.3s ease-out;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
         }
 
         .emoji-item:hover { 
@@ -310,14 +414,14 @@
             box-shadow: 0 7px 25px rgba(220, 38, 38, 0.5);
         }
 
-        .admin-badge {
+        .admin-tag {
             background: #ffd700;
             color: #000;
-            padding: 2px 8px;
-            border-radius: 12px;
+            padding: 2px 6px;
+            border-radius: 4px;
             font-size: 10px;
             font-weight: bold;
-            margin-left: 8px;
+            margin-left: 5px;
         }
 
         @media (max-width: 600px) {
@@ -349,7 +453,7 @@
                     </div>
                 </div>
 
-                <!-- Register Form (hidden by default) -->
+                <!-- Register Form -->
                 <div id="registerForm" style="display: none; background: #222; padding: 25px; border-radius: 12px; border: 1px solid #333;">
                     <div style="font-weight: bold; margin-bottom: 15px; font-size: 16px; color: #ccc; text-align: center;">Register</div>
                     <div style="display: flex; flex-direction: column; gap: 12px;">
@@ -369,8 +473,8 @@
     <!-- Room Selection Screen -->
     <div id="room-screen" style="display: none; flex-direction: column; height: 100%;">
         <div class="header" style="flex-shrink: 0; justify-content: space-between;">
-            <h1>💬 Black Hole Chat</h1>
-            <button onclick="handleLogout()" style="background: #c0392b; padding: 8px 15px; font-size: 12px; font-weight: bold; border-radius: 6px;">Logout: <span id="loggedInUsername">User</span></button>
+            <h1>💬 Black Hole Chat <span id="admin-indicator-header" style="display: none;" class="admin-badge">ADMIN</span></h1>
+            <button onclick="handleLogout()" style="background: #c0392b; padding: 8px 15px; font-size: 12px; font-weight: bold; border-radius: 6px;">Logout: <span id="loggedInUsername">User</span><span id="admin-badge-logout" style="display: none;" class="admin-tag">ADMIN</span></button>
         </div>
         
         <div id="room-content" style="flex: 1; overflow-y: auto; padding: 20px; background: #0f0f0f;">
@@ -404,12 +508,13 @@
             <div class="user-info">
                 <span class="status-dot"></span>
                 <span id="username-display">User</span>
+                <span id="admin-badge-chat" style="display: none;" class="admin-badge">ADMIN</span>
             </div>
         </div>
         <div id="messages" style="flex: 1; overflow-y: auto; padding: 20px; background: #0f0f0f; display: flex; flex-direction: column; gap: 12px;"></div>
         <div id="input-area">
             <div class="input-row">
-                <input id="messageInput" placeholder="Type a message..." autocomplete="off">
+                <input id="messageInput" placeholder="Type a message... (/help for commands)" autocomplete="off">
                 <button class="emoji-btn" onclick="toggleEmojiPanel()" title="Emoji">😊</button>
                 <button onclick="sendMessage()" style="min-width: 70px;">Send</button>
             </div>
@@ -423,31 +528,10 @@
 
 <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 <script>
-    // Admin password (same for all admin functions)
-    const ADMIN_PASSWORD = 'A@sh1shlivechat';
-
-    // Cookie management functions
-    function setCookie(name, value, days = 30) {
-        const d = new Date();
-        d.setTime(d.getTime() + (days * 24 * 60 * 60 * 1000));
-        const expires = "expires=" + d.toUTCString();
-        document.cookie = name + "=" + value + ";" + expires + ";path=/";
-    }
-
-    function getCookie(name) {
-        const nameEQ = name + "=";
-        const ca = document.cookie.split(';');
-        for (let i = 0; i < ca.length; i++) {
-            let c = ca[i].trim();
-            if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
-        }
-        return "";
-    }
-
-    function deleteCookie(name) {
-        document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;";
-    }
-
+    // ============================================
+    // 🎮 BLACK HOLE CHAT - CLIENT
+    // ============================================
+    
     const socket = io();
     const msgContainer = document.getElementById('messages');
     const input = document.getElementById('messageInput');
@@ -462,9 +546,10 @@
 
     let currentUsername = 'User';
     let currentRoom = null;
+    let isAdmin = false;
     const bannedUsers = {};
 
-    // Emojis
+    // ========== EMOJIS ==========
     const emojis = ['😀', '😂', '😍', '🥰', '😎', '🤔', '😢', '🎉', '👍', '❤️', '🔥', '✨', '🌟', '💯', '😱', '🤯', '🎊', '🎈', '🚀', '💪', '😘', '🙏', '👏', '🎵', '🍕', '🍔', '🍉', '🎮'];
 
     // Load emojis
@@ -484,7 +569,7 @@
         input.focus();
     }
 
-    // Form switching
+    // ========== AUTH UI ==========
     function switchToRegister() {
         document.getElementById('loginForm').style.display = 'none';
         document.getElementById('registerForm').style.display = 'block';
@@ -503,7 +588,7 @@
         authMessage.style.display = 'block';
     }
 
-    // Login handler
+    // ========== AUTH HANDLERS ==========
     function handleLogin() {
         const username = document.getElementById('loginUsername').value.trim();
         const password = document.getElementById('loginPassword').value;
@@ -516,7 +601,6 @@
         socket.emit('login', { username, password });
     }
 
-    // Register handler
     function handleRegister() {
         const username = document.getElementById('regUsername').value.trim();
         const password = document.getElementById('regPassword').value;
@@ -535,27 +619,34 @@
         socket.emit('register', { username, password });
     }
 
-    // Logout handler
     function handleLogout() {
         if (currentRoom) {
             socket.emit('leave_room');
         }
         socket.emit('logout');
-        deleteCookie('black-hole_username');
         currentUsername = 'User';
         currentRoom = null;
+        isAdmin = false;
         authScreen.style.display = 'flex';
         roomScreen.style.display = 'none';
         chatScreen.style.display = 'none';
         switchToLogin();
     }
 
-    // Auth event listeners
+    // ========== SOCKET AUTH EVENTS ==========
     socket.on('auth_success', (data) => {
         currentUsername = data.username;
+        isAdmin = data.isAdmin || false;
+        
         loggedInUsernameDisplay.textContent = data.username;
         usernameDisplay.textContent = data.username;
-        setCookie('black-hole_username', data.username);
+        
+        // Show admin badges
+        if (isAdmin) {
+            document.getElementById('admin-indicator-header').style.display = 'inline';
+            document.getElementById('admin-badge-logout').style.display = 'inline';
+            document.getElementById('admin-badge-chat').style.display = 'inline';
+        }
         
         showAuthMessage(data.message, false);
         setTimeout(() => {
@@ -565,20 +656,28 @@
         }, 500);
     });
 
+    socket.on('auth_error', (data) => {
+        showAuthMessage(data.message);
+    });
+
     socket.on('logged_out', () => {
-        deleteCookie('black-hole_username');
         currentUsername = 'User';
+        isAdmin = false;
         authScreen.style.display = 'flex';
         roomScreen.style.display = 'none';
         chatScreen.style.display = 'none';
         switchToLogin();
     });
 
-    socket.on('auth_error', (data) => {
-        showAuthMessage(data.message);
+    socket.on('admin_granted', (data) => {
+        isAdmin = true;
+        document.getElementById('admin-indicator-header').style.display = 'inline';
+        document.getElementById('admin-badge-logout').style.display = 'inline';
+        document.getElementById('admin-badge-chat').style.display = 'inline';
+        addSystemMessage('👑 ' + data.message);
     });
 
-    // Load rooms
+    // ========== ROOMS ==========
     function loadRooms() {
         socket.emit('get_rooms');
     }
@@ -592,8 +691,6 @@
         rooms.forEach(room => {
             const roomDiv = document.createElement('div');
             roomDiv.style.cssText = 'background: #222; padding: 15px; border-radius: 8px; border: 1px solid #444; cursor: pointer; transition: all 0.2s; display: flex; justify-content: space-between; align-items: center;';
-            roomDiv.onmouseover = () => roomDiv.style.background = '#2a2a2a';
-            roomDiv.onmouseout = () => roomDiv.style.background = '#222';
             
             const info = document.createElement('div');
             info.innerHTML = `
@@ -620,7 +717,7 @@
             btnContainer.style.cssText = 'display: flex; gap: 5px;';
             btnContainer.appendChild(button);
             
-            // Show delete button for all rooms except Main
+            // Show delete button for all rooms except Main (admins can delete any room)
             if (room.name !== 'Main') {
                 const deleteButton = document.createElement('button');
                 deleteButton.textContent = '🗑️ Delete';
@@ -639,12 +736,15 @@
         });
     });
 
-    // Delete room with admin password
     function deleteRoom(roomName) {
-        const password = prompt(`Enter admin password to delete "${roomName}":`);
-        if (password === null) return;
-        
-        socket.emit('delete_room', { roomName, password });
+        if (isAdmin) {
+            // Admins don't need password
+            socket.emit('delete_room', { roomName, password: '' });
+        } else {
+            const password = prompt(`Enter admin password to delete "${roomName}":`);
+            if (password === null) return;
+            socket.emit('delete_room', { roomName, password });
+        }
     }
 
     socket.on('room_created', () => loadRooms());
@@ -679,6 +779,14 @@
         alert('Error: ' + data.message);
     });
 
+    socket.on('command_error', (data) => {
+        addSystemMessage(data.message);
+    });
+
+    socket.on('command_success', (data) => {
+        addSystemMessage(data.message);
+    });
+
     socket.on('joined_room', (data) => {
         currentRoom = data.roomName;
         usernameDisplay.textContent = data.username;
@@ -693,7 +801,7 @@
     socket.on('room_history', (data) => {
         msgContainer.innerHTML = '';
         data.messages.forEach(msg => {
-            addMessage(msg.username, msg.message);
+            addMessage(msg.username, msg.message, msg.isAdmin);
         });
     });
 
@@ -710,10 +818,10 @@
     });
 
     socket.on('chat message', (data) => {
-        addMessage(data.username, data.message);
+        addMessage(data.username, data.message, data.isAdmin);
     });
 
-    function addMessage(username, message) {
+    function addMessage(username, message, isAdminMsg = false) {
         const wrapper = document.createElement('div');
         wrapper.className = 'msg-wrapper';
         if (username === currentUsername) {
@@ -723,6 +831,9 @@
         const userLabel = document.createElement('div');
         userLabel.className = 'msg-username';
         userLabel.textContent = username;
+        if (isAdminMsg) {
+            userLabel.innerHTML += ' <span class="admin-tag">ADMIN</span>';
+        }
         wrapper.appendChild(userLabel);
         
         const item = document.createElement('div');
@@ -732,6 +843,9 @@
         }
         if (username === 'System') {
             item.classList.add('system');
+        }
+        if (isAdminMsg) {
+            item.classList.add('admin-message');
         }
         item.textContent = message;
         wrapper.appendChild(item);
@@ -753,6 +867,52 @@
         msgContainer.scrollTop = msgContainer.scrollHeight;
     }
 
+    // ========== EFFECTS ==========
+    socket.on('room_effect', (data) => {
+        addSystemMessage(`✨ Admin ${data.triggeredBy} triggered effect: ${data.effect}`);
+        
+        switch(data.effect) {
+            case 'glitch':
+                document.body.classList.add('glitch');
+                setTimeout(() => document.body.classList.remove('glitch'), 5000);
+                break;
+            case 'flashbang':
+                document.body.classList.add('flashbang');
+                setTimeout(() => document.body.classList.remove('flashbang'), 1000);
+                break;
+            case 'black':
+                document.body.classList.add('black');
+                setTimeout(() => document.body.classList.remove('black'), 5000);
+                break;
+            case 'firework':
+                document.body.classList.add('firework');
+                setTimeout(() => document.body.classList.remove('firework'), 2000);
+                break;
+            case 'gameroom':
+                document.body.classList.add('gameroom');
+                setTimeout(() => document.body.classList.remove('gameroom'), 10000);
+                break;
+            case 'confetti':
+                for (let i = 0; i < 100; i++) {
+                    createConfetti();
+                }
+                break;
+        }
+    });
+
+    function createConfetti() {
+        const confetti = document.createElement('div');
+        confetti.className = 'confetti';
+        confetti.style.left = Math.random() * 100 + 'vw';
+        confetti.style.background = `hsl(${Math.random() * 360}, 100%, 50%)`;
+        confetti.style.animationDelay = Math.random() * 2 + 's';
+        confetti.style.width = Math.random() * 10 + 5 + 'px';
+        confetti.style.height = Math.random() * 10 + 5 + 'px';
+        document.body.appendChild(confetti);
+        setTimeout(() => confetti.remove(), 3000);
+    }
+
+    // ========== MESSAGES ==========
     function sendMessage() {
         if (input.value.trim()) {
             const messageText = input.value;
@@ -767,26 +927,14 @@
             const messageData = { username: currentUsername, message: messageText };
             socket.emit('chat message', messageData);
             
-            const wrapper = document.createElement('div');
-            wrapper.className = 'msg-wrapper mine';
-            
-            const userLabel = document.createElement('div');
-            userLabel.className = 'msg-username';
-            userLabel.textContent = currentUsername;
-            wrapper.appendChild(userLabel);
-            
-            const item = document.createElement('div');
-            item.className = 'msg mine';
-            item.textContent = messageText;
-            wrapper.appendChild(item);
-            
-            msgContainer.appendChild(wrapper);
+            addMessage(currentUsername, messageText, isAdmin);
             input.value = '';
             emojiPanel.classList.remove('show');
             msgContainer.scrollTop = msgContainer.scrollHeight;
         }
     }
 
+    // ========== COMMANDS ==========
     function handleCommand(commandText) {
         const parts = commandText.split(' ');
         const command = parts[0].toLowerCase();
@@ -814,36 +962,52 @@
             case '/delete':
                 handleDeleteCommand(args);
                 break;
+            case '/admin':
+                handleAdminCommand(args);
+                break;
+            case '/effect':
+                handleEffectCommand(args);
+                break;
             default:
                 addSystemMessage(`Unknown command: ${command}. Type /help for available commands.`);
         }
     }
 
     function showCommandHelp() {
-        const helpText = `
-🔹 **AVAILABLE COMMANDS** 🔹
+        let helpText = `🔹 **AVAILABLE COMMANDS** 🔹
 
 /help - Show this help message
 
-/clear <admin_password> - Clear all messages in current room
+/clear <password> - Clear all messages (no password needed for admins)
 
 /flip - Flip a coin (heads/tails)
 
 /roll <min> <max> - Roll a random number
 
-/ban <username> <duration> <admin_password> - Ban user (duration: 10m, 1h, 1d, etc.)
+/ban <username> [duration] <password> - Ban user (no password for admins)
+      Duration: 10m, 1h, 1d (default: 10m)
 
-/unban <username> <admin_password> - Unban user
+/unban <username> <password> - Unban user (no password for admins)
 
-/delete <room_name> <admin_password> - Delete any room
+/delete <room_name> <password> - Delete any room (no password for admins)
 
-⚡ Admin Password: ${ADMIN_PASSWORD}
-        `.trim();
+/admin <username> <ADMIN_PASSWORD> - Grant admin status to a user`;
+
+        // Admin-only commands
+        if (isAdmin) {
+            helpText += `
+
+🔸 **ADMIN COMMANDS** 🔸
+
+/effect <effect> - Trigger visual effect
+      Effects: glitch, flashbang, black, firework, gameroom, confetti`;
+        }
+
         addSystemMessage(helpText);
     }
 
     function handleClearCommand(args) {
-        if (args.length === 0) {
+        if (args.length === 0 && !isAdmin) {
             addSystemMessage('Usage: /clear <admin_password>');
             return;
         }
@@ -853,8 +1017,9 @@
 
     function handleFlipCommand() {
         const result = Math.random() < 0.5 ? 'HEADS' : 'TAILS';
-        addSystemMessage(`🪙 ${currentUsername} flipped a coin... ${result}!`);
-        socket.emit('chat message', { username: 'System', message: `🪙 ${currentUsername} flipped a coin... ${result}!` });
+        const message = `🪙 ${currentUsername} flipped a coin... ${result}!`;
+        socket.emit('chat message', { username: 'System', message });
+        addMessage('System', message);
     }
 
     function handleRollCommand(args) {
@@ -877,14 +1042,14 @@
         }
 
         const result = Math.floor(Math.random() * (max - min + 1)) + min;
-        addSystemMessage(`🎲 ${currentUsername} rolled a number... ${result}!`);
-        socket.emit('chat message', { username: 'System', message: `🎲 ${currentUsername} rolled a number... ${result}!` });
+        const message = `🎲 ${currentUsername} rolled a number... ${result}!`;
+        socket.emit('chat message', { username: 'System', message });
+        addMessage('System', message);
     }
 
     function handleBanCommand(args) {
-        if (args.length < 2) {
-            addSystemMessage('Usage: /ban <username> [duration] <admin_password>');
-            addSystemMessage('Duration: 10m (10 minutes), 1h (1 hour), 1d (1 day)');
+        if (args.length < 1) {
+            addSystemMessage('Usage: /ban <username> [duration] <password>');
             return;
         }
 
@@ -892,21 +1057,30 @@
         let duration = '10m';
         let password = '';
 
-        if (args.length === 2) {
-            password = args[1];
-        } else {
-            const possibleDuration = args[1];
-            if (/^\d+[hmd]?$/.test(possibleDuration)) {
-                duration = possibleDuration;
-                password = args.slice(2).join(' ');
-            } else {
-                password = args.slice(1).join(' ');
+        if (isAdmin) {
+            // Admins don't need password
+            if (args.length >= 2) {
+                const possibleDuration = args[1];
+                if (/^\d+[hmd]?$/.test(possibleDuration)) {
+                    duration = possibleDuration;
+                }
             }
-        }
-
-        if (password !== ADMIN_PASSWORD) {
-            addSystemMessage('❌ Incorrect admin password');
-            return;
+            password = '';
+        } else {
+            if (args.length === 2) {
+                password = args[1];
+            } else if (args.length >= 3) {
+                const possibleDuration = args[1];
+                if (/^\d+[hmd]?$/.test(possibleDuration)) {
+                    duration = possibleDuration;
+                    password = args.slice(2).join(' ');
+                } else {
+                    password = args.slice(1).join(' ');
+                }
+            } else {
+                addSystemMessage('Usage: /ban <username> [duration] <password>');
+                return;
+            }
         }
 
         socket.emit('ban_user', { 
@@ -919,17 +1093,22 @@
     }
 
     function handleUnbanCommand(args) {
-        if (args.length < 2) {
-            addSystemMessage('Usage: /unban <username> <admin_password>');
+        if (args.length < 1) {
+            addSystemMessage('Usage: /unban <username> <password>');
             return;
         }
 
         const targetUser = args[0];
-        const password = args.slice(1).join(' ');
+        let password = '';
 
-        if (password !== ADMIN_PASSWORD) {
-            addSystemMessage('❌ Incorrect admin password');
-            return;
+        if (isAdmin) {
+            password = '';
+        } else {
+            if (args.length < 2) {
+                addSystemMessage('Usage: /unban <username> <password>');
+                return;
+            }
+            password = args.slice(1).join(' ');
         }
 
         socket.emit('unban_user', { 
@@ -941,22 +1120,55 @@
     }
 
     function handleDeleteCommand(args) {
-        if (args.length < 2) {
-            addSystemMessage('Usage: /delete <room_name> <admin_password>');
+        if (args.length < 1) {
+            addSystemMessage('Usage: /delete <room_name> <password>');
             return;
         }
 
         const roomName = args[0];
-        const password = args.slice(1).join(' ');
+        let password = '';
 
-        if (password !== ADMIN_PASSWORD) {
-            addSystemMessage('❌ Incorrect admin password');
-            return;
+        if (isAdmin) {
+            password = '';
+        } else {
+            if (args.length < 2) {
+                addSystemMessage('Usage: /delete <room_name> <password>');
+                return;
+            }
+            password = args.slice(1).join(' ');
         }
 
         socket.emit('delete_room', { roomName, password });
     }
 
+    function handleAdminCommand(args) {
+        if (args.length < 2) {
+            addSystemMessage('Usage: /admin <username> <ADMIN_PASSWORD>');
+            return;
+        }
+
+        const targetUser = args[0];
+        const password = args.slice(1).join(' ');
+
+        socket.emit('make_admin', { username: targetUser, password });
+    }
+
+    function handleEffectCommand(args) {
+        if (!isAdmin) {
+            addSystemMessage('❌ This command is for admins only!');
+            return;
+        }
+
+        if (args.length < 1) {
+            addSystemMessage('Usage: /effect <glitch|flashbang|black|firework|gameroom|confetti>');
+            return;
+        }
+
+        const effect = args[0].toLowerCase();
+        socket.emit('effect_command', { effect, roomName: currentRoom });
+    }
+
+    // ========== ROOM MANAGEMENT ==========
     function leaveRoom() {
         socket.emit('leave_room');
         currentRoom = null;
@@ -965,7 +1177,7 @@
         loadRooms();
     }
 
-    // Event listeners for room deletion
+    // ========== EVENT LISTENERS ==========
     socket.on('room_deleted_by_owner', (data) => {
         addSystemMessage(`🗑️ Room "${data.roomName}" has been deleted by admin`);
         if (currentRoom === data.roomName) {
@@ -977,7 +1189,7 @@
 
     socket.on('messages_cleared', () => {
         msgContainer.innerHTML = '';
-        addSystemMessage('🧹 All messages have been cleared by admin');
+        addSystemMessage('🧹 All messages have been cleared');
     });
 
     socket.on('user_banned', (data) => {
@@ -998,12 +1210,11 @@
         bannedUsers[currentRoom] = bannedUsers[currentRoom].filter(b => b.user !== data.bannedUser);
         bannedUsers[currentRoom].push({ user: data.bannedUser, expiresAt });
         
-        addSystemMessage(`⛔ ${data.bannedUser} has been banned for ${data.duration || '10m'}`);
-        
         if (data.bannedUser === currentUsername) {
+            addSystemMessage(`⛔ You have been banned from this room for ${data.duration || '10m'}`);
             setTimeout(() => {
                 leaveRoom();
-            }, 1000);
+            }, 2000);
         }
     });
 
@@ -1023,7 +1234,7 @@
         }
     });
 
-    // Enter key to send
+    // ========== UI EVENT LISTENERS ==========
     input.addEventListener("keypress", (e) => { 
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
@@ -1031,7 +1242,6 @@
         }
     });
 
-    // Close emoji panel when clicking outside
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.emoji-btn') && !e.target.closest('.emoji-panel')) {
             emojiPanel.classList.remove('show');
@@ -1045,13 +1255,25 @@
     document.getElementById('regPassword').addEventListener('keypress', (e) => { if (e.key === 'Enter') handleRegister(); });
     document.getElementById('regConfirmPassword').addEventListener('keypress', (e) => { if (e.key === 'Enter') handleRegister(); });
 
-    // Check for saved session
+    // ========== INITIAL CONNECTION ==========
     socket.on('connect', () => {
-        const savedUsername = getCookie('black-hole_username');
-        if (savedUsername) {
-            currentUsername = savedUsername;
-            loggedInUsernameDisplay.textContent = savedUsername;
-            usernameDisplay.textContent = savedUsername;
+        console.log('Connected to server');
+        socket.emit('check_auth');
+    });
+
+    socket.on('auth_status', (data) => {
+        if (data.authenticated) {
+            currentUsername = data.username;
+            isAdmin = data.isAdmin || false;
+            loggedInUsernameDisplay.textContent = data.username;
+            usernameDisplay.textContent = data.username;
+            
+            if (isAdmin) {
+                document.getElementById('admin-indicator-header').style.display = 'inline';
+                document.getElementById('admin-badge-logout').style.display = 'inline';
+                document.getElementById('admin-badge-chat').style.display = 'inline';
+            }
+            
             authScreen.style.display = 'none';
             roomScreen.style.display = 'flex';
             loadRooms();

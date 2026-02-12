@@ -16,12 +16,21 @@ const io = new Server(server, {
 });
 
 // ============================================
-// 🔥 YOUR MONGODB ATLAS CONNECTION STRING
+// 🔐 ENVIRONMENT VARIABLES (NO PASSWORDS IN CODE!)
 // ============================================
-const MONGODB_URI = 'mongodb+srv://livechatdb:A%40sh1shmongodb@cluster0.j2qik61.mongodb.net/blackholechat?retryWrites=true&w=majority';
+const MONGODB_URI = process.env.MONGODB_URI;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const PORT = process.env.PORT || 3000;
 
-// Admin password (same for all admin functions)
-const ADMIN_PASSWORD = 'A@sh1shlivechat';
+// Validate environment variables
+if (!MONGODB_URI) {
+  console.error('❌ MONGODB_URI not set in .env file!');
+  process.exit(1);
+}
+if (!ADMIN_PASSWORD) {
+  console.error('❌ ADMIN_PASSWORD not set in .env file!');
+  process.exit(1);
+}
 
 // ============================================
 // 🔌 CONNECT TO MONGODB ATLAS
@@ -32,24 +41,23 @@ mongoose.connect(MONGODB_URI, {
 })
 .then(() => {
   console.log('✅✅✅ MONGODB ATLAS CONNECTED SUCCESSFULLY!');
-  console.log('💾 Database: blackholechat');
-  console.log('🌍 Cluster: cluster0.j2qik61.mongodb.net');
 })
 .catch(err => {
   console.error('❌❌❌ MONGODB CONNECTION FAILED:', err.message);
-  console.log('⚠️  Server will continue but data will NOT persist!');
+  process.exit(1);
 });
 
 // ============================================
 // 📊 MONGODB SCHEMAS
 // ============================================
 
-// User Schema
+// User Schema (with admin flag)
 const UserSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   createdAt: { type: Date, default: Date.now },
   lastLogin: { type: Date },
+  isAdmin: { type: Boolean, default: false }, // NEW: Admin flag
   isBanned: { type: Boolean, default: false }
 });
 
@@ -68,7 +76,8 @@ const MessageSchema = new mongoose.Schema({
   username: { type: String, required: true },
   message: { type: String, required: true },
   timestamp: { type: Date, default: Date.now },
-  isSystem: { type: Boolean, default: false }
+  isSystem: { type: Boolean, default: false },
+  isAdmin: { type: Boolean, default: false } // NEW: Admin badge
 });
 
 // Ban Schema
@@ -119,11 +128,11 @@ app.get('/stats', async (req, res) => {
   try {
     const stats = {
       users: await User.countDocuments(),
+      admins: await User.countDocuments({ isAdmin: true }),
       rooms: await Room.countDocuments(),
       messages: await Message.countDocuments(),
       activeBans: await Ban.countDocuments({ isActive: true, expiresAt: { $gt: new Date() } }),
       activeSessions: await Session.countDocuments(),
-      mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
       timestamp: new Date()
     };
     res.json(stats);
@@ -150,17 +159,34 @@ async function initializeDefaultRoom() {
         isDefault: true,
         createdBy: 'System'
       });
-      console.log('🏠 Default "Main" room created in MongoDB');
-    } else {
-      console.log('🏠 Default "Main" room already exists');
+      console.log('🏠 Default "Main" room created');
     }
   } catch (err) {
     console.error('Error creating default room:', err);
   }
 }
 
-// Run default room initialization
+// Create default admin user (for first time setup)
+async function createDefaultAdmin() {
+  try {
+    const adminExists = await User.findOne({ username: 'admin' });
+    if (!adminExists) {
+      await User.create({
+        username: 'admin',
+        password: ADMIN_PASSWORD, // Use same password for default admin
+        isAdmin: true,
+        lastLogin: new Date()
+      });
+      console.log('👑 Default admin user created (username: admin)');
+    }
+  } catch (err) {
+    console.error('Error creating default admin:', err);
+  }
+}
+
+// Run initializations
 initializeDefaultRoom();
+createDefaultAdmin();
 
 // ============================================
 // 🧹 CLEANUP EXPIRED BANS
@@ -216,10 +242,11 @@ io.on('connection', (socket) => {
         return;
       }
       
-      // Create user in MongoDB
+      // Create user in MongoDB (non-admin by default)
       await User.create({
         username,
         password,
+        isAdmin: false,
         lastLogin: new Date()
       });
       
@@ -230,7 +257,7 @@ io.on('connection', (socket) => {
       });
       
       socket.emit('auth_success', { username, message: 'Registration successful!' });
-      console.log('✅ User registered in MongoDB:', username);
+      console.log('✅ User registered:', username);
       
     } catch (err) {
       console.error('Registration error:', err);
@@ -260,6 +287,12 @@ io.on('connection', (socket) => {
         return;
       }
       
+      // Check if user is banned globally
+      if (user.isBanned) {
+        socket.emit('auth_error', { message: 'This account has been banned' });
+        return;
+      }
+      
       // Update last login
       user.lastLogin = new Date();
       await user.save();
@@ -270,12 +303,57 @@ io.on('connection', (socket) => {
         username
       });
       
-      socket.emit('auth_success', { username, message: 'Login successful!' });
-      console.log('✅ User logged in:', username);
+      // Send user data including admin status
+      socket.emit('auth_success', { 
+        username, 
+        isAdmin: user.isAdmin,
+        message: 'Login successful!' 
+      });
+      
+      console.log('✅ User logged in:', username, user.isAdmin ? '(ADMIN)' : '');
       
     } catch (err) {
       console.error('Login error:', err);
       socket.emit('auth_error', { message: 'Server error during login' });
+    }
+  });
+  
+  // /admin command - Make user admin (requires admin password)
+  socket.on('make_admin', async (data) => {
+    try {
+      const { username, password } = data;
+      
+      if (password !== ADMIN_PASSWORD) {
+        socket.emit('command_error', { message: '❌ Incorrect admin password' });
+        return;
+      }
+      
+      const user = await User.findOne({ username });
+      if (!user) {
+        socket.emit('command_error', { message: 'User not found' });
+        return;
+      }
+      
+      user.isAdmin = true;
+      await user.save();
+      
+      // If user is online, notify them
+      const userSession = await Session.findOne({ username });
+      if (userSession) {
+        io.to(userSession.socketId).emit('admin_granted', { 
+          message: '👑 You are now an admin!' 
+        });
+      }
+      
+      socket.emit('command_success', { 
+        message: `✅ ${username} is now an admin` 
+      });
+      
+      console.log(`👑 Admin granted to: ${username}`);
+      
+    } catch (err) {
+      console.error('Make admin error:', err);
+      socket.emit('command_error', { message: 'Failed to make admin' });
     }
   });
   
@@ -295,7 +373,12 @@ io.on('connection', (socket) => {
     try {
       const session = await Session.findOne({ socketId: socket.id });
       if (session) {
-        socket.emit('auth_status', { authenticated: true, username: session.username });
+        const user = await User.findOne({ username: session.username });
+        socket.emit('auth_status', { 
+          authenticated: true, 
+          username: session.username,
+          isAdmin: user ? user.isAdmin : false
+        });
       } else {
         socket.emit('auth_status', { authenticated: false });
       }
@@ -371,13 +454,20 @@ io.on('connection', (socket) => {
       await session.save();
       socket.join(roomName);
       
-      socket.emit('joined_room', { roomName, username: session.username });
+      const user = await User.findOne({ username: session.username });
+      
+      socket.emit('joined_room', { 
+        roomName, 
+        username: session.username,
+        isAdmin: user ? user.isAdmin : false
+      });
       
       // Notify others
       const roomSessions = await Session.find({ roomName });
       io.to(roomName).emit('user_joined', {
         username: session.username,
-        members: roomSessions.length
+        members: roomSessions.length,
+        isAdmin: user ? user.isAdmin : false
       });
       
       // System message
@@ -401,7 +491,7 @@ io.on('connection', (socket) => {
         members: 1
       });
       
-      console.log('🏠 Room created in MongoDB:', roomName, 'by', session.username);
+      console.log('🏠 Room created:', roomName, 'by', session.username);
       
     } catch (err) {
       console.error('Create room error:', err);
@@ -445,12 +535,33 @@ io.on('connection', (socket) => {
         return;
       }
       
-      // Join room
+      // Check if already in room - FIX: Leave old room first
+      if (session.roomName && session.roomName !== roomName) {
+        const oldRoom = session.roomName;
+        session.roomName = null;
+        await session.save();
+        socket.leave(oldRoom);
+        
+        // Notify old room
+        const oldRoomSessions = await Session.find({ roomName: oldRoom });
+        io.to(oldRoom).emit('user_left', {
+          username: session.username,
+          members: oldRoomSessions.length
+        });
+      }
+      
+      // Join new room
       session.roomName = roomName;
       await session.save();
       socket.join(roomName);
       
-      socket.emit('joined_room', { roomName, username: session.username });
+      const user = await User.findOne({ username: session.username });
+      
+      socket.emit('joined_room', { 
+        roomName, 
+        username: session.username,
+        isAdmin: user ? user.isAdmin : false
+      });
       
       // Send room history (last 50 messages)
       const recentMessages = await Message.find({ roomName })
@@ -462,7 +573,8 @@ io.on('connection', (socket) => {
         messages: recentMessages.map(msg => ({
           username: msg.username,
           message: msg.message,
-          timestamp: msg.timestamp.toLocaleTimeString()
+          timestamp: msg.timestamp.toLocaleTimeString(),
+          isAdmin: msg.isAdmin
         }))
       });
       
@@ -470,7 +582,8 @@ io.on('connection', (socket) => {
       const roomSessions = await Session.find({ roomName });
       io.to(roomName).emit('user_joined', {
         username: session.username,
-        members: roomSessions.length
+        members: roomSessions.length,
+        isAdmin: user ? user.isAdmin : false
       });
       
       // System message
@@ -495,7 +608,7 @@ io.on('connection', (socket) => {
     }
   });
   
-  // Leave room
+  // Leave room - FIX: Properly remove user and update counts
   socket.on('leave_room', async () => {
     try {
       const session = await Session.findOne({ socketId: socket.id });
@@ -509,11 +622,14 @@ io.on('connection', (socket) => {
       await session.save();
       socket.leave(roomName);
       
-      // Notify others
+      // Get updated member count
       const roomSessions = await Session.find({ roomName });
+      const memberCount = roomSessions.length;
+      
+      // Notify others
       io.to(roomName).emit('user_left', {
         username: session.username,
-        members: roomSessions.length
+        members: memberCount
       });
       
       // System message
@@ -530,67 +646,22 @@ io.on('connection', (socket) => {
         timestamp: systemMessage.timestamp.toLocaleTimeString()
       });
       
+      console.log(`🚪 ${session.username} left room: ${roomName} (${memberCount} members remain)`);
+      
       // Delete empty non-default rooms
-      if (roomSessions.length === 0) {
+      if (memberCount === 0) {
         const room = await Room.findOne({ name: roomName });
         if (room && !room.isDefault) {
           await Room.deleteOne({ name: roomName });
           await Message.deleteMany({ roomName });
           await Ban.deleteMany({ roomName });
           io.emit('room_deleted', { name: roomName });
-          console.log('🗑️ Empty room deleted from MongoDB:', roomName);
+          console.log('🗑️ Empty room deleted:', roomName);
         }
       }
       
     } catch (err) {
       console.error('Leave room error:', err);
-    }
-  });
-  
-  // Delete room (with admin password)
-  socket.on('delete_room', async (data) => {
-    try {
-      const { roomName, password } = data;
-      
-      // Check admin password
-      if (password !== ADMIN_PASSWORD) {
-        socket.emit('error', { message: 'Incorrect admin password' });
-        return;
-      }
-      
-      const room = await Room.findOne({ name: roomName });
-      if (!room) {
-        socket.emit('error', { message: 'Room does not exist' });
-        return;
-      }
-      
-      // Prevent deletion of Main room
-      if (room.isDefault) {
-        socket.emit('error', { message: 'Cannot delete the Main room' });
-        return;
-      }
-      
-      // Delete room and all related data from MongoDB
-      await Room.deleteOne({ name: roomName });
-      await Message.deleteMany({ roomName });
-      await Ban.deleteMany({ roomName });
-      
-      // Disconnect all users from room
-      const roomSessions = await Session.find({ roomName });
-      for (const session of roomSessions) {
-        session.roomName = null;
-        await session.save();
-        io.to(session.socketId).emit('room_deleted_by_owner', { roomName });
-      }
-      
-      // Notify all clients
-      io.emit('room_deleted', { name: roomName });
-      
-      console.log('🗑️ Room deleted by admin from MongoDB:', roomName);
-      
-    } catch (err) {
-      console.error('Delete room error:', err);
-      socket.emit('error', { message: 'Failed to delete room' });
     }
   });
   
@@ -618,19 +689,25 @@ io.on('connection', (socket) => {
         return;
       }
       
+      // Check if user is admin
+      const user = await User.findOne({ username });
+      const isAdmin = user ? user.isAdmin : false;
+      
       // Save message to MongoDB
       const messageData = await Message.create({
         roomName,
         username,
         message: msg.message,
-        isSystem: false
+        isSystem: false,
+        isAdmin: isAdmin
       });
       
-      // Broadcast to others
+      // Broadcast to others with admin badge
       socket.broadcast.to(roomName).emit('chat message', {
         username,
         message: msg.message,
-        timestamp: messageData.timestamp.toLocaleTimeString()
+        timestamp: messageData.timestamp.toLocaleTimeString(),
+        isAdmin: isAdmin
       });
       
       // Update session activity
@@ -642,13 +719,75 @@ io.on('connection', (socket) => {
     }
   });
   
-  // Clear messages (with admin password)
+  // ========== ADMIN COMMANDS ==========
+  
+  // /effect command - ONLY FOR ADMINS
+  socket.on('effect_command', async (data) => {
+    try {
+      const session = await Session.findOne({ socketId: socket.id });
+      if (!session) return;
+      
+      const user = await User.findOne({ username: session.username });
+      
+      // Check if user is admin
+      if (!user || !user.isAdmin) {
+        socket.emit('command_error', { message: '❌ This command is for admins only!' });
+        return;
+      }
+      
+      const { effect, roomName } = data;
+      
+      // List of valid effects
+      const validEffects = ['glitch', 'flashbang', 'black', 'firework', 'gameroom', 'confetti'];
+      
+      if (!validEffects.includes(effect)) {
+        socket.emit('command_error', { message: '❌ Invalid effect! Valid: glitch, flashbang, black, firework, gameroom, confetti' });
+        return;
+      }
+      
+      // Broadcast effect to the room
+      io.to(roomName).emit('room_effect', {
+        effect: effect,
+        triggeredBy: session.username
+      });
+      
+      // System message
+      const systemMessage = await Message.create({
+        roomName,
+        username: 'System',
+        message: `✨ Admin ${session.username} triggered effect: ${effect}`,
+        isSystem: true
+      });
+      
+      io.to(roomName).emit('chat message', {
+        username: 'System',
+        message: systemMessage.message,
+        timestamp: systemMessage.timestamp.toLocaleTimeString()
+      });
+      
+      console.log(`✨ Admin ${session.username} triggered effect: ${effect} in ${roomName}`);
+      
+    } catch (err) {
+      console.error('Effect command error:', err);
+      socket.emit('command_error', { message: 'Failed to trigger effect' });
+    }
+  });
+  
+  // /clear command - NO PASSWORD NEEDED FOR ADMINS
   socket.on('clear_messages', async (data) => {
     try {
+      const session = await Session.findOne({ socketId: socket.id });
+      if (!session) return;
+      
       const { roomName, password } = data;
       
-      if (password !== ADMIN_PASSWORD) {
-        socket.emit('error', { message: 'Incorrect admin password' });
+      // Check if user is admin
+      const user = await User.findOne({ username: session.username });
+      const isAdmin = user ? user.isAdmin : false;
+      
+      // If not admin, require password
+      if (!isAdmin && password !== ADMIN_PASSWORD) {
+        socket.emit('error', { message: '❌ Incorrect admin password' });
         return;
       }
       
@@ -663,7 +802,9 @@ io.on('connection', (socket) => {
       const systemMessage = await Message.create({
         roomName,
         username: 'System',
-        message: '🧹 All messages have been cleared by admin',
+        message: isAdmin ? 
+          `🧹 Admin ${session.username} cleared all messages` : 
+          '🧹 All messages have been cleared by admin',
         isSystem: true
       });
       
@@ -673,22 +814,28 @@ io.on('connection', (socket) => {
         timestamp: systemMessage.timestamp.toLocaleTimeString()
       });
       
-      console.log('🧹 Messages cleared from MongoDB:', roomName);
+      console.log(`🧹 Messages cleared in ${roomName} by ${session.username} ${isAdmin ? '(ADMIN)' : ''}`);
       
     } catch (err) {
       console.error('Clear messages error:', err);
     }
   });
   
-  // ========== MODERATION ==========
-  
-  // Ban user (with admin password)
+  // /ban command - NO PASSWORD NEEDED FOR ADMINS
   socket.on('ban_user', async (data) => {
     try {
+      const session = await Session.findOne({ socketId: socket.id });
+      if (!session) return;
+      
       const { roomName, bannedUser, duration = '10m', bannerName, password } = data;
       
-      if (password !== ADMIN_PASSWORD) {
-        socket.emit('error', { message: 'Incorrect admin password' });
+      // Check if user is admin
+      const user = await User.findOne({ username: session.username });
+      const isAdmin = user ? user.isAdmin : false;
+      
+      // If not admin, require password
+      if (!isAdmin && password !== ADMIN_PASSWORD) {
+        socket.emit('error', { message: '❌ Incorrect admin password' });
         return;
       }
       
@@ -717,7 +864,7 @@ io.on('connection', (socket) => {
         { isActive: false }
       );
       
-      // Create new ban in MongoDB
+      // Create new ban
       await Ban.create({
         roomName,
         username: bannedUser,
@@ -733,7 +880,9 @@ io.on('connection', (socket) => {
       const systemMessage = await Message.create({
         roomName,
         username: 'System',
-        message: `⛔ ${bannedUser} has been banned for ${duration}`,
+        message: isAdmin ?
+          `⛔ Admin ${bannerName} banned ${bannedUser} for ${duration}` :
+          `⛔ ${bannedUser} has been banned for ${duration}`,
         isSystem: true
       });
       
@@ -751,7 +900,7 @@ io.on('connection', (socket) => {
         io.to(bannedSession.socketId).emit('force_leave', { roomName, reason: 'banned' });
       }
       
-      console.log(`🔨 ${bannedUser} banned from ${roomName} for ${duration} - saved to MongoDB`);
+      console.log(`🔨 ${bannedUser} banned from ${roomName} for ${duration} by ${bannerName} ${isAdmin ? '(ADMIN)' : ''}`);
       
     } catch (err) {
       console.error('Ban error:', err);
@@ -759,13 +908,21 @@ io.on('connection', (socket) => {
     }
   });
   
-  // Unban user (with admin password)
+  // /unban command - NO PASSWORD NEEDED FOR ADMINS
   socket.on('unban_user', async (data) => {
     try {
+      const session = await Session.findOne({ socketId: socket.id });
+      if (!session) return;
+      
       const { roomName, unbannedUser, unbannerName, password } = data;
       
-      if (password !== ADMIN_PASSWORD) {
-        socket.emit('error', { message: 'Incorrect admin password' });
+      // Check if user is admin
+      const user = await User.findOne({ username: session.username });
+      const isAdmin = user ? user.isAdmin : false;
+      
+      // If not admin, require password
+      if (!isAdmin && password !== ADMIN_PASSWORD) {
+        socket.emit('error', { message: '❌ Incorrect admin password' });
         return;
       }
       
@@ -775,7 +932,7 @@ io.on('connection', (socket) => {
         return;
       }
       
-      // Deactivate bans in MongoDB
+      // Deactivate bans
       await Ban.updateMany(
         { roomName, username: unbannedUser, isActive: true },
         { isActive: false }
@@ -788,7 +945,9 @@ io.on('connection', (socket) => {
       const systemMessage = await Message.create({
         roomName,
         username: 'System',
-        message: `✅ ${unbannedUser} has been unbanned by ${unbannerName}`,
+        message: isAdmin ?
+          `✅ Admin ${unbannerName} unbanned ${unbannedUser}` :
+          `✅ ${unbannedUser} has been unbanned`,
         isSystem: true
       });
       
@@ -798,11 +957,65 @@ io.on('connection', (socket) => {
         timestamp: systemMessage.timestamp.toLocaleTimeString()
       });
       
-      console.log(`✅ ${unbannedUser} unbanned from ${roomName} - updated in MongoDB`);
+      console.log(`✅ ${unbannedUser} unbanned from ${roomName} by ${unbannerName} ${isAdmin ? '(ADMIN)' : ''}`);
       
     } catch (err) {
       console.error('Unban error:', err);
       socket.emit('error', { message: 'Failed to unban user' });
+    }
+  });
+  
+  // /delete room command - NO PASSWORD NEEDED FOR ADMINS
+  socket.on('delete_room', async (data) => {
+    try {
+      const session = await Session.findOne({ socketId: socket.id });
+      if (!session) return;
+      
+      const { roomName, password } = data;
+      
+      // Check if user is admin
+      const user = await User.findOne({ username: session.username });
+      const isAdmin = user ? user.isAdmin : false;
+      
+      // If not admin, require password
+      if (!isAdmin && password !== ADMIN_PASSWORD) {
+        socket.emit('error', { message: '❌ Incorrect admin password' });
+        return;
+      }
+      
+      const room = await Room.findOne({ name: roomName });
+      if (!room) {
+        socket.emit('error', { message: 'Room does not exist' });
+        return;
+      }
+      
+      // Prevent deletion of Main room
+      if (room.isDefault) {
+        socket.emit('error', { message: 'Cannot delete the Main room' });
+        return;
+      }
+      
+      // Delete room and all related data
+      await Room.deleteOne({ name: roomName });
+      await Message.deleteMany({ roomName });
+      await Ban.deleteMany({ roomName });
+      
+      // Disconnect all users from room
+      const roomSessions = await Session.find({ roomName });
+      for (const session of roomSessions) {
+        session.roomName = null;
+        await session.save();
+        io.to(session.socketId).emit('room_deleted_by_owner', { roomName });
+      }
+      
+      // Notify all clients
+      io.emit('room_deleted', { name: roomName });
+      
+      console.log(`🗑️ Room deleted: ${roomName} by ${session.username} ${isAdmin ? '(ADMIN)' : ''}`);
+      
+    } catch (err) {
+      console.error('Delete room error:', err);
+      socket.emit('error', { message: 'Failed to delete room' });
     }
   });
   
@@ -817,11 +1030,15 @@ io.on('connection', (socket) => {
         const username = session.username;
         
         if (roomName) {
-          // Notify room
+          // Get updated member count AFTER removal
+          await Session.deleteOne({ socketId: socket.id });
           const roomSessions = await Session.find({ roomName });
+          const memberCount = roomSessions.length;
+          
+          // Notify room
           io.to(roomName).emit('user_left', {
             username,
-            members: roomSessions.length - 1
+            members: memberCount
           });
           
           // System message
@@ -838,24 +1055,27 @@ io.on('connection', (socket) => {
             timestamp: systemMessage.timestamp.toLocaleTimeString()
           });
           
+          console.log(`👋 ${username} disconnected from ${roomName} (${memberCount} members remain)`);
+          
           // Delete empty non-default rooms
-          if (roomSessions.length <= 1) {
+          if (memberCount === 0) {
             const room = await Room.findOne({ name: roomName });
             if (room && !room.isDefault) {
               await Room.deleteOne({ name: roomName });
               await Message.deleteMany({ roomName });
               await Ban.deleteMany({ roomName });
               io.emit('room_deleted', { name: roomName });
-              console.log('🗑️ Empty room deleted from MongoDB:', roomName);
+              console.log('🗑️ Empty room deleted:', roomName);
             }
           }
+        } else {
+          // Just delete the session if no room
+          await Session.deleteOne({ socketId: socket.id });
+          console.log('👋 User disconnected:', username);
         }
-        
-        // Delete session
-        await Session.deleteOne({ socketId: socket.id });
+      } else {
+        console.log('👋 Unknown user disconnected:', socket.id);
       }
-      
-      console.log('👋 User disconnected:', socket.id);
       
     } catch (err) {
       console.error('Disconnect error:', err);
@@ -867,15 +1087,13 @@ io.on('connection', (socket) => {
 // ============================================
 // 🚀 START SERVER
 // ============================================
-const PORT = process.env.PORT || 3000;
-
 server.listen(PORT, '0.0.0.0', () => {
   console.log('\n' + '='.repeat(60));
   console.log('🚀🚀🚀 BLACK HOLE CHAT SERVER STARTED 🚀🚀🚀');
   console.log('='.repeat(60));
   console.log(`\n📡 Port: ${PORT}`);
   console.log(`💾 MongoDB: ${MONGODB_URI.replace(/:[^:@]*@/, ':****@')}`);
-  console.log(`🔑 Admin Password: ${ADMIN_PASSWORD}`);
+  console.log(`🔑 Admin Password: ${ADMIN_PASSWORD.replace(/./g, '*')} (hidden)`);
   console.log('\n' + '='.repeat(60) + '\n');
 });
 
