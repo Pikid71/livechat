@@ -1,723 +1,881 @@
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
-const fs = require('fs').promises;
+const mongoose = require('mongoose');
 
 const app = express();
 const server = http.createServer(app);
-
-// Configure Socket.IO
 const io = new Server(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"],
     credentials: true
-  },
-  connectionStateRecovery: {
-    maxDisconnectionDuration: 2 * 60 * 1000,
-    skipMiddlewares: true,
   }
 });
 
-const dataFilePath = path.join(__dirname, 'chat_data.json');
+// ============================================
+// 🔥 YOUR MONGODB ATLAS CONNECTION STRING
+// ============================================
+const MONGODB_URI = 'mongodb+srv://livechatdb:A%40sh1shmongodb@cluster0.j2qik61.mongodb.net/blackholechat?retryWrites=true&w=majority';
 
-let users = {};
-let rooms = {};
-let userSessions = {};
-let userRooms = {};
+// Admin password (same for all admin functions)
+const ADMIN_PASSWORD = 'A@sh1shlivechat';
 
-// Create default "Main" room
-rooms['Main'] = {
-  password: '',
-  members: [],
-  messages: [],
-  isDefault: true,
-  bans: []
-};
-
-// Load data from file on server start
-async function loadData() {
-  try {
-    await fs.access(dataFilePath);
-    const data = JSON.parse(await fs.readFile(dataFilePath, 'utf-8'));
-    users = data.users || {};
-    
-    // Merge saved rooms with default Main room
-    if (data.rooms) {
-      rooms = { ...rooms, ...data.rooms };
-      // Ensure Main room always has isDefault flag
-      if (rooms['Main']) {
-        rooms['Main'].isDefault = true;
-      }
-    }
-    
-    console.log('✅ Data loaded successfully');
-  } catch (err) {
-    if (err.code === 'ENOENT') {
-      // File doesn't exist, create it
-      await saveData();
-      console.log('📁 Created new data file');
-    } else {
-      console.error('❌ Error reading data file:', err);
-    }
-  }
-}
-
-// Save data to file
-async function saveData(retries = 3) {
-  const data = { 
-    users: users, 
-    rooms: rooms 
-  };
-  
-  for (let i = 0; i < retries; i++) {
-    try {
-      await fs.writeFile(dataFilePath, JSON.stringify(data, null, 2));
-      return;
-    } catch (err) {
-      console.error(`Error writing data file (attempt ${i + 1}/${retries}):`, err);
-      if (i === retries - 1) throw err;
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
-  }
-}
-
-// Periodic save
-setInterval(async () => {
-  try {
-    await saveData();
-    console.log('💾 Auto-saved data');
-  } catch (err) {
-    console.error('Auto-save failed:', err);
-  }
-}, 5 * 60 * 1000);
-
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  console.log('SIGTERM received, saving data...');
-  await saveData();
-  process.exit(0);
+// ============================================
+// 🔌 CONNECT TO MONGODB ATLAS
+// ============================================
+mongoose.connect(MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+.then(() => {
+  console.log('✅✅✅ MONGODB ATLAS CONNECTED SUCCESSFULLY!');
+  console.log('💾 Database: blackholechat');
+  console.log('🌍 Cluster: cluster0.j2qik61.mongodb.net');
+})
+.catch(err => {
+  console.error('❌❌❌ MONGODB CONNECTION FAILED:', err.message);
+  console.log('⚠️  Server will continue but data will NOT persist!');
 });
 
-process.on('SIGINT', async () => {
-  console.log('SIGINT received, saving data...');
-  await saveData();
-  process.exit(0);
+// ============================================
+// 📊 MONGODB SCHEMAS
+// ============================================
+
+// User Schema
+const UserSchema = new mongoose.Schema({
+  username: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  createdAt: { type: Date, default: Date.now },
+  lastLogin: { type: Date },
+  isBanned: { type: Boolean, default: false }
 });
 
-// Serve static files
+// Room Schema
+const RoomSchema = new mongoose.Schema({
+  name: { type: String, required: true, unique: true },
+  password: { type: String, default: '' },
+  isDefault: { type: Boolean, default: false },
+  createdBy: { type: String },
+  createdAt: { type: Date, default: Date.now }
+});
+
+// Message Schema
+const MessageSchema = new mongoose.Schema({
+  roomName: { type: String, required: true, index: true },
+  username: { type: String, required: true },
+  message: { type: String, required: true },
+  timestamp: { type: Date, default: Date.now },
+  isSystem: { type: Boolean, default: false }
+});
+
+// Ban Schema
+const BanSchema = new mongoose.Schema({
+  roomName: { type: String, required: true, index: true },
+  username: { type: String, required: true },
+  bannedBy: { type: String, required: true },
+  bannedAt: { type: Date, default: Date.now },
+  expiresAt: { type: Date, required: true },
+  isActive: { type: Boolean, default: true }
+});
+
+// Session Schema
+const SessionSchema = new mongoose.Schema({
+  socketId: { type: String, required: true, unique: true },
+  username: { type: String, required: true },
+  roomName: { type: String },
+  connectedAt: { type: Date, default: Date.now },
+  lastActivity: { type: Date, default: Date.now }
+});
+
+// ============================================
+// 📁 MODELS
+// ============================================
+const User = mongoose.model('User', UserSchema);
+const Room = mongoose.model('Room', RoomSchema);
+const Message = mongoose.model('Message', MessageSchema);
+const Ban = mongoose.model('Ban', BanSchema);
+const Session = mongoose.model('Session', SessionSchema);
+
+// ============================================
+// 🚀 EXPRESS SETUP
+// ============================================
 app.use(express.static(path.join(__dirname)));
+app.use(express.json());
 
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({ 
     status: 'healthy', 
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    environment: process.env.CODESPACES ? 'codespaces' : process.env.NODE_ENV || 'development'
+    mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    timestamp: new Date().toISOString()
   });
 });
 
-// Route for index.html
+// Stats endpoint
+app.get('/stats', async (req, res) => {
+  try {
+    const stats = {
+      users: await User.countDocuments(),
+      rooms: await Room.countDocuments(),
+      messages: await Message.countDocuments(),
+      activeBans: await Ban.countDocuments({ isActive: true, expiresAt: { $gt: new Date() } }),
+      activeSessions: await Session.countDocuments(),
+      mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+      timestamp: new Date()
+    };
+    res.json(stats);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Main route
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Load data on startup
-loadData().catch(err => {
-  console.error('Failed to load data on startup:', err);
-});
+// ============================================
+// 🏠 INITIALIZE DEFAULT ROOM
+// ============================================
+async function initializeDefaultRoom() {
+  try {
+    const defaultRoom = await Room.findOne({ name: 'Main' });
+    if (!defaultRoom) {
+      await Room.create({
+        name: 'Main',
+        password: '',
+        isDefault: true,
+        createdBy: 'System'
+      });
+      console.log('🏠 Default "Main" room created in MongoDB');
+    } else {
+      console.log('🏠 Default "Main" room already exists');
+    }
+  } catch (err) {
+    console.error('Error creating default room:', err);
+  }
+}
 
+// Run default room initialization
+initializeDefaultRoom();
+
+// ============================================
+// 🧹 CLEANUP EXPIRED BANS
+// ============================================
+async function cleanupExpiredBans() {
+  try {
+    const result = await Ban.updateMany(
+      { expiresAt: { $lt: new Date() }, isActive: true },
+      { isActive: false }
+    );
+    if (result.modifiedCount > 0) {
+      console.log(`🧹 Cleaned up ${result.modifiedCount} expired bans`);
+    }
+  } catch (err) {
+    console.error('Error cleaning up bans:', err);
+  }
+}
+
+// Run cleanup every hour
+setInterval(cleanupExpiredBans, 60 * 60 * 1000);
+
+// ============================================
+// 🔌 SOCKET.IO HANDLERS
+// ============================================
 io.on('connection', (socket) => {
   console.log('👤 User connected:', socket.id);
   
+  // ========== AUTHENTICATION ==========
+  
   // Register new user
   socket.on('register', async (data) => {
-    const { username, password } = data;
-    
-    if (!username || !password) {
-      socket.emit('auth_error', { message: 'Username and password required' });
-      return;
-    }
-    
-    if (username.length < 3) {
-      socket.emit('auth_error', { message: 'Username must be at least 3 characters' });
-      return;
-    }
-    
-    if (password.length < 4) {
-      socket.emit('auth_error', { message: 'Password must be at least 4 characters' });
-      return;
-    }
-    
-    if (users[username]) {
-      socket.emit('auth_error', { message: 'Username already exists' });
-      return;
-    }
-    
-    // Create user
-    users[username] = password;
-    userSessions[socket.id] = username;
-    
-    // Save to file
     try {
-      await saveData();
+      const { username, password } = data;
+      
+      if (!username || !password) {
+        socket.emit('auth_error', { message: 'Username and password required' });
+        return;
+      }
+      
+      if (username.length < 3) {
+        socket.emit('auth_error', { message: 'Username must be at least 3 characters' });
+        return;
+      }
+      
+      if (password.length < 4) {
+        socket.emit('auth_error', { message: 'Password must be at least 4 characters' });
+        return;
+      }
+      
+      const existingUser = await User.findOne({ username });
+      if (existingUser) {
+        socket.emit('auth_error', { message: 'Username already exists' });
+        return;
+      }
+      
+      // Create user in MongoDB
+      await User.create({
+        username,
+        password,
+        lastLogin: new Date()
+      });
+      
+      // Create session
+      await Session.create({
+        socketId: socket.id,
+        username
+      });
+      
+      socket.emit('auth_success', { username, message: 'Registration successful!' });
+      console.log('✅ User registered in MongoDB:', username);
+      
     } catch (err) {
-      console.error('Failed to save user data:', err);
+      console.error('Registration error:', err);
+      socket.emit('auth_error', { message: 'Server error during registration' });
     }
-    
-    socket.emit('auth_success', { username, message: 'Registration successful!' });
-    console.log('✅ User registered:', username);
   });
   
   // Login user
-  socket.on('login', (data) => {
-    const { username, password } = data;
-    
-    if (!username || !password) {
-      socket.emit('auth_error', { message: 'Username and password required' });
-      return;
+  socket.on('login', async (data) => {
+    try {
+      const { username, password } = data;
+      
+      if (!username || !password) {
+        socket.emit('auth_error', { message: 'Username and password required' });
+        return;
+      }
+      
+      const user = await User.findOne({ username });
+      
+      if (!user) {
+        socket.emit('auth_error', { message: 'Username not found' });
+        return;
+      }
+      
+      if (user.password !== password) {
+        socket.emit('auth_error', { message: 'Incorrect password' });
+        return;
+      }
+      
+      // Update last login
+      user.lastLogin = new Date();
+      await user.save();
+      
+      // Create session
+      await Session.create({
+        socketId: socket.id,
+        username
+      });
+      
+      socket.emit('auth_success', { username, message: 'Login successful!' });
+      console.log('✅ User logged in:', username);
+      
+    } catch (err) {
+      console.error('Login error:', err);
+      socket.emit('auth_error', { message: 'Server error during login' });
     }
-    
-    if (!users[username]) {
-      socket.emit('auth_error', { message: 'Username not found' });
-      return;
-    }
-    
-    if (users[username] !== password) {
-      socket.emit('auth_error', { message: 'Incorrect password' });
-      return;
-    }
-    
-    userSessions[socket.id] = username;
-    socket.emit('auth_success', { username, message: 'Login successful!' });
-    console.log('✅ User logged in:', username);
   });
   
-  // Check current authentication status
-  socket.on('check_auth', () => {
-    const username = userSessions[socket.id];
-    if (username) {
-      socket.emit('auth_status', { authenticated: true, username });
-    } else {
+  // Logout
+  socket.on('logout', async () => {
+    try {
+      await Session.deleteOne({ socketId: socket.id });
+      socket.emit('logged_out');
+      console.log('👋 User logged out:', socket.id);
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
+  });
+  
+  // Check authentication
+  socket.on('check_auth', async () => {
+    try {
+      const session = await Session.findOne({ socketId: socket.id });
+      if (session) {
+        socket.emit('auth_status', { authenticated: true, username: session.username });
+      } else {
+        socket.emit('auth_status', { authenticated: false });
+      }
+    } catch (err) {
       socket.emit('auth_status', { authenticated: false });
     }
   });
   
-  // Broadcast user banned notification
-  socket.on('user_banned', (data) => {
-    const { roomName, bannedUser, bannerName } = data;
-    io.to(roomName).emit('chat message', {
-      username: 'System',
-      message: `⛔ ${bannedUser} has been banned by ${bannerName}`
-    });
-  });
-
-  // Ban a user with duration
-  socket.on('ban_user', async (data) => {
-    const { roomName, bannedUser, duration, bannerName } = data;
-    
-    if (!rooms[roomName]) {
-      socket.emit('error', { message: 'Room does not exist' });
-      return;
+  // ========== ROOMS ==========
+  
+  // Get rooms list
+  socket.on('get_rooms', async () => {
+    try {
+      const session = await Session.findOne({ socketId: socket.id });
+      if (!session) {
+        socket.emit('auth_error', { message: 'Not authenticated' });
+        return;
+      }
+      
+      const rooms = await Room.find();
+      
+      // Get member counts for each room
+      const roomList = await Promise.all(rooms.map(async (room) => {
+        const sessions = await Session.find({ roomName: room.name });
+        return {
+          name: room.name,
+          hasPassword: !!room.password,
+          members: sessions.length,
+          isDefault: room.isDefault
+        };
+      }));
+      
+      socket.emit('rooms_list', roomList);
+      
+    } catch (err) {
+      console.error('Get rooms error:', err);
+      socket.emit('error', { message: 'Failed to get rooms' });
     }
-
-    // Parse duration
-    let durationMs = 10 * 60 * 1000; // default 10 minutes
-    if (duration) {
+  });
+  
+  // Create room
+  socket.on('create_room', async (data) => {
+    try {
+      const session = await Session.findOne({ socketId: socket.id });
+      if (!session) {
+        socket.emit('auth_error', { message: 'Not authenticated' });
+        return;
+      }
+      
+      const { roomName, password } = data;
+      
+      if (!roomName || roomName.trim() === '') {
+        socket.emit('error', { message: 'Room name cannot be empty' });
+        return;
+      }
+      
+      const existingRoom = await Room.findOne({ name: roomName });
+      if (existingRoom) {
+        socket.emit('error', { message: 'Room already exists' });
+        return;
+      }
+      
+      // Create room in MongoDB
+      await Room.create({
+        name: roomName,
+        password: password || '',
+        createdBy: session.username,
+        isDefault: false
+      });
+      
+      // Join room
+      session.roomName = roomName;
+      await session.save();
+      socket.join(roomName);
+      
+      socket.emit('joined_room', { roomName, username: session.username });
+      
+      // Notify others
+      const roomSessions = await Session.find({ roomName });
+      io.to(roomName).emit('user_joined', {
+        username: session.username,
+        members: roomSessions.length
+      });
+      
+      // System message
+      const systemMessage = await Message.create({
+        roomName,
+        username: 'System',
+        message: `🎉 Room "${roomName}" created by ${session.username}`,
+        isSystem: true
+      });
+      
+      io.to(roomName).emit('chat message', {
+        username: 'System',
+        message: systemMessage.message,
+        timestamp: systemMessage.timestamp.toLocaleTimeString()
+      });
+      
+      // Notify all clients about new room
+      io.emit('room_created', { 
+        name: roomName, 
+        hasPassword: !!password,
+        members: 1
+      });
+      
+      console.log('🏠 Room created in MongoDB:', roomName, 'by', session.username);
+      
+    } catch (err) {
+      console.error('Create room error:', err);
+      socket.emit('error', { message: 'Failed to create room' });
+    }
+  });
+  
+  // Join room
+  socket.on('join_room', async (data) => {
+    try {
+      const session = await Session.findOne({ socketId: socket.id });
+      if (!session) {
+        socket.emit('auth_error', { message: 'Not authenticated' });
+        return;
+      }
+      
+      const { roomName, password } = data;
+      
+      const room = await Room.findOne({ name: roomName });
+      if (!room) {
+        socket.emit('error', { message: 'Room does not exist' });
+        return;
+      }
+      
+      // Check if banned
+      const activeBan = await Ban.findOne({
+        roomName,
+        username: session.username,
+        isActive: true,
+        expiresAt: { $gt: new Date() }
+      });
+      
+      if (activeBan) {
+        socket.emit('error', { message: '❌ You are banned from this room' });
+        return;
+      }
+      
+      // Check password
+      if (room.password && room.password !== password) {
+        socket.emit('error', { message: 'Incorrect password' });
+        return;
+      }
+      
+      // Join room
+      session.roomName = roomName;
+      await session.save();
+      socket.join(roomName);
+      
+      socket.emit('joined_room', { roomName, username: session.username });
+      
+      // Send room history (last 50 messages)
+      const recentMessages = await Message.find({ roomName })
+        .sort({ timestamp: -1 })
+        .limit(50)
+        .sort({ timestamp: 1 });
+      
+      socket.emit('room_history', {
+        messages: recentMessages.map(msg => ({
+          username: msg.username,
+          message: msg.message,
+          timestamp: msg.timestamp.toLocaleTimeString()
+        }))
+      });
+      
+      // Notify others
+      const roomSessions = await Session.find({ roomName });
+      io.to(roomName).emit('user_joined', {
+        username: session.username,
+        members: roomSessions.length
+      });
+      
+      // System message
+      const systemMessage = await Message.create({
+        roomName,
+        username: 'System',
+        message: `👋 ${session.username} joined the room`,
+        isSystem: true
+      });
+      
+      io.to(roomName).emit('chat message', {
+        username: 'System',
+        message: systemMessage.message,
+        timestamp: systemMessage.timestamp.toLocaleTimeString()
+      });
+      
+      console.log(`🚪 ${session.username} joined room:`, roomName);
+      
+    } catch (err) {
+      console.error('Join room error:', err);
+      socket.emit('error', { message: 'Failed to join room' });
+    }
+  });
+  
+  // Leave room
+  socket.on('leave_room', async () => {
+    try {
+      const session = await Session.findOne({ socketId: socket.id });
+      if (!session) return;
+      
+      const roomName = session.roomName;
+      if (!roomName) return;
+      
+      // Leave room
+      session.roomName = null;
+      await session.save();
+      socket.leave(roomName);
+      
+      // Notify others
+      const roomSessions = await Session.find({ roomName });
+      io.to(roomName).emit('user_left', {
+        username: session.username,
+        members: roomSessions.length
+      });
+      
+      // System message
+      const systemMessage = await Message.create({
+        roomName,
+        username: 'System',
+        message: `👋 ${session.username} left the room`,
+        isSystem: true
+      });
+      
+      io.to(roomName).emit('chat message', {
+        username: 'System',
+        message: systemMessage.message,
+        timestamp: systemMessage.timestamp.toLocaleTimeString()
+      });
+      
+      // Delete empty non-default rooms
+      if (roomSessions.length === 0) {
+        const room = await Room.findOne({ name: roomName });
+        if (room && !room.isDefault) {
+          await Room.deleteOne({ name: roomName });
+          await Message.deleteMany({ roomName });
+          await Ban.deleteMany({ roomName });
+          io.emit('room_deleted', { name: roomName });
+          console.log('🗑️ Empty room deleted from MongoDB:', roomName);
+        }
+      }
+      
+    } catch (err) {
+      console.error('Leave room error:', err);
+    }
+  });
+  
+  // Delete room (with admin password)
+  socket.on('delete_room', async (data) => {
+    try {
+      const { roomName, password } = data;
+      
+      // Check admin password
+      if (password !== ADMIN_PASSWORD) {
+        socket.emit('error', { message: 'Incorrect admin password' });
+        return;
+      }
+      
+      const room = await Room.findOne({ name: roomName });
+      if (!room) {
+        socket.emit('error', { message: 'Room does not exist' });
+        return;
+      }
+      
+      // Prevent deletion of Main room
+      if (room.isDefault) {
+        socket.emit('error', { message: 'Cannot delete the Main room' });
+        return;
+      }
+      
+      // Delete room and all related data from MongoDB
+      await Room.deleteOne({ name: roomName });
+      await Message.deleteMany({ roomName });
+      await Ban.deleteMany({ roomName });
+      
+      // Disconnect all users from room
+      const roomSessions = await Session.find({ roomName });
+      for (const session of roomSessions) {
+        session.roomName = null;
+        await session.save();
+        io.to(session.socketId).emit('room_deleted_by_owner', { roomName });
+      }
+      
+      // Notify all clients
+      io.emit('room_deleted', { name: roomName });
+      
+      console.log('🗑️ Room deleted by admin from MongoDB:', roomName);
+      
+    } catch (err) {
+      console.error('Delete room error:', err);
+      socket.emit('error', { message: 'Failed to delete room' });
+    }
+  });
+  
+  // ========== MESSAGES ==========
+  
+  // Chat message
+  socket.on('chat message', async (msg) => {
+    try {
+      const session = await Session.findOne({ socketId: socket.id });
+      if (!session || !session.roomName) return;
+      
+      const roomName = session.roomName;
+      const username = msg.username;
+      
+      // Check if banned
+      const activeBan = await Ban.findOne({
+        roomName,
+        username,
+        isActive: true,
+        expiresAt: { $gt: new Date() }
+      });
+      
+      if (activeBan) {
+        socket.emit('error', { message: '❌ You are currently banned from this room' });
+        return;
+      }
+      
+      // Save message to MongoDB
+      const messageData = await Message.create({
+        roomName,
+        username,
+        message: msg.message,
+        isSystem: false
+      });
+      
+      // Broadcast to others
+      socket.broadcast.to(roomName).emit('chat message', {
+        username,
+        message: msg.message,
+        timestamp: messageData.timestamp.toLocaleTimeString()
+      });
+      
+      // Update session activity
+      session.lastActivity = new Date();
+      await session.save();
+      
+    } catch (err) {
+      console.error('Message error:', err);
+    }
+  });
+  
+  // Clear messages (with admin password)
+  socket.on('clear_messages', async (data) => {
+    try {
+      const { roomName, password } = data;
+      
+      if (password !== ADMIN_PASSWORD) {
+        socket.emit('error', { message: 'Incorrect admin password' });
+        return;
+      }
+      
+      const room = await Room.findOne({ name: roomName });
+      if (!room) return;
+      
+      await Message.deleteMany({ roomName });
+      
+      io.to(roomName).emit('messages_cleared', { roomName });
+      
+      // System message
+      const systemMessage = await Message.create({
+        roomName,
+        username: 'System',
+        message: '🧹 All messages have been cleared by admin',
+        isSystem: true
+      });
+      
+      io.to(roomName).emit('chat message', {
+        username: 'System',
+        message: systemMessage.message,
+        timestamp: systemMessage.timestamp.toLocaleTimeString()
+      });
+      
+      console.log('🧹 Messages cleared from MongoDB:', roomName);
+      
+    } catch (err) {
+      console.error('Clear messages error:', err);
+    }
+  });
+  
+  // ========== MODERATION ==========
+  
+  // Ban user (with admin password)
+  socket.on('ban_user', async (data) => {
+    try {
+      const { roomName, bannedUser, duration = '10m', bannerName, password } = data;
+      
+      if (password !== ADMIN_PASSWORD) {
+        socket.emit('error', { message: 'Incorrect admin password' });
+        return;
+      }
+      
+      const room = await Room.findOne({ name: roomName });
+      if (!room) {
+        socket.emit('error', { message: 'Room does not exist' });
+        return;
+      }
+      
+      // Parse duration
+      let durationMs = 10 * 60 * 1000;
       const match = duration.match(/^(\d+)([hmd]?)$/);
       if (match) {
         const value = parseInt(match[1]);
         const unit = match[2] || 'm';
-        
         if (unit === 'h') durationMs = value * 60 * 60 * 1000;
         else if (unit === 'm') durationMs = value * 60 * 1000;
         else if (unit === 'd') durationMs = value * 24 * 60 * 60 * 1000;
       }
-    }
-
-    const expiresAt = Date.now() + durationMs;
-    
-    if (!rooms[roomName].bans) {
-      rooms[roomName].bans = [];
-    }
-
-    // Remove existing ban if any
-    rooms[roomName].bans = rooms[roomName].bans.filter(b => b.user !== bannedUser);
-    
-    // Add new ban
-    rooms[roomName].bans.push({ 
-      user: bannedUser, 
-      expiresAt,
-      bannedBy: bannerName,
-      bannedAt: Date.now()
-    });
-
-    // Save to file
-    try {
-      await saveData();
-    } catch (err) {
-      console.error('Failed to save ban data:', err);
-    }
-
-    // Notify all clients about the ban
-    io.to(roomName).emit('user_banned', { 
-      bannedUser, 
-      duration: duration || '10m',
-      bannerName
-    });
-
-    // Also send a system message
-    io.to(roomName).emit('chat message', {
-      username: 'System',
-      message: `⛔ ${bannedUser} has been banned from the room for ${duration || '10m'}`
-    });
-
-    // Auto-unban after duration expires
-    setTimeout(async () => {
-      if (rooms[roomName] && rooms[roomName].bans) {
-        rooms[roomName].bans = rooms[roomName].bans.filter(b => b.user !== bannedUser);
-        try {
-          await saveData();
-        } catch (err) {
-          console.error('Failed to save unban data:', err);
-        }
-        io.to(roomName).emit('user_unbanned', { 
-          unbannedUser: bannedUser, 
-          unbannerName: 'System (Auto)'
-        });
-        io.to(roomName).emit('chat message', {
-          username: 'System',
-          message: `✅ Ban expired: ${bannedUser} has been automatically unbanned`
-        });
-      }
-    }, durationMs);
-
-    console.log(`🔨 User ${bannedUser} banned from ${roomName} for ${duration || '10m'}`);
-  });
-
-  // Unban a user
-  socket.on('unban_user', async (data) => {
-    const { roomName, unbannedUser, unbannerName } = data;
-    
-    if (!rooms[roomName]) {
-      socket.emit('error', { message: 'Room does not exist' });
-      return;
-    }
-
-    if (!rooms[roomName].bans) {
-      rooms[roomName].bans = [];
-    }
-
-    // Remove ban
-    rooms[roomName].bans = rooms[roomName].bans.filter(b => b.user !== unbannedUser);
-
-    // Save to file
-    try {
-      await saveData();
-    } catch (err) {
-      console.error('Failed to save unban data:', err);
-    }
-
-    // Notify all clients about the unban
-    io.to(roomName).emit('user_unbanned', { 
-      unbannedUser, 
-      unbannerName
-    });
-
-    // Send system message
-    io.to(roomName).emit('chat message', {
-      username: 'System',
-      message: `✅ ${unbannedUser} has been unbanned by ${unbannerName}`
-    });
-
-    console.log(`✅ User ${unbannedUser} unbanned from ${roomName}`);
-  });
-
-  // Clear messages from room
-  socket.on('clear_messages', async (data) => {
-    const { roomName, password } = data;
-    
-    if (password === 'A@sh1shlivechat' && rooms[roomName]) {
-      rooms[roomName].messages = [];
       
-      try {
-        await saveData();
-      } catch (err) {
-        console.error('Failed to save after clearing messages:', err);
-      }
+      const expiresAt = new Date(Date.now() + durationMs);
       
-      io.to(roomName).emit('messages_cleared', { roomName });
-    }
-  });
-
-  // Leave room
-  socket.on('leave_room', async (data) => {
-    const { roomName } = data;
-    const username = userSessions[socket.id];
-    
-    if (roomName && rooms[roomName] && username) {
-      // Remove user from room members
-      rooms[roomName].members = rooms[roomName].members.filter(m => m.id !== socket.id);
+      // Deactivate old bans
+      await Ban.updateMany(
+        { roomName, username: bannedUser, isActive: true },
+        { isActive: false }
+      );
       
-      // Notify remaining members
-      io.to(roomName).emit('user_left', {
-        username,
-        members: rooms[roomName].members.length
+      // Create new ban in MongoDB
+      await Ban.create({
+        roomName,
+        username: bannedUser,
+        bannedBy: bannerName,
+        expiresAt,
+        isActive: true
       });
       
-      socket.leave(roomName);
+      // Notify room
+      io.to(roomName).emit('user_banned', { bannedUser, duration, bannerName });
       
-      // Delete empty non-default rooms
-      if (rooms[roomName].members.length === 0 && !rooms[roomName].isDefault) {
-        delete rooms[roomName];
-        try {
-          await saveData();
-        } catch (err) {
-          console.error('Failed to save after room deletion:', err);
-        }
-        io.emit('room_deleted', { name: roomName });
-      } else {
-        // Save even if just member left
-        try {
-          await saveData();
-        } catch (err) {
-          console.error('Failed to save after member left:', err);
-        }
+      // System message
+      const systemMessage = await Message.create({
+        roomName,
+        username: 'System',
+        message: `⛔ ${bannedUser} has been banned for ${duration}`,
+        isSystem: true
+      });
+      
+      io.to(roomName).emit('chat message', {
+        username: 'System',
+        message: systemMessage.message,
+        timestamp: systemMessage.timestamp.toLocaleTimeString()
+      });
+      
+      // Kick user if currently in room
+      const bannedSession = await Session.findOne({ username: bannedUser, roomName });
+      if (bannedSession) {
+        bannedSession.roomName = null;
+        await bannedSession.save();
+        io.to(bannedSession.socketId).emit('force_leave', { roomName, reason: 'banned' });
       }
-    }
-    delete userRooms[socket.id];
-  });
-
-  // Logout user
-  socket.on('logout', () => {
-    const username = userSessions[socket.id];
-    
-    if (username) {
-      delete userSessions[socket.id];
-      socket.emit('logged_out');
-      console.log('👋 User logged out:', username);
+      
+      console.log(`🔨 ${bannedUser} banned from ${roomName} for ${duration} - saved to MongoDB`);
+      
+    } catch (err) {
+      console.error('Ban error:', err);
+      socket.emit('error', { message: 'Failed to ban user' });
     }
   });
   
-  // Get list of available rooms (without passwords)
-  socket.on('get_rooms', () => {
-    const username = userSessions[socket.id];
-    if (!username) {
-      socket.emit('auth_error', { message: 'Not authenticated' });
-      return;
-    }
-    
-    const roomList = Object.keys(rooms).map(roomName => ({
-      name: roomName,
-      hasPassword: rooms[roomName].password ? true : false,
-      members: rooms[roomName].members.length
-    }));
-    socket.emit('rooms_list', roomList);
-  });
-
-  // Create a new room
-  socket.on('create_room', async (data) => {
-    const username = userSessions[socket.id];
-    if (!username) {
-      socket.emit('auth_error', { message: 'Not authenticated' });
-      return;
-    }
-    
-    const { roomName, password } = data;
-    
-    if (!roomName || roomName.trim() === '') {
-      socket.emit('error', { message: 'Room name cannot be empty' });
-      return;
-    }
-
-    if (rooms[roomName]) {
-      socket.emit('error', { message: 'Room already exists' });
-      return;
-    }
-
-    // Create room
-    rooms[roomName] = {
-      password: password || '',
-      members: [{ id: socket.id, username }],
-      messages: [],
-      bans: [],
-      createdBy: username,
-      createdAt: Date.now(),
-      isDefault: false
-    };
-
-    // Save to file
+  // Unban user (with admin password)
+  socket.on('unban_user', async (data) => {
     try {
-      await saveData();
-    } catch (err) {
-      console.error('Failed to save new room data:', err);
-    }
-
-    userRooms[socket.id] = roomName;
-    socket.join(roomName);
-    socket.emit('joined_room', { roomName, username });
-    
-    // Notify room members
-    io.to(roomName).emit('user_joined', {
-      username,
-      members: rooms[roomName].members.length
-    });
-
-    // Send welcome message
-    io.to(roomName).emit('chat message', {
-      username: 'System',
-      message: `🎉 Room "${roomName}" created by ${username}`
-    });
-
-    // Notify all clients about new room
-    io.emit('room_created', { 
-      name: roomName, 
-      hasPassword: !!password,
-      members: 1
-    });
-
-    console.log('🏠 Room created:', roomName, 'by', username);
-  });
-
-  // Join existing room
-  socket.on('join_room', async (data) => {
-    const username = userSessions[socket.id];
-    if (!username) {
-      socket.emit('auth_error', { message: 'Not authenticated' });
-      return;
-    }
-    
-    const { roomName, password } = data;
-
-    if (!rooms[roomName]) {
-      socket.emit('error', { message: 'Room does not exist' });
-      return;
-    }
-
-    const room = rooms[roomName];
-    
-    // Check if user is banned
-    if (room.bans) {
-      const ban = room.bans.find(b => b.user === username && b.expiresAt > Date.now());
-      if (ban) {
-        socket.emit('error', { message: '❌ You are banned from this room' });
+      const { roomName, unbannedUser, unbannerName, password } = data;
+      
+      if (password !== ADMIN_PASSWORD) {
+        socket.emit('error', { message: 'Incorrect admin password' });
         return;
       }
-    }
-
-    // Check password
-    if (room.password && room.password !== password) {
-      socket.emit('error', { message: 'Incorrect password' });
-      return;
-    }
-
-    // Check if already in room
-    if (room.members.some(m => m.id === socket.id)) {
-      socket.emit('error', { message: 'Already in this room' });
-      return;
-    }
-
-    // Add user to room
-    room.members.push({ id: socket.id, username });
-    userRooms[socket.id] = roomName;
-    socket.join(roomName);
-
-    // Send room history and current members
-    socket.emit('joined_room', { roomName, username });
-    socket.emit('room_history', { messages: room.messages });
-
-    // Notify room members
-    io.to(roomName).emit('user_joined', {
-      username,
-      members: room.members.length
-    });
-
-    // Send welcome message
-    io.to(roomName).emit('chat message', {
-      username: 'System',
-      message: `👋 ${username} joined the room`
-    });
-
-    // Save to file
-    try {
-      await saveData();
-    } catch (err) {
-      console.error('Failed to save after user joined:', err);
-    }
-
-    console.log(`🚪 ${username} joined room:`, roomName);
-  });
-
-  // Handle chat messages
-  socket.on('chat message', async (msg) => {
-    const roomName = userRooms[socket.id];
-    if (!roomName || !rooms[roomName]) return;
-
-    const username = msg.username;
-
-    // Check if user is banned
-    if (rooms[roomName].bans) {
-      const ban = rooms[roomName].bans.find(b => b.user === username && b.expiresAt > Date.now());
-      if (ban) {
-        socket.emit('error', { message: '❌ You are currently banned from this room' });
+      
+      const room = await Room.findOne({ name: roomName });
+      if (!room) {
+        socket.emit('error', { message: 'Room does not exist' });
         return;
       }
-    }
-
-    const messageData = {
-      username: msg.username,
-      message: msg.message,
-      timestamp: new Date().toLocaleTimeString(),
-      id: Date.now() + Math.random().toString(36).substr(2, 9)
-    };
-
-    // Store message in room
-    rooms[roomName].messages.push(messageData);
-    if (rooms[roomName].messages.length > 100) {
-      rooms[roomName].messages.shift();
-    }
-
-    // Save to file (throttle to reduce I/O)
-    try {
-      if (rooms[roomName].messages.length % 10 === 0) {
-        await saveData();
-      }
-    } catch (err) {
-      console.error('Failed to save message data:', err);
-    }
-
-    // Broadcast to everyone in the room EXCEPT sender
-    socket.broadcast.to(roomName).emit('chat message', messageData);
-  });
-
-  // Delete room with password verification
-  socket.on('delete_room', async (data) => {
-    const { roomName, password } = data;
-    
-    // Prevent deletion of default "Main" room
-    if (roomName === 'Main') {
-      socket.emit('error', { message: 'Cannot delete the Main room' });
-      return;
-    }
-    
-    if (!rooms[roomName]) {
-      socket.emit('error', { message: 'Room does not exist' });
-      return;
-    }
-
-    // Verify deletion password
-    if (password !== 'A@sh1shdeleteroom') {
-      socket.emit('error', { message: 'Incorrect deletion password' });
-      return;
-    }
-
-    // Delete the room
-    delete rooms[roomName];
-
-    // Save to file
-    try {
-      await saveData();
-    } catch (err) {
-      console.error('Failed to save after room deletion:', err);
-    }
-
-    // Notify all members in the room to leave
-    io.to(roomName).emit('room_deleted_by_owner', { roomName });
-    
-    // Broadcast room deletion to all clients
-    io.emit('room_deleted', { name: roomName });
-    
-    console.log('🗑️ Room deleted:', roomName);
-  });
-
-  socket.on('disconnect', async () => {
-    const username = userSessions[socket.id];
-    const roomName = userRooms[socket.id];
-    
-    if (roomName && rooms[roomName]) {
-      // Remove user from room
-      rooms[roomName].members = rooms[roomName].members.filter(m => m.id !== socket.id);
-
-      // Notify room members
-      io.to(roomName).emit('user_left', {
-        username,
-        members: rooms[roomName].members.length
+      
+      // Deactivate bans in MongoDB
+      await Ban.updateMany(
+        { roomName, username: unbannedUser, isActive: true },
+        { isActive: false }
+      );
+      
+      // Notify room
+      io.to(roomName).emit('user_unbanned', { unbannedUser, unbannerName });
+      
+      // System message
+      const systemMessage = await Message.create({
+        roomName,
+        username: 'System',
+        message: `✅ ${unbannedUser} has been unbanned by ${unbannerName}`,
+        isSystem: true
       });
-
-      // Send leave message
-      if (username) {
-        io.to(roomName).emit('chat message', {
-          username: 'System',
-          message: `👋 ${username} left the room`
-        });
-      }
-
-      // Delete empty non-default rooms
-      if (rooms[roomName].members.length === 0 && !rooms[roomName].isDefault) {
-        delete rooms[roomName];
-        try {
-          await saveData();
-        } catch (err) {
-          console.error('Failed to save after room deletion on disconnect:', err);
-        }
-        io.emit('room_deleted', { name: roomName });
-      } else {
-        // Save even if just member left
-        try {
-          await saveData();
-        } catch (err) {
-          console.error('Failed to save after member disconnect:', err);
-        }
-      }
+      
+      io.to(roomName).emit('chat message', {
+        username: 'System',
+        message: systemMessage.message,
+        timestamp: systemMessage.timestamp.toLocaleTimeString()
+      });
+      
+      console.log(`✅ ${unbannedUser} unbanned from ${roomName} - updated in MongoDB`);
+      
+    } catch (err) {
+      console.error('Unban error:', err);
+      socket.emit('error', { message: 'Failed to unban user' });
     }
-    
-    delete userRooms[socket.id];
-    delete userSessions[socket.id];
-    
-    if (username) {
-      console.log('👋 User disconnected:', username, socket.id);
-    } else {
-      console.log('👋 Anonymous disconnected:', socket.id);
+  });
+  
+  // ========== DISCONNECT ==========
+  
+  socket.on('disconnect', async () => {
+    try {
+      const session = await Session.findOne({ socketId: socket.id });
+      
+      if (session) {
+        const roomName = session.roomName;
+        const username = session.username;
+        
+        if (roomName) {
+          // Notify room
+          const roomSessions = await Session.find({ roomName });
+          io.to(roomName).emit('user_left', {
+            username,
+            members: roomSessions.length - 1
+          });
+          
+          // System message
+          const systemMessage = await Message.create({
+            roomName,
+            username: 'System',
+            message: `👋 ${username} disconnected`,
+            isSystem: true
+          });
+          
+          io.to(roomName).emit('chat message', {
+            username: 'System',
+            message: systemMessage.message,
+            timestamp: systemMessage.timestamp.toLocaleTimeString()
+          });
+          
+          // Delete empty non-default rooms
+          if (roomSessions.length <= 1) {
+            const room = await Room.findOne({ name: roomName });
+            if (room && !room.isDefault) {
+              await Room.deleteOne({ name: roomName });
+              await Message.deleteMany({ roomName });
+              await Ban.deleteMany({ roomName });
+              io.emit('room_deleted', { name: roomName });
+              console.log('🗑️ Empty room deleted from MongoDB:', roomName);
+            }
+          }
+        }
+        
+        // Delete session
+        await Session.deleteOne({ socketId: socket.id });
+      }
+      
+      console.log('👋 User disconnected:', socket.id);
+      
+    } catch (err) {
+      console.error('Disconnect error:', err);
+      await Session.deleteOne({ socketId: socket.id }).catch(() => {});
     }
   });
 });
 
+// ============================================
+// 🚀 START SERVER
+// ============================================
 const PORT = process.env.PORT || 3000;
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log('\n' + '='.repeat(60));
-  console.log('🚀 BLACK HOLE CHAT SERVER');
+  console.log('🚀🚀🚀 BLACK HOLE CHAT SERVER STARTED 🚀🚀🚀');
   console.log('='.repeat(60));
-  console.log(`\n📡 Server running on port ${PORT}`);
-  console.log(`⚡ Mode: ${process.env.CODESPACES ? 'CODESPACES' : process.env.NODE_ENV || 'development'}`);
-  
-  // Codespaces specific instructions
-  if (process.env.CODESPACES === 'true') {
-    const codespaceName = process.env.CODESPACE_NAME;
-    const domain = process.env.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN || 'preview.app.github.dev';
-    const url = `https://${codespaceName}-${PORT}.${domain}`;
-    
-    console.log('\n' + '🔴 CODESPACES DETECTED');
-    console.log('\n' + '📋 QUICK SETUP:');
-    console.log('   1. Look at the BOTTOM PANEL of your VS Code window');
-    console.log('   2. Click the "PORTS" tab (next to Terminal)');
-    console.log('   3. Find port ' + PORT + ' in the list');
-    console.log('   4. Right-click it → "Port Visibility" → "Public"');
-    console.log('   5. Click the 🌐 globe icon to open in browser');
-    
-    console.log('\n' + '🔗 OR USE THIS LINK:');
-    console.log('   ' + url);
-    
-    console.log('\n' + '⚠️  If the link doesn\'t work:');
-    console.log('   • Wait 10 seconds for port forwarding to initialize');
-    console.log('   • Check that port ' + PORT + ' is listed in the Ports tab');
-    console.log('   • Make sure it\'s set to "Public"');
-  } else {
-    console.log(`\n📱 Local access: http://localhost:${PORT}`);
-  }
-  
+  console.log(`\n📡 Port: ${PORT}`);
+  console.log(`💾 MongoDB: ${MONGODB_URI.replace(/:[^:@]*@/, ':****@')}`);
+  console.log(`🔑 Admin Password: ${ADMIN_PASSWORD}`);
   console.log('\n' + '='.repeat(60) + '\n');
 });
 
