@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Live Black Hole Chat</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%23667eea' opacity='0.3'/><path d='M30 50 Q50 65 70 50' stroke='%23667eea' stroke-width='3' fill='none' stroke-linecap='round' opacity='0.5'/></svg>">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a0a2e 100%);
+            color: white; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center;
+            padding: 20px;
+            min-height: 100vh;
+            animation: bgGlow 15s ease-in-out infinite;
+        }
+
+        @keyframes bgGlow {
+            0%, 100% { background: linear-gradient(135deg, #0a0a0a 0%, #1a0a2e 100%); }
+            50% { background: linear-gradient(135deg, #0f0f1e 0%, #2a0a3e 100%); }
+        }
+        #chat-container { 
+            width: 100%;
+            max-width: 600px;
+            height: 90vh;
+            background: #0f0f1e; 
+            border-radius: 20px; 
+            overflow: hidden; 
+            border: 2px solid #667eea;
+            box-shadow: 0 20px 80px rgba(0,0,0,0.8), inset 0 0 30px rgba(102, 126, 234, 0.1);
+            display: flex;
+            flex-direction: column;
+            animation: slideUp 0.6s ease-out;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #667eea;
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.3);
+            animation: slideDown 0.6s ease-out;
+        }
+
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .header h1 { font-size: 20px; font-weight: 700; letter-spacing: 0.5px; }
+        .user-info { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+        .status-dot { 
+            width: 10px; 
+            height: 10px; 
+            background: #4ade80; 
+            border-radius: 50%; 
+            animation: pulse 2s infinite;
+            box-shadow: 0 0 10px #4ade80;
+        }
+        
+        @keyframes pulse { 
+            0%, 100% { opacity: 1; box-shadow: 0 0 10px #4ade80; } 
+            50% { opacity: 0.5; box-shadow: 0 0 5px #4ade80; } 
+        }
+        #messages { 
+            flex: 1;
+            overflow-y: auto; 
+            padding: 20px; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 12px;
+            background: linear-gradient(to bottom, #0a0a18 0%, #0f0f2e 100%);
+            scroll-behavior: smooth;
+            align-items: center;
+        }
+
+        .msg-wrapper { 
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            width: 100%;
+            transition: color 0.2s;
+        }
+
+        .msg-wrapper.mine {
+            align-items: flex-end;
+        }
+
+        .msg-username {
+            font-size: 12px;
+            color: #aaa;
+            margin-bottom: 4px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .msg-wrapper.mine .msg-username {
+            color: #667eea;
+        }
+        
+        .msg { 
+            background: #4a4a5e;
+            padding: 12px 16px; 
+            border-radius: 18px; 
+            max-width: 70%;
+            word-wrap: break-word;
+            animation: slideIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3), inset 0 0 10px rgba(255,255,255,0.05);
+            border: 1px solid rgba(100, 100, 120, 0.3);
+            transition: all 0.2s;
+            color: #e0e0e0;
+        }
+
+        .msg:hover { 
+            box-shadow: 0 6px 20px rgba(100, 100, 120, 0.3), inset 0 0 10px rgba(255,255,255,0.1);
+            transform: translateY(-2px);
+        }
+
+        @keyframes slideIn { 
+            from { opacity: 0; transform: translateY(10px) scale(0.95); } 
+            to { opacity: 1; transform: translateY(0) scale(1); } 
+        }
+
+        .msg.mine { 
+            background: #4169e1;
+            text-shadow: none;
+            border: 1px solid rgba(65, 105, 225, 0.5);
+            color: #ffffff;
+        }
+
+        .msg.mine:hover { 
+            background: #5179f1;
+            box-shadow: 0 6px 20px rgba(65, 105, 225, 0.4), inset 0 0 10px rgba(255,255,255,0.1);
+        }
+
+        .msg.system {
+            background: #2a2a3e;
+            border: 1px solid #667eea;
+            color: #b0b0e0;
+            font-size: 13px;
+            font-style: italic;
+            align-self: center;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 10px;
+            animation: fadeInUp 0.5s ease-out 0.2s both;
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        #input-area { 
+            display: flex; 
+            flex-direction: column;
+            gap: 10px;
+            padding: 15px; 
+            background: #111; 
+            border-top: 2px solid #667eea;
+            color: white; 
+            border-radius: 10px; 
+            outline: none;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        #messageInput { 
+            background: #333; 
+            border: 2px solid #444;
+            padding: 12px 15px; 
+            color: white; 
+            border-radius: 8px; 
+            outline: none;
+            font-size: 14px;
+            flex: 1;
+        }
+
+        input:focus { 
+            border-color: #667eea; 
+            box-shadow: 0 0 0 4px rgba(102,126,234,0.2), inset 0 0 10px rgba(102,126,234,0.1);
+        }
+
+        button { 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none; 
+            padding: 12px 25px; 
+            color: white; 
+            cursor: pointer; 
+            border-radius: 10px; 
+            font-weight: bold;
+            transition: all 0.3s;
+            white-space: nowrap;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            transition: left 0.5s;
+        }
+
+        button:hover::before {
+            left: 100%;
+        }
+
+        .emoji-panel {
+            background: linear-gradient(135deg, #1a1a3e 0%, #2a2a4e 100%);
+            padding: 12px;
+            border-radius: 12px;
+            border: 1px solid #667eea;
+            display: none;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 5px;
+            max-height: 180px;
+            overflow-y: auto;
+            animation: scaleIn 0.3s ease-out;
+        }
+
+        @keyframes scaleIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .emoji-panel.show { display: grid; }
+
+        .emoji-item {
+            font-size: 24px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 8px;
+            transition: all 0.2s;
+            text-align: center;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .emoji-item:hover { 
+            background: rgba(102, 126, 234, 0.3); 
+            transform: scale(1.3) rotate(10deg);
+        }
+
+        button:hover { 
+            transform: translateY(-2px); 
+            box-shadow: 0 5px 15px rgba(102,126,234,0.4); 
+        }
+
+        button:active { 
+            transform: translateY(0); 
+        }
+
+        .emoji-btn { 
+            padding: 12px 15px; 
+        }
+
+        #messages::-webkit-scrollbar { width: 8px; }
+        #messages::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); border-radius: 4px; }
+        #messages::-webkit-scrollbar-thumb { background: linear-gradient(to bottom, #667eea, #764ba2); border-radius: 4px; }
+        #messages::-webkit-scrollbar-thumb:hover { background: linear-gradient(to bottom, #7a8ff5, #8a5bb2); }
+
+        #room-content::-webkit-scrollbar { width: 8px; }
+        #room-content::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); border-radius: 4px; }
+        #room-content::-webkit-scrollbar-thumb { background: linear-gradient(to bottom, #667eea, #764ba2); border-radius: 4px; }
+        #room-content::-webkit-scrollbar-thumb:hover { background: linear-gradient(to bottom, #7a8ff5, #8a5bb2); }
+
+        .room-item-btn {
+            display: flex;
+            gap: 5px;
+        }
+
+        .delete-btn {
+            background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+            padding: 8px 12px;
+            font-size: 12px;
+            box-shadow: 0 4px 15px rgba(220, 38, 38, 0.3);
+        }
+
+        .delete-btn:hover {
+            box-shadow: 0 7px 25px rgba(220, 38, 38, 0.5);
+        }
+
+        @media (max-width: 600px) {
+            #chat-container { height: 100vh; border-radius: 0; }
+            .msg { max-width: 85%; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="chat-container">
+    <!-- Auth Screen -->
+    <div id="auth-screen" style="display: flex; flex-direction: column; height: 100%;">
+        <div class="header" style="flex-shrink: 0;">
+            <h1>💬 Black Hole Chat</h1>
+            <div style="font-size: 13px; opacity: 0.9;">Login or Register</div>
+        </div>
+        
+        <div style="flex: 1; display: flex; justify-content: center; align-items: center; padding: 20px; background: #0f0f0f;">
+            <div style="width: 100%; max-width: 400px;">
+                <!-- Login Form -->
+                <div id="loginForm" style="background: #222; padding: 25px; border-radius: 12px; border: 1px solid #333; margin-bottom: 15px;">
+                    <div style="font-weight: bold; margin-bottom: 15px; font-size: 16px; color: #ccc; text-align: center;">Login</div>
+                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                        <input id="loginUsername" placeholder="Username..." maxlength="30" style="background: #333; border: 2px solid #444; padding: 12px 15px; color: white; border-radius: 8px; outline: none; font-size: 14px;" />
+                        <input id="loginPassword" placeholder="Password..." maxlength="30" type="password" style="background: #333; border: 2px solid #444; padding: 12px 15px; color: white; border-radius: 8px; outline: none; font-size: 14px;" />
+                        <button onclick="handleLogin()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; padding: 12px; color: white; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 5px;">Login</button>
+                        <div style="text-align: center; color: #aaa; font-size: 13px;">Don't have an account? <span onclick="switchToRegister()" style="cursor: pointer; color: #667eea; text-decoration: underline;">Register</span></div>
+                    </div>
+                </div>
+
+                <!-- Register Form (hidden by default) -->
+                <div id="registerForm" style="display: none; background: #222; padding: 25px; border-radius: 12px; border: 1px solid #333;">
+                    <div style="font-weight: bold; margin-bottom: 15px; font-size: 16px; color: #ccc; text-align: center;">Register</div>
+                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                        <input id="regUsername" placeholder="Choose username..." maxlength="30" style="background: #333; border: 2px solid #444; padding: 12px 15px; color: white; border-radius: 8px; outline: none; font-size: 14px;" />
+                        <input id="regPassword" placeholder="Choose password..." maxlength="30" type="password" style="background: #333; border: 2px solid #444; padding: 12px 15px; color: white; border-radius: 8px; outline: none; font-size: 14px;" />
+                        <input id="regConfirmPassword" placeholder="Confirm password..." maxlength="30" type="password" style="background: #333; border: 2px solid #444; padding: 12px 15px; color: white; border-radius: 8px; outline: none; font-size: 14px;" />
+                        <button onclick="handleRegister()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; padding: 12px; color: white; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 5px;">Register</button>
+                        <div style="text-align: center; color: #aaa; font-size: 13px;">Already have an account? <span onclick="switchToLogin()" style="cursor: pointer; color: #667eea; text-decoration: underline;">Login</span></div>
+                    </div>
+                </div>
+                
+                <div id="authMessage" style="text-align: center; color: #ff6b6b; margin-top: 15px; font-size: 13px; display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Room Selection Screen -->
+    <div id="room-screen" style="display: none; flex-direction: column; height: 100%;">
+        <div class="header" style="flex-shrink: 0; justify-content: space-between;">
+            <h1>💬 Black Hole Chat</h1>
+            <button onclick="handleLogout()" style="background: #c0392b; padding: 8px 15px; font-size: 12px; font-weight: bold; border-radius: 6px;">Logout: <span id="loggedInUsername">User</span></button>
+        </div>
+        
+        <div id="room-content" style="flex: 1; overflow-y: auto; padding: 20px; background: #0f0f0f;">
+            <!-- Create Room Section -->
+            <div style="background: #222; padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #333;">
+                <div style="font-weight: bold; margin-bottom: 12px; font-size: 14px; color: #ccc;">Create New Room</div>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <input id="newRoomName" placeholder="Room name..." maxlength="30" style="background: #333; border: 2px solid #444; padding: 10px 15px; color: white; border-radius: 8px; outline: none; font-size: 14px;" />
+                    <input id="newRoomPassword" placeholder="Password (optional)..." maxlength="30" type="password" style="background: #333; border: 2px solid #444; padding: 10px 15px; color: white; border-radius: 8px; outline: none; font-size: 14px;" />
+                    <button onclick="createRoom()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; padding: 12px; color: white; border-radius: 8px; font-weight: bold; cursor: pointer;">Create Room</button>
+                </div>
+            </div>
+
+            <!-- Available Rooms Section -->
+            <div>
+                <div style="font-weight: bold; margin-bottom: 12px; font-size: 14px; color: #ccc;">Available Rooms</div>
+                <div id="rooms-list" style="display: flex; flex-direction: column; gap: 10px;">
+                    <div style="text-align: center; color: #666; padding: 20px;">Loading rooms...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chat Screen -->
+    <div id="chat-screen" style="display: none; flex-direction: column; height: 100%;">
+        <div class="header" style="flex-shrink: 0;">
+            <div>
+                <h1 style="margin-bottom: 4px;">💬 <span id="current-room">Room</span></h1>
+                <div class="room-name" style="font-size: 13px; opacity: 0.8;"><span id="members-count">0</span> members</div>
+            </div>
+            <div class="user-info">
+                <span class="status-dot"></span>
+                <span id="username-display">User</span>
+            </div>
+        </div>
+        <div id="messages" style="flex: 1; overflow-y: auto; padding: 20px; background: #0f0f0f; display: flex; flex-direction: column; gap: 12px;"></div>
+        <div id="input-area">
+            <div class="input-row">
+                <input id="messageInput" placeholder="Type a message..." autocomplete="off">
+                <button class="emoji-btn" onclick="toggleEmojiPanel()" title="Emoji">😊</button>
+                <button onclick="sendMessage()" style="min-width: 70px;">Send</button>
+            </div>
+            <div class="emoji-panel" id="emojiPanel"></div>
+            <div class="input-row" style="margin-top: 10px;">
+                <button onclick="leaveRoom()" style="background: #c0392b; flex: 1;">Leave Room</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+<script>
+    // Cookie management functions
+    function setCookie(name, value, days = 30) {
+        const d = new Date();
+        d.setTime(d.getTime() + (days * 24 * 60 * 60 * 1000));
+        const expires = "expires=" + d.toUTCString();
+        document.cookie = name + "=" + value + ";" + expires + ";path=/";
+    }
+
+    function getCookie(name) {
+        const nameEQ = name + "=";
+        const ca = document.cookie.split(';');
+        for (let i = 0; i < ca.length; i++) {
+            let c = ca[i].trim();
+            if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+        }
+        return "";
+    }
+
+    function deleteCookie(name) {
+        document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;";
+    }
+
+    const socket = io();
+    const msgContainer = document.getElementById('messages');
+    const input = document.getElementById('messageInput');
+    const emojiPanel = document.getElementById('emojiPanel');
+    const authScreen = document.getElementById('auth-screen');
+    const roomScreen = document.getElementById('room-screen');
+    const chatScreen = document.getElementById('chat-screen');
+    const roomsList = document.getElementById('rooms-list');
+    const usernameDisplay = document.getElementById('username-display');
+    const loggedInUsernameDisplay = document.getElementById('loggedInUsername');
+    const authMessage = document.getElementById('authMessage');
+
+    let currentUsername = 'User';
+    let currentRoom = null;
+    const bannedUsers = {}; // Track banned users per room: { roomName: ["user1", "user2"] }
+    const ADMIN_PASSWORD = 'A@sh1shlivechat';
+
+    // Form switching
+    function switchToRegister() {
+        document.getElementById('loginForm').style.display = 'none';
+        document.getElementById('registerForm').style.display = 'block';
+        authMessage.style.display = 'none';
+    }
+
+    function switchToLogin() {
+        document.getElementById('registerForm').style.display = 'none';
+        document.getElementById('loginForm').style.display = 'block';
+        authMessage.style.display = 'none';
+    }
+
+    function showAuthMessage(msg, isError = true) {
+        authMessage.textContent = msg;
+        authMessage.style.color = isError ? '#ff6b6b' : '#4ade80';
+        authMessage.style.display = 'block';
+    }
+
+    // Login handler
+    function handleLogin() {
+        const username = document.getElementById('loginUsername').value.trim();
+        const password = document.getElementById('loginPassword').value;
+
+        if (!username || !password) {
+            showAuthMessage('Please enter both username and password');
+            return;
+        }
+
+        socket.emit('login', { username, password });
+    }
+
+    // Register handler
+    function handleRegister() {
+        const username = document.getElementById('regUsername').value.trim();
+        const password = document.getElementById('regPassword').value;
+        const confirmPassword = document.getElementById('regConfirmPassword').value;
+
+        if (!username || !password || !confirmPassword) {
+            showAuthMessage('Please fill in all fields');
+            return;
+        }
+
+        if (password !== confirmPassword) {
+            showAuthMessage('Passwords do not match');
+            return;
+        }
+
+        socket.emit('register', { username, password });
+    }
+
+    // Handle logout
+    function handleLogout() {
+        // First leave the room if in one
+        if (currentRoom) {
+            socket.emit('leave_room', { roomName: currentRoom });
+        }
+        
+        // Then logout
+        socket.emit('logout');
+        
+        // Force disconnect and reset UI immediately
+        setTimeout(() => {
+            socket.disconnect();
+            
+            // Reset UI
+            deleteCookie('black-hole_username');
+            currentUsername = 'User';
+            currentRoom = null;
+            authScreen.style.display = 'flex';
+            roomScreen.style.display = 'none';
+            chatScreen.style.display = 'none';
+            
+            // Clear forms
+            document.getElementById('loginUsername').value = '';
+            document.getElementById('loginPassword').value = '';
+            document.getElementById('regUsername').value = '';
+            document.getElementById('regPassword').value = '';
+            document.getElementById('regConfirmPassword').value = '';
+            
+            switchToLogin();
+            showAuthMessage('Logged out successfully', false);
+            setTimeout(() => {
+                authMessage.style.display = 'none';
+            }, 2000);
+            
+            // Reconnect socket for next login
+            socket.connect();
+        }, 100);
+    }
+
+    // Auth event listeners
+    socket.on('auth_success', (data) => {
+        currentUsername = data.username;
+        loggedInUsernameDisplay.textContent = data.username;
+        usernameDisplay.textContent = data.username;
+        setCookie('black-hole_username', data.username);
+        
+        // Show success message and switch screens
+        showAuthMessage(data.message, false);
+        setTimeout(() => {
+            authScreen.style.display = 'none';
+            roomScreen.style.display = 'flex';
+            loadRooms();
+        }, 500);
+    });
+
+    socket.on('logged_out', () => {
+        deleteCookie('black-hole_username');
+        currentUsername = 'User';
+        authScreen.style.display = 'flex';
+        roomScreen.style.display = 'none';
+        chatScreen.style.display = 'none';
+        
+        // Clear forms
+        document.getElementById('loginUsername').value = '';
+        document.getElementById('loginPassword').value = '';
+        document.getElementById('regUsername').value = '';
+        document.getElementById('regPassword').value = '';
+        document.getElementById('regConfirmPassword').value = '';
+        
+        switchToLogin();
+        showAuthMessage('Logged out successfully', false);
+        setTimeout(() => {
+            authMessage.style.display = 'none';
+        }, 2000);
+    });
+
+    socket.on('auth_error', (data) => {
+        showAuthMessage(data.message);
+    });
+
+    const emojis = ['😀', '😂', '😍', '🥰', '😎', '🤔', '😢', '🎉', '👍', '❤️', '🔥', '✨', '🌟', '💯', '😱', '🤯', '🎊', '🎈', '🚀', '💪', '😘', '🙏', '👏', '🎵', '🍕', '🍔', '🍉', '🎮'];
+
+    // Load emojis
+    emojis.forEach(emoji => {
+        const emojiItem = document.createElement('div');
+        emojiItem.className = 'emoji-item';
+        emojiItem.textContent = emoji;
+        emojiItem.onclick = () => {
+            input.value += emoji;
+            input.focus();
+        };
+        emojiPanel.appendChild(emojiItem);
+    });
+
+    function toggleEmojiPanel() {
+        emojiPanel.classList.toggle('show');
+        input.focus();
+    }
+
+    // Load rooms from server
+    function loadRooms() {
+        socket.emit('get_rooms');
+    }
+
+    socket.on('rooms_list', (rooms) => {
+        roomsList.innerHTML = '';
+        if (rooms.length === 0) {
+            roomsList.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">No rooms available. Create one!</div>';
+            return;
+        }
+        rooms.forEach(room => {
+            const roomDiv = document.createElement('div');
+            roomDiv.style.cssText = 'background: #222; padding: 15px; border-radius: 8px; border: 1px solid #444; cursor: pointer; transition: all 0.2s; display: flex; justify-content: space-between; align-items: center;';
+            roomDiv.onmouseover = () => roomDiv.style.background = '#2a2a2a';
+            roomDiv.onmouseout = () => roomDiv.style.background = '#222';
+            
+            const info = document.createElement('div');
+            info.innerHTML = `
+                <div style="font-weight: bold; margin-bottom: 4px;">${room.name}${room.hasPassword ? ' 🔒' : ''}</div>
+                <div style="font-size: 12px; color: #888;">${room.members} member${room.members !== 1 ? 's' : ''}</div>
+            `;
+            
+            const button = document.createElement('button');
+            button.textContent = 'Join';
+            button.style.cssText = 'background: #667eea; border: none; padding: 8px 16px; color: white; border-radius: 6px; cursor: pointer; font-weight: bold;';
+            button.onclick = () => {
+                if (room.hasPassword) {
+                    joinRoomWithPassword(room.name);
+                } else {
+                    joinRoom(room.name, '');
+                }
+            };
+            
+            const btnContainer = document.createElement('div');
+            btnContainer.className = 'room-item-btn';
+            btnContainer.style.cssText = 'display: flex; gap: 5px;';
+            btnContainer.appendChild(button);
+            
+            // Only show delete button for non-Main rooms
+            if (room.name !== 'Main') {
+                const deleteButton = document.createElement('button');
+                deleteButton.textContent = '🗑️ Delete';
+                deleteButton.className = 'delete-btn';
+                deleteButton.style.cssText = 'background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); border: none; padding: 8px 12px; color: white; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 12px;';
+                deleteButton.onclick = (e) => {
+                    e.stopPropagation();
+                    deleteRoomPrompt(room.name);
+                };
+                btnContainer.appendChild(deleteButton);
+            }
+            
+            roomDiv.appendChild(info);
+            roomDiv.appendChild(btnContainer);
+            roomsList.appendChild(roomDiv);
+        });
+    });
+
+    socket.on('room_created', () => loadRooms());
+    socket.on('room_deleted', () => loadRooms());
+
+    function createRoom() {
+        const roomName = document.getElementById('newRoomName').value.trim();
+        const password = document.getElementById('newRoomPassword').value;
+
+        if (!roomName) {
+            alert('Please enter a room name');
+            return;
+        }
+
+        socket.emit('create_room', { roomName, password });
+        document.getElementById('newRoomName').value = '';
+        document.getElementById('newRoomPassword').value = '';
+    }
+
+    function joinRoomWithPassword(roomName) {
+        const password = prompt('Enter room password:');
+        if (password === null) return;
+        joinRoom(roomName, password);
+    }
+
+    function joinRoom(roomName, password) {
+        currentRoom = roomName;
+        socket.emit('join_room', { roomName, password });
+    }
+
+    socket.on('error', (data) => {
+        alert('Error: ' + data.message);
+    });
+
+    socket.on('joined_room', (data) => {
+        currentRoom = data.roomName;
+        usernameDisplay.textContent = data.username;
+        document.getElementById('current-room').textContent = data.roomName;
+        msgContainer.innerHTML = '';
+        roomScreen.style.display = 'none';
+        chatScreen.style.display = 'flex';
+        input.focus();
+    });
+
+    socket.on('room_history', (data) => {
+        msgContainer.innerHTML = '';
+        data.messages.forEach(msg => {
+            addMessage(msg.username, msg.message);
+        });
+    });
+
+    socket.on('user_joined', (data) => {
+        document.getElementById('members-count').textContent = data.members;
+    });
+
+    socket.on('user_left', (data) => {
+        document.getElementById('members-count').textContent = data.members;
+    });
+
+    // Receive message from server (NOT from sender)
+    socket.on('chat message', (data) => {
+        addMessage(data.username, data.message);
+    });
+
+    function addMessage(username, message) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'msg-wrapper';
+        
+        const userLabel = document.createElement('div');
+        userLabel.className = 'msg-username';
+        userLabel.textContent = username;
+        wrapper.appendChild(userLabel);
+        
+        const item = document.createElement('div');
+        item.className = 'msg';
+        item.textContent = message;
+        wrapper.appendChild(item);
+        
+        msgContainer.appendChild(wrapper);
+        msgContainer.scrollTop = msgContainer.scrollHeight;
+    }
+
+    function sendMessage() {
+        if (input.value.trim()) {
+            const messageText = input.value;
+            
+            // Check if it's a command
+            if (messageText.startsWith('/')) {
+                handleCommand(messageText);
+                input.value = '';
+                emojiPanel.classList.remove('show');
+                return;
+            }
+            
+            // Check if user is banned
+            if (bannedUsers[currentRoom] && bannedUsers[currentRoom].some(b => b.user === currentUsername && b.expiresAt > Date.now())) {
+                addSystemMessage('❌ You are currently banned from this room');
+                return;
+            }
+            
+            const messageData = { username: currentUsername, message: messageText };
+            socket.emit('chat message', messageData);
+            
+            // Add your own message to UI locally
+            const wrapper = document.createElement('div');
+            wrapper.className = 'msg-wrapper mine';
+            
+            const userLabel = document.createElement('div');
+            userLabel.className = 'msg-username';
+            userLabel.textContent = currentUsername;
+            wrapper.appendChild(userLabel);
+            
+            const item = document.createElement('div');
+            item.className = 'msg mine';
+            item.textContent = messageText;
+            wrapper.appendChild(item);
+            
+            msgContainer.appendChild(wrapper);
+            input.value = '';
+            emojiPanel.classList.remove('show');
+            msgContainer.scrollTop = msgContainer.scrollHeight;
+        }
+    }
+
+    function handleCommand(commandText) {
+        const parts = commandText.split(' ');
+        const command = parts[0].toLowerCase();
+        const args = parts.slice(1);
+
+        switch(command) {
+            case '/help':
+                showCommandHelp();
+                break;
+            case '/clear':
+                handleClearCommand(args);
+                break;
+            case '/flip':
+                handleFlipCommand();
+                break;
+            case '/roll':
+                handleRollCommand(args);
+                break;
+            case '/ban':
+                handleBanCommand(args);
+                break;
+            case '/unban':
+                handleUnbanCommand(args);
+                break;
+            default:
+                addSystemMessage(`Unknown command: ${command}. Type /help for available commands.`);
+        }
+    }
+
+    function showCommandHelp() {
+        const helpText = `
+Available Commands:
+/help - Show this message
+/clear <password> - Clear all messages (admin only)
+/flip - Flip a coin (heads or tails)
+/roll <min> <max> - Roll a random number between min and max
+/ban <username> <duration> <password> - Ban a user (h/m/d, default 10m)
+/unban <username> <password> - Unban a user (admin only)
+        `.trim();
+        addSystemMessage(helpText);
+    }
+
+    function handleClearCommand(args) {
+        if (args.length === 0) {
+            addSystemMessage('Usage: /clear <password>');
+            return;
+        }
+        
+        const password = args.join(' ');
+        if (password === ADMIN_PASSWORD) {
+            msgContainer.innerHTML = '';
+            socket.emit('clear_messages', { roomName: currentRoom, password });
+            addSystemMessage('Messages cleared by ' + currentUsername);
+        } else {
+            addSystemMessage('❌ Incorrect password for /clear command');
+        }
+    }
+
+    function handleFlipCommand() {
+        const result = Math.random() < 0.5 ? 'HEADS' : 'TAILS';
+        const message = `🪙 ${currentUsername} flipped a coin... ${result}!`;
+        socket.emit('chat message', { username: 'System', message });
+        addMessage('System', message);
+    }
+
+    function handleRollCommand(args) {
+        if (args.length < 2) {
+            addSystemMessage('Usage: /roll <min> <max>');
+            return;
+        }
+
+        const min = parseInt(args[0]);
+        const max = parseInt(args[1]);
+
+        if (isNaN(min) || isNaN(max)) {
+            addSystemMessage('Min and max must be numbers');
+            return;
+        }
+
+        if (min >= max) {
+            addSystemMessage('Min must be less than max');
+            return;
+        }
+
+        const result = Math.floor(Math.random() * (max - min + 1)) + min;
+        const message = `🎲 ${currentUsername} rolled a number... ${result}!`;
+        socket.emit('chat message', { username: 'System', message });
+        addMessage('System', message);
+    }
+
+    function handleBanCommand(args) {
+        if (args.length < 2) {
+            addSystemMessage('Usage: /ban <username> [duration] <password>');
+            addSystemMessage('Duration: h (hours), m (minutes), d (days), or blank for 10 minutes');
+            return;
+        }
+
+        const targetUser = args[0];
+        let duration = '10m'; // default 10 minutes
+        let password = '';
+
+        // Parse arguments: could be /ban user password or /ban user 1h password
+        if (args.length === 2) {
+            // Only password provided, use default duration
+            password = args[1];
+        } else if (args.length >= 3) {
+            // Duration and password provided
+            const possibleDuration = args[1];
+            // Check if it's a duration (ends with h, m, or d)
+            if (/^\d+[hmd]?$/.test(possibleDuration)) {
+                duration = possibleDuration;
+                password = args.slice(2).join(' ');
+            } else {
+                password = args.slice(1).join(' ');
+            }
+        }
+
+        if (password === ADMIN_PASSWORD) {
+            socket.emit('ban_user', { 
+                roomName: currentRoom, 
+                bannedUser: targetUser, 
+                bannerName: currentUsername,
+                duration: duration 
+            });
+            addSystemMessage(`⛔ ${targetUser} has been banned for ${duration}`);
+        } else {
+            addSystemMessage('❌ Incorrect password for /ban command');
+        }
+    }
+
+    function handleUnbanCommand(args) {
+        if (args.length < 2) {
+            addSystemMessage('Usage: /unban <username> <password>');
+            return;
+        }
+
+        const targetUser = args[0];
+        const password = args.slice(1).join(' ');
+
+        if (password === ADMIN_PASSWORD) {
+            socket.emit('unban_user', { 
+                roomName: currentRoom, 
+                unbannedUser: targetUser, 
+                unbannerName: currentUsername
+            });
+            addSystemMessage(`✅ ${targetUser} has been unbanned`);
+        } else {
+            addSystemMessage('❌ Incorrect password for /unban command');
+        }
+    }
+
+    function addSystemMessage(message) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'msg-wrapper';
+        
+        const item = document.createElement('div');
+        item.className = 'msg system';
+        item.textContent = message;
+        wrapper.appendChild(item);
+        
+        msgContainer.appendChild(wrapper);
+        msgContainer.scrollTop = msgContainer.scrollHeight;
+    }
+
+    function leaveRoom() {
+        currentRoom = null;
+        roomScreen.style.display = 'flex';
+        chatScreen.style.display = 'none';
+        loadRooms();
+    }
+
+    // Allow 'Enter' key to send
+    input.addEventListener("keypress", (e) => { if (e.key === "Enter" && !e.shiftKey) sendMessage(); });
+
+    // Close emoji panel when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.emoji-btn') && !e.target.closest('.emoji-panel')) {
+            emojiPanel.classList.remove('show');
+        }
+    });
+
+    // Auth form keyboard events
+    document.getElementById('loginUsername').addEventListener('keypress', (e) => { if (e.key === 'Enter') handleLogin(); });
+    document.getElementById('loginPassword').addEventListener('keypress', (e) => { if (e.key === 'Enter') handleLogin(); });
+    document.getElementById('regUsername').addEventListener('keypress', (e) => { if (e.key === 'Enter') handleRegister(); });
+    document.getElementById('regPassword').addEventListener('keypress', (e) => { if (e.key === 'Enter') handleRegister(); });
+    document.getElementById('regConfirmPassword').addEventListener('keypress', (e) => { if (e.key === 'Enter') handleRegister(); });
+
+    // Load rooms on connect
+    socket.on('connect', () => {
+        // Check if user has a saved username in cookies
+        const savedUsername = getCookie('black-hole_username');
+        if (savedUsername) {
+            currentUsername = savedUsername;
+            loggedInUsernameDisplay.textContent = savedUsername;
+            usernameDisplay.textContent = savedUsername;
+            authScreen.style.display = 'none';
+            roomScreen.style.display = 'flex';
+            loadRooms();
+        } else {
+            authScreen.style.display = 'flex';
+            roomScreen.style.display = 'none';
+            chatScreen.style.display = 'none';
+        }
+    });
+
+    // Handle room deletion
+    function deleteRoomPrompt(roomName) {
+        const password = prompt(`Enter deletion password for "${roomName}":`);
+        if (password === null) return;
+        
+        socket.emit('delete_room', { roomName, password });
+    }
+
+    // When room is deleted while user is in it
+    socket.on('room_deleted_by_owner', (data) => {
+        alert(`Room "${data.roomName}" has been deleted by owner.`);
+        leaveRoom();
+    });
+
+    // When room is deleted, refresh the room list for all clients
+    socket.on('room_deleted', (data) => {
+        loadRooms();
+    });
+
+    // When messages are cleared
+    socket.on('messages_cleared', (data) => {
+        msgContainer.innerHTML = '';
+        addSystemMessage('All messages have been cleared');
+    });
+
+    // When a user is banned
+    socket.on('user_banned', (data) => {
+        // Calculate expiration time
+        let durationMs = 10 * 60 * 1000; // default 10 minutes
+        
+        if (data.duration) {
+            const match = data.duration.match(/^(\d+)([hmd]?)$/);
+            if (match) {
+                const value = parseInt(match[1]);
+                const unit = match[2] || 'm';
+                
+                if (unit === 'h') durationMs = value * 60 * 60 * 1000;
+                else if (unit === 'm') durationMs = value * 60 * 1000;
+                else if (unit === 'd') durationMs = value * 24 * 60 * 60 * 1000;
+            }
+        }
+        
+        const expiresAt = Date.now() + durationMs;
+        if (!bannedUsers[currentRoom]) bannedUsers[currentRoom] = [];
+        
+        // Remove if already exists
+        bannedUsers[currentRoom] = bannedUsers[currentRoom].filter(b => b.user !== data.bannedUser);
+        
+        // Add new ban entry
+        bannedUsers[currentRoom].push({ user: data.bannedUser, expiresAt });
+        
+        addSystemMessage(`⛔ ${data.bannedUser} has been banned for ${data.duration || '10m'}`);
+        
+        // Auto-unban after duration
+        setTimeout(() => {
+            if (bannedUsers[currentRoom]) {
+                bannedUsers[currentRoom] = bannedUsers[currentRoom].filter(b => b.user !== data.bannedUser);
+            }
+            addSystemMessage(`✅ Ban expired: ${data.bannedUser} is now unbanned`);
+        }, durationMs);
+    });
+
+    // When a user is unbanned
+    socket.on('user_unbanned', (data) => {
+        if (bannedUsers[currentRoom]) {
+            bannedUsers[currentRoom] = bannedUsers[currentRoom].filter(b => b.user !== data.unbannedUser);
+        }
+        addSystemMessage(`✅ ${data.unbannedUser} has been unbanned by ${data.unbannerName}`);
+    });
+</script>
+</body>
+</html>
