@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Live Black Hole Chat</title>
+    <title>Black Hole Chat</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%23667eea' opacity='0.3'/><path d='M30 50 Q50 65 70 50' stroke='%23667eea' stroke-width='3' fill='none' stroke-linecap='round' opacity='0.5'/></svg>">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -21,6 +21,7 @@
             0%, 100% { background: linear-gradient(135deg, #0a0a0a 0%, #1a0a2e 100%); }
             50% { background: linear-gradient(135deg, #0f0f1e 0%, #2a0a3e 100%); }
         }
+        
         #chat-container { 
             width: 100%;
             max-width: 600px;
@@ -39,6 +40,7 @@
             from { opacity: 0; transform: translateY(30px); }
             to { opacity: 1; transform: translateY(0); }
         }
+        
         .header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             padding: 15px 20px;
@@ -54,8 +56,16 @@
             from { opacity: 0; transform: translateY(-30px); }
             to { opacity: 1; transform: translateY(0); }
         }
+        
         .header h1 { font-size: 20px; font-weight: 700; letter-spacing: 0.5px; }
-        .user-info { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+        
+        .user-info { 
+            display: flex; 
+            align-items: center; 
+            gap: 10px; 
+            font-size: 13px; 
+        }
+        
         .status-dot { 
             width: 10px; 
             height: 10px; 
@@ -69,6 +79,7 @@
             0%, 100% { opacity: 1; box-shadow: 0 0 10px #4ade80; } 
             50% { opacity: 0.5; box-shadow: 0 0 5px #4ade80; } 
         }
+        
         #messages { 
             flex: 1;
             overflow-y: auto; 
@@ -299,6 +310,16 @@
             box-shadow: 0 7px 25px rgba(220, 38, 38, 0.5);
         }
 
+        .admin-badge {
+            background: #ffd700;
+            color: #000;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: bold;
+            margin-left: 8px;
+        }
+
         @media (max-width: 600px) {
             #chat-container { height: 100vh; border-radius: 0; }
             .msg { max-width: 85%; }
@@ -402,6 +423,9 @@
 
 <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 <script>
+    // Admin password (same for all admin functions)
+    const ADMIN_PASSWORD = 'A@sh1shlivechat';
+
     // Cookie management functions
     function setCookie(name, value, days = 30) {
         const d = new Date();
@@ -438,8 +462,27 @@
 
     let currentUsername = 'User';
     let currentRoom = null;
-    const bannedUsers = {}; // Track banned users per room: { roomName: ["user1", "user2"] }
-    const ADMIN_PASSWORD = 'A@sh1shlivechat';
+    const bannedUsers = {};
+
+    // Emojis
+    const emojis = ['😀', '😂', '😍', '🥰', '😎', '🤔', '😢', '🎉', '👍', '❤️', '🔥', '✨', '🌟', '💯', '😱', '🤯', '🎊', '🎈', '🚀', '💪', '😘', '🙏', '👏', '🎵', '🍕', '🍔', '🍉', '🎮'];
+
+    // Load emojis
+    emojis.forEach(emoji => {
+        const emojiItem = document.createElement('div');
+        emojiItem.className = 'emoji-item';
+        emojiItem.textContent = emoji;
+        emojiItem.onclick = () => {
+            input.value += emoji;
+            input.focus();
+        };
+        emojiPanel.appendChild(emojiItem);
+    });
+
+    function toggleEmojiPanel() {
+        emojiPanel.classList.toggle('show');
+        input.focus();
+    }
 
     // Form switching
     function switchToRegister() {
@@ -492,44 +535,19 @@
         socket.emit('register', { username, password });
     }
 
-    // Handle logout
+    // Logout handler
     function handleLogout() {
-        // First leave the room if in one
         if (currentRoom) {
-            socket.emit('leave_room', { roomName: currentRoom });
+            socket.emit('leave_room');
         }
-        
-        // Then logout
         socket.emit('logout');
-        
-        // Force disconnect and reset UI immediately
-        setTimeout(() => {
-            socket.disconnect();
-            
-            // Reset UI
-            deleteCookie('black-hole_username');
-            currentUsername = 'User';
-            currentRoom = null;
-            authScreen.style.display = 'flex';
-            roomScreen.style.display = 'none';
-            chatScreen.style.display = 'none';
-            
-            // Clear forms
-            document.getElementById('loginUsername').value = '';
-            document.getElementById('loginPassword').value = '';
-            document.getElementById('regUsername').value = '';
-            document.getElementById('regPassword').value = '';
-            document.getElementById('regConfirmPassword').value = '';
-            
-            switchToLogin();
-            showAuthMessage('Logged out successfully', false);
-            setTimeout(() => {
-                authMessage.style.display = 'none';
-            }, 2000);
-            
-            // Reconnect socket for next login
-            socket.connect();
-        }, 100);
+        deleteCookie('black-hole_username');
+        currentUsername = 'User';
+        currentRoom = null;
+        authScreen.style.display = 'flex';
+        roomScreen.style.display = 'none';
+        chatScreen.style.display = 'none';
+        switchToLogin();
     }
 
     // Auth event listeners
@@ -539,7 +557,6 @@
         usernameDisplay.textContent = data.username;
         setCookie('black-hole_username', data.username);
         
-        // Show success message and switch screens
         showAuthMessage(data.message, false);
         setTimeout(() => {
             authScreen.style.display = 'none';
@@ -554,45 +571,14 @@
         authScreen.style.display = 'flex';
         roomScreen.style.display = 'none';
         chatScreen.style.display = 'none';
-        
-        // Clear forms
-        document.getElementById('loginUsername').value = '';
-        document.getElementById('loginPassword').value = '';
-        document.getElementById('regUsername').value = '';
-        document.getElementById('regPassword').value = '';
-        document.getElementById('regConfirmPassword').value = '';
-        
         switchToLogin();
-        showAuthMessage('Logged out successfully', false);
-        setTimeout(() => {
-            authMessage.style.display = 'none';
-        }, 2000);
     });
 
     socket.on('auth_error', (data) => {
         showAuthMessage(data.message);
     });
 
-    const emojis = ['😀', '😂', '😍', '🥰', '😎', '🤔', '😢', '🎉', '👍', '❤️', '🔥', '✨', '🌟', '💯', '😱', '🤯', '🎊', '🎈', '🚀', '💪', '😘', '🙏', '👏', '🎵', '🍕', '🍔', '🍉', '🎮'];
-
-    // Load emojis
-    emojis.forEach(emoji => {
-        const emojiItem = document.createElement('div');
-        emojiItem.className = 'emoji-item';
-        emojiItem.textContent = emoji;
-        emojiItem.onclick = () => {
-            input.value += emoji;
-            input.focus();
-        };
-        emojiPanel.appendChild(emojiItem);
-    });
-
-    function toggleEmojiPanel() {
-        emojiPanel.classList.toggle('show');
-        input.focus();
-    }
-
-    // Load rooms from server
+    // Load rooms
     function loadRooms() {
         socket.emit('get_rooms');
     }
@@ -611,7 +597,10 @@
             
             const info = document.createElement('div');
             info.innerHTML = `
-                <div style="font-weight: bold; margin-bottom: 4px;">${room.name}${room.hasPassword ? ' 🔒' : ''}</div>
+                <div style="font-weight: bold; margin-bottom: 4px;">
+                    ${room.name}${room.hasPassword ? ' 🔒' : ''}
+                    ${room.isDefault ? '<span class="admin-badge">DEFAULT</span>' : ''}
+                </div>
                 <div style="font-size: 12px; color: #888;">${room.members} member${room.members !== 1 ? 's' : ''}</div>
             `;
             
@@ -631,7 +620,7 @@
             btnContainer.style.cssText = 'display: flex; gap: 5px;';
             btnContainer.appendChild(button);
             
-            // Only show delete button for non-Main rooms
+            // Show delete button for all rooms except Main
             if (room.name !== 'Main') {
                 const deleteButton = document.createElement('button');
                 deleteButton.textContent = '🗑️ Delete';
@@ -639,7 +628,7 @@
                 deleteButton.style.cssText = 'background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); border: none; padding: 8px 12px; color: white; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 12px;';
                 deleteButton.onclick = (e) => {
                     e.stopPropagation();
-                    deleteRoomPrompt(room.name);
+                    deleteRoom(room.name);
                 };
                 btnContainer.appendChild(deleteButton);
             }
@@ -649,6 +638,14 @@
             roomsList.appendChild(roomDiv);
         });
     });
+
+    // Delete room with admin password
+    function deleteRoom(roomName) {
+        const password = prompt(`Enter admin password to delete "${roomName}":`);
+        if (password === null) return;
+        
+        socket.emit('delete_room', { roomName, password });
+    }
 
     socket.on('room_created', () => loadRooms());
     socket.on('room_deleted', () => loadRooms());
@@ -686,6 +683,7 @@
         currentRoom = data.roomName;
         usernameDisplay.textContent = data.username;
         document.getElementById('current-room').textContent = data.roomName;
+        document.getElementById('members-count').textContent = '1';
         msgContainer.innerHTML = '';
         roomScreen.style.display = 'none';
         chatScreen.style.display = 'flex';
@@ -701,13 +699,16 @@
 
     socket.on('user_joined', (data) => {
         document.getElementById('members-count').textContent = data.members;
+        addSystemMessage(`👋 ${data.username} joined the room`);
     });
 
     socket.on('user_left', (data) => {
         document.getElementById('members-count').textContent = data.members;
+        if (data.username) {
+            addSystemMessage(`👋 ${data.username} left the room`);
+        }
     });
 
-    // Receive message from server (NOT from sender)
     socket.on('chat message', (data) => {
         addMessage(data.username, data.message);
     });
@@ -715,6 +716,9 @@
     function addMessage(username, message) {
         const wrapper = document.createElement('div');
         wrapper.className = 'msg-wrapper';
+        if (username === currentUsername) {
+            wrapper.classList.add('mine');
+        }
         
         const userLabel = document.createElement('div');
         userLabel.className = 'msg-username';
@@ -723,6 +727,25 @@
         
         const item = document.createElement('div');
         item.className = 'msg';
+        if (username === currentUsername) {
+            item.classList.add('mine');
+        }
+        if (username === 'System') {
+            item.classList.add('system');
+        }
+        item.textContent = message;
+        wrapper.appendChild(item);
+        
+        msgContainer.appendChild(wrapper);
+        msgContainer.scrollTop = msgContainer.scrollHeight;
+    }
+
+    function addSystemMessage(message) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'msg-wrapper';
+        
+        const item = document.createElement('div');
+        item.className = 'msg system';
         item.textContent = message;
         wrapper.appendChild(item);
         
@@ -734,7 +757,6 @@
         if (input.value.trim()) {
             const messageText = input.value;
             
-            // Check if it's a command
             if (messageText.startsWith('/')) {
                 handleCommand(messageText);
                 input.value = '';
@@ -742,16 +764,9 @@
                 return;
             }
             
-            // Check if user is banned
-            if (bannedUsers[currentRoom] && bannedUsers[currentRoom].some(b => b.user === currentUsername && b.expiresAt > Date.now())) {
-                addSystemMessage('❌ You are currently banned from this room');
-                return;
-            }
-            
             const messageData = { username: currentUsername, message: messageText };
             socket.emit('chat message', messageData);
             
-            // Add your own message to UI locally
             const wrapper = document.createElement('div');
             wrapper.className = 'msg-wrapper mine';
             
@@ -796,6 +811,9 @@
             case '/unban':
                 handleUnbanCommand(args);
                 break;
+            case '/delete':
+                handleDeleteCommand(args);
+                break;
             default:
                 addSystemMessage(`Unknown command: ${command}. Type /help for available commands.`);
         }
@@ -803,38 +821,40 @@
 
     function showCommandHelp() {
         const helpText = `
-Available Commands:
-/help - Show this message
-/clear <password> - Clear all messages (admin only)
-/flip - Flip a coin (heads or tails)
-/roll <min> <max> - Roll a random number between min and max
-/ban <username> <duration> <password> - Ban a user (h/m/d, default 10m)
-/unban <username> <password> - Unban a user (admin only)
+🔹 **AVAILABLE COMMANDS** 🔹
+
+/help - Show this help message
+
+/clear <admin_password> - Clear all messages in current room
+
+/flip - Flip a coin (heads/tails)
+
+/roll <min> <max> - Roll a random number
+
+/ban <username> <duration> <admin_password> - Ban user (duration: 10m, 1h, 1d, etc.)
+
+/unban <username> <admin_password> - Unban user
+
+/delete <room_name> <admin_password> - Delete any room
+
+⚡ Admin Password: ${ADMIN_PASSWORD}
         `.trim();
         addSystemMessage(helpText);
     }
 
     function handleClearCommand(args) {
         if (args.length === 0) {
-            addSystemMessage('Usage: /clear <password>');
+            addSystemMessage('Usage: /clear <admin_password>');
             return;
         }
-        
         const password = args.join(' ');
-        if (password === ADMIN_PASSWORD) {
-            msgContainer.innerHTML = '';
-            socket.emit('clear_messages', { roomName: currentRoom, password });
-            addSystemMessage('Messages cleared by ' + currentUsername);
-        } else {
-            addSystemMessage('❌ Incorrect password for /clear command');
-        }
+        socket.emit('clear_messages', { roomName: currentRoom, password });
     }
 
     function handleFlipCommand() {
         const result = Math.random() < 0.5 ? 'HEADS' : 'TAILS';
-        const message = `🪙 ${currentUsername} flipped a coin... ${result}!`;
-        socket.emit('chat message', { username: 'System', message });
-        addMessage('System', message);
+        addSystemMessage(`🪙 ${currentUsername} flipped a coin... ${result}!`);
+        socket.emit('chat message', { username: 'System', message: `🪙 ${currentUsername} flipped a coin... ${result}!` });
     }
 
     function handleRollCommand(args) {
@@ -857,30 +877,25 @@ Available Commands:
         }
 
         const result = Math.floor(Math.random() * (max - min + 1)) + min;
-        const message = `🎲 ${currentUsername} rolled a number... ${result}!`;
-        socket.emit('chat message', { username: 'System', message });
-        addMessage('System', message);
+        addSystemMessage(`🎲 ${currentUsername} rolled a number... ${result}!`);
+        socket.emit('chat message', { username: 'System', message: `🎲 ${currentUsername} rolled a number... ${result}!` });
     }
 
     function handleBanCommand(args) {
         if (args.length < 2) {
-            addSystemMessage('Usage: /ban <username> [duration] <password>');
-            addSystemMessage('Duration: h (hours), m (minutes), d (days), or blank for 10 minutes');
+            addSystemMessage('Usage: /ban <username> [duration] <admin_password>');
+            addSystemMessage('Duration: 10m (10 minutes), 1h (1 hour), 1d (1 day)');
             return;
         }
 
         const targetUser = args[0];
-        let duration = '10m'; // default 10 minutes
+        let duration = '10m';
         let password = '';
 
-        // Parse arguments: could be /ban user password or /ban user 1h password
         if (args.length === 2) {
-            // Only password provided, use default duration
             password = args[1];
-        } else if (args.length >= 3) {
-            // Duration and password provided
+        } else {
             const possibleDuration = args[1];
-            // Check if it's a duration (ends with h, m, or d)
             if (/^\d+[hmd]?$/.test(possibleDuration)) {
                 duration = possibleDuration;
                 password = args.slice(2).join(' ');
@@ -889,62 +904,132 @@ Available Commands:
             }
         }
 
-        if (password === ADMIN_PASSWORD) {
-            socket.emit('ban_user', { 
-                roomName: currentRoom, 
-                bannedUser: targetUser, 
-                bannerName: currentUsername,
-                duration: duration 
-            });
-            addSystemMessage(`⛔ ${targetUser} has been banned for ${duration}`);
-        } else {
-            addSystemMessage('❌ Incorrect password for /ban command');
+        if (password !== ADMIN_PASSWORD) {
+            addSystemMessage('❌ Incorrect admin password');
+            return;
         }
+
+        socket.emit('ban_user', { 
+            roomName: currentRoom, 
+            bannedUser: targetUser, 
+            bannerName: currentUsername,
+            duration,
+            password
+        });
     }
 
     function handleUnbanCommand(args) {
         if (args.length < 2) {
-            addSystemMessage('Usage: /unban <username> <password>');
+            addSystemMessage('Usage: /unban <username> <admin_password>');
             return;
         }
 
         const targetUser = args[0];
         const password = args.slice(1).join(' ');
 
-        if (password === ADMIN_PASSWORD) {
-            socket.emit('unban_user', { 
-                roomName: currentRoom, 
-                unbannedUser: targetUser, 
-                unbannerName: currentUsername
-            });
-            addSystemMessage(`✅ ${targetUser} has been unbanned`);
-        } else {
-            addSystemMessage('❌ Incorrect password for /unban command');
+        if (password !== ADMIN_PASSWORD) {
+            addSystemMessage('❌ Incorrect admin password');
+            return;
         }
+
+        socket.emit('unban_user', { 
+            roomName: currentRoom, 
+            unbannedUser: targetUser, 
+            unbannerName: currentUsername,
+            password
+        });
     }
 
-    function addSystemMessage(message) {
-        const wrapper = document.createElement('div');
-        wrapper.className = 'msg-wrapper';
-        
-        const item = document.createElement('div');
-        item.className = 'msg system';
-        item.textContent = message;
-        wrapper.appendChild(item);
-        
-        msgContainer.appendChild(wrapper);
-        msgContainer.scrollTop = msgContainer.scrollHeight;
+    function handleDeleteCommand(args) {
+        if (args.length < 2) {
+            addSystemMessage('Usage: /delete <room_name> <admin_password>');
+            return;
+        }
+
+        const roomName = args[0];
+        const password = args.slice(1).join(' ');
+
+        if (password !== ADMIN_PASSWORD) {
+            addSystemMessage('❌ Incorrect admin password');
+            return;
+        }
+
+        socket.emit('delete_room', { roomName, password });
     }
 
     function leaveRoom() {
+        socket.emit('leave_room');
         currentRoom = null;
         roomScreen.style.display = 'flex';
         chatScreen.style.display = 'none';
         loadRooms();
     }
 
-    // Allow 'Enter' key to send
-    input.addEventListener("keypress", (e) => { if (e.key === "Enter" && !e.shiftKey) sendMessage(); });
+    // Event listeners for room deletion
+    socket.on('room_deleted_by_owner', (data) => {
+        addSystemMessage(`🗑️ Room "${data.roomName}" has been deleted by admin`);
+        if (currentRoom === data.roomName) {
+            setTimeout(() => {
+                leaveRoom();
+            }, 2000);
+        }
+    });
+
+    socket.on('messages_cleared', () => {
+        msgContainer.innerHTML = '';
+        addSystemMessage('🧹 All messages have been cleared by admin');
+    });
+
+    socket.on('user_banned', (data) => {
+        let durationMs = 10 * 60 * 1000;
+        if (data.duration) {
+            const match = data.duration.match(/^(\d+)([hmd]?)$/);
+            if (match) {
+                const value = parseInt(match[1]);
+                const unit = match[2] || 'm';
+                if (unit === 'h') durationMs = value * 60 * 60 * 1000;
+                else if (unit === 'm') durationMs = value * 60 * 1000;
+                else if (unit === 'd') durationMs = value * 24 * 60 * 60 * 1000;
+            }
+        }
+        
+        const expiresAt = Date.now() + durationMs;
+        if (!bannedUsers[currentRoom]) bannedUsers[currentRoom] = [];
+        bannedUsers[currentRoom] = bannedUsers[currentRoom].filter(b => b.user !== data.bannedUser);
+        bannedUsers[currentRoom].push({ user: data.bannedUser, expiresAt });
+        
+        addSystemMessage(`⛔ ${data.bannedUser} has been banned for ${data.duration || '10m'}`);
+        
+        if (data.bannedUser === currentUsername) {
+            setTimeout(() => {
+                leaveRoom();
+            }, 1000);
+        }
+    });
+
+    socket.on('user_unbanned', (data) => {
+        if (bannedUsers[currentRoom]) {
+            bannedUsers[currentRoom] = bannedUsers[currentRoom].filter(b => b.user !== data.unbannedUser);
+        }
+        addSystemMessage(`✅ ${data.unbannedUser} has been unbanned by ${data.unbannerName}`);
+    });
+
+    socket.on('force_leave', (data) => {
+        if (data.reason === 'banned') {
+            addSystemMessage(`⛔ You have been banned from this room`);
+            setTimeout(() => {
+                leaveRoom();
+            }, 1000);
+        }
+    });
+
+    // Enter key to send
+    input.addEventListener("keypress", (e) => { 
+        if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
 
     // Close emoji panel when clicking outside
     document.addEventListener('click', (e) => {
@@ -960,9 +1045,8 @@ Available Commands:
     document.getElementById('regPassword').addEventListener('keypress', (e) => { if (e.key === 'Enter') handleRegister(); });
     document.getElementById('regConfirmPassword').addEventListener('keypress', (e) => { if (e.key === 'Enter') handleRegister(); });
 
-    // Load rooms on connect
+    // Check for saved session
     socket.on('connect', () => {
-        // Check if user has a saved username in cookies
         const savedUsername = getCookie('black-hole_username');
         if (savedUsername) {
             currentUsername = savedUsername;
@@ -976,76 +1060,6 @@ Available Commands:
             roomScreen.style.display = 'none';
             chatScreen.style.display = 'none';
         }
-    });
-
-    // Handle room deletion
-    function deleteRoomPrompt(roomName) {
-        const password = prompt(`Enter deletion password for "${roomName}":`);
-        if (password === null) return;
-        
-        socket.emit('delete_room', { roomName, password });
-    }
-
-    // When room is deleted while user is in it
-    socket.on('room_deleted_by_owner', (data) => {
-        alert(`Room "${data.roomName}" has been deleted by owner.`);
-        leaveRoom();
-    });
-
-    // When room is deleted, refresh the room list for all clients
-    socket.on('room_deleted', (data) => {
-        loadRooms();
-    });
-
-    // When messages are cleared
-    socket.on('messages_cleared', (data) => {
-        msgContainer.innerHTML = '';
-        addSystemMessage('All messages have been cleared');
-    });
-
-    // When a user is banned
-    socket.on('user_banned', (data) => {
-        // Calculate expiration time
-        let durationMs = 10 * 60 * 1000; // default 10 minutes
-        
-        if (data.duration) {
-            const match = data.duration.match(/^(\d+)([hmd]?)$/);
-            if (match) {
-                const value = parseInt(match[1]);
-                const unit = match[2] || 'm';
-                
-                if (unit === 'h') durationMs = value * 60 * 60 * 1000;
-                else if (unit === 'm') durationMs = value * 60 * 1000;
-                else if (unit === 'd') durationMs = value * 24 * 60 * 60 * 1000;
-            }
-        }
-        
-        const expiresAt = Date.now() + durationMs;
-        if (!bannedUsers[currentRoom]) bannedUsers[currentRoom] = [];
-        
-        // Remove if already exists
-        bannedUsers[currentRoom] = bannedUsers[currentRoom].filter(b => b.user !== data.bannedUser);
-        
-        // Add new ban entry
-        bannedUsers[currentRoom].push({ user: data.bannedUser, expiresAt });
-        
-        addSystemMessage(`⛔ ${data.bannedUser} has been banned for ${data.duration || '10m'}`);
-        
-        // Auto-unban after duration
-        setTimeout(() => {
-            if (bannedUsers[currentRoom]) {
-                bannedUsers[currentRoom] = bannedUsers[currentRoom].filter(b => b.user !== data.bannedUser);
-            }
-            addSystemMessage(`✅ Ban expired: ${data.bannedUser} is now unbanned`);
-        }, durationMs);
-    });
-
-    // When a user is unbanned
-    socket.on('user_unbanned', (data) => {
-        if (bannedUsers[currentRoom]) {
-            bannedUsers[currentRoom] = bannedUsers[currentRoom].filter(b => b.user !== data.unbannedUser);
-        }
-        addSystemMessage(`✅ ${data.unbannedUser} has been unbanned by ${data.unbannerName}`);
     });
 </script>
 </body>
