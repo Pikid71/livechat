@@ -1,27 +1,71 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Black Hole Chat</title>
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%23667eea' opacity='0.3'/><path d='M30 50 Q50 65 70 50' stroke='%23667eea' stroke-width='3' fill='none' stroke-linecap='round' opacity='0.5'/></svg>">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>BLACK HOLE CHAT V2 🕳️</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%23667eea' opacity='0.3'/><path d='M30 50 Q50 65 70 50' stroke='%23667eea' stroke-width='3' fill='none' stroke-linecap='round' opacity='0.5'/><text x='50' y='80' font-size='12' text-anchor='middle' fill='white'>V2</text></svg>">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        /* ========== GLOBAL STYLES ========== */
+        * { 
+            margin: 0; 
+            padding: 0; 
+            box-sizing: border-box; 
+            font-family: 'Segoe UI', 'Courier New', monospace, sans-serif;
+        }
+        
         body { 
-            background: linear-gradient(135deg, #0a0a0a 0%, #1a0a2e 100%);
+            background: radial-gradient(circle at 20% 30%, #0a0a0a 0%, #1a0a2e 100%);
             color: white; 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
             display: flex; 
             justify-content: center; 
             align-items: center;
             padding: 20px;
             min-height: 100vh;
-            transition: all 0.5s ease;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow-x: hidden;
         }
-        
-        /* EFFECT STYLES */
+
+        /* ========== THEME VARIABLES ========== */
+        body[data-theme="default"] {
+            background: radial-gradient(circle at 20% 30%, #0a0a0a 0%, #1a0a2e 100%);
+        }
+        body[data-theme="dark"] {
+            background: #0a0a0a;
+        }
+        body[data-theme="light"] {
+            background: #f0f0f0;
+            color: #222;
+        }
+        body[data-theme="neon"] {
+            background: #000;
+            color: #0ff;
+        }
+        body[data-theme="midnight"] {
+            background: linear-gradient(135deg, #0b0b2b 0%, #1a1a3a 100%);
+        }
+        body[data-theme="sunset"] {
+            background: linear-gradient(135deg, #ff7e5f 0%, #feb47b 100%);
+        }
+        body[data-theme="forest"] {
+            background: linear-gradient(135deg, #134e5e 0%, #71b280 100%);
+        }
+        body[data-theme="ocean"] {
+            background: linear-gradient(135deg, #2193b0 0%, #6dd5ed 100%);
+        }
+        body[data-theme="cyberpunk"] {
+            background: linear-gradient(135deg, #ff0099 0%, #493240 100%);
+        }
+        body[data-theme="vintage"] {
+            background: #f4e4c1;
+            color: #5d3a1a;
+        }
+
+        /* ========== EFFECT STYLES ========== */
         body.glitch {
             animation: glitch 0.3s infinite;
         }
-        
         @keyframes glitch {
             0% { transform: translate(0); filter: hue-rotate(0deg); }
             20% { transform: translate(-5px, 3px); filter: hue-rotate(90deg); }
@@ -30,32 +74,81 @@
             80% { transform: translate(3px, -5px); filter: hue-rotate(360deg); }
             100% { transform: translate(0); filter: hue-rotate(0deg); }
         }
-        
+
         body.flashbang {
             background: white !important;
             transition: background 0.1s;
         }
-        
-        body.flashbang #chat-container,
-        body.flashbang .header,
-        body.flashbang #input-area {
+        body.flashbang #chat-container {
             background: white !important;
             color: black !important;
-            border-color: black !important;
         }
-        
+
         body.black {
             background: black !important;
         }
-        
         body.black #chat-container {
             opacity: 0.8;
         }
-        
-        body.firework {
+
+        body.hack {
+            background: black !important;
+            color: #00ff00 !important;
+            font-family: 'Courier New', monospace !important;
+        }
+        body.hack .msg {
+            font-family: 'Courier New', monospace !important;
+            color: #00ff00 !important;
+            background: #001100 !important;
+            border: 1px solid #00ff00 !important;
+            text-shadow: 0 0 5px #00ff00;
+        }
+        body.hack .header {
+            background: #001100 !important;
+            border-bottom: 2px solid #00ff00 !important;
+        }
+
+        body.matrix {
+            background: black !important;
             position: relative;
         }
-        
+        body.matrix::before {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(0deg, rgba(0,255,0,0.1) 0px, rgba(0,255,0,0.1) 2px, transparent 2px, transparent 4px);
+            pointer-events: none;
+            animation: matrix 20s linear infinite;
+        }
+        @keyframes matrix {
+            from { background-position: 0 0; }
+            to { background-position: 0 100%; }
+        }
+
+        body.rainbow {
+            animation: rainbow-bg 3s linear infinite;
+        }
+        @keyframes rainbow-bg {
+            0% { background: #ff0000; }
+            17% { background: #ff8800; }
+            33% { background: #ffff00; }
+            50% { background: #00ff00; }
+            67% { background: #0088ff; }
+            83% { background: #8800ff; }
+            100% { background: #ff0000; }
+        }
+
+        body.neon {
+            animation: neon-pulse 1s ease-in-out infinite alternate;
+        }
+        @keyframes neon-pulse {
+            from { box-shadow: 0 0 10px #0ff, 0 0 20px #0ff, 0 0 30px #0ff; }
+            to { box-shadow: 0 0 20px #f0f, 0 0 40px #f0f, 0 0 60px #f0f; }
+        }
+
         body.firework::after {
             content: "🎆 🎇 ✨";
             position: fixed;
@@ -66,94 +159,137 @@
             animation: firework 2s ease-out;
             pointer-events: none;
         }
-        
         @keyframes firework {
             0% { opacity: 0; transform: translate(-50%, -50%) scale(0.1); }
             50% { opacity: 1; transform: translate(-50%, -50%) scale(1.5); }
             100% { opacity: 0; transform: translate(-50%, -50%) scale(2); }
         }
-        
+
         body.gameroom {
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
         }
-        
         body.gameroom #chat-container {
             border: 4px solid #ffd700;
             box-shadow: 0 0 30px #ffd700;
         }
-        
+
         .confetti {
             position: fixed;
             width: 10px;
             height: 10px;
-            background: #ffd700;
-            position: fixed;
             animation: confetti-fall 3s ease-out forwards;
             pointer-events: none;
             z-index: 9999;
         }
-        
         @keyframes confetti-fall {
             0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; }
             100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
         }
-        
-        .admin-badge {
-            background: #ffd700;
+
+        /* ========== RANK BADGES ========== */
+        .rank-owner {
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
             color: #000;
             padding: 2px 8px;
             border-radius: 12px;
             font-size: 10px;
             font-weight: bold;
-            margin-left: 8px;
-            display: inline-block;
+            margin-left: 6px;
+            border: 1px solid #fff;
+            box-shadow: 0 0 10px #FFD700;
         }
-        
+        .rank-admin {
+            background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: bold;
+            margin-left: 6px;
+        }
+        .rank-moderator {
+            background: linear-gradient(135deg, #ff9933 0%, #ff6600 100%);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: bold;
+            margin-left: 6px;
+        }
+        .rank-vip {
+            background: linear-gradient(135deg, #9933ff 0%, #6600cc 100%);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: bold;
+            margin-left: 6px;
+        }
+        .rank-member {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: bold;
+            margin-left: 6px;
+        }
+
+        /* ========== CHAT CONTAINER ========== */
         #chat-container { 
             width: 100%;
-            max-width: 600px;
-            height: 90vh;
-            background: #0f0f1e; 
-            border-radius: 20px; 
+            max-width: 800px;
+            height: 95vh;
+            background: rgba(15, 15, 30, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 24px; 
             overflow: hidden; 
-            border: 2px solid #667eea;
+            border: 2px solid rgba(102, 126, 234, 0.5);
             box-shadow: 0 20px 80px rgba(0,0,0,0.8), inset 0 0 30px rgba(102, 126, 234, 0.1);
             display: flex;
             flex-direction: column;
-            animation: slideUp 0.6s ease-out;
+            animation: slideUp 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
             transition: all 0.3s ease;
+            position: relative;
         }
 
         @keyframes slideUp {
-            from { opacity: 0; transform: translateY(30px); }
+            from { opacity: 0; transform: translateY(50px); }
             to { opacity: 1; transform: translateY(0); }
         }
-        
+
+        /* ========== HEADER ========== */
         .header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 15px 20px;
+            padding: 16px 24px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 2px solid #667eea;
+            border-bottom: 2px solid rgba(102, 126, 234, 0.5);
             box-shadow: 0 5px 20px rgba(102, 126, 234, 0.3);
-            animation: slideDown 0.6s ease-out;
+            flex-shrink: 0;
         }
 
-        @keyframes slideDown {
-            from { opacity: 0; transform: translateY(-30px); }
-            to { opacity: 1; transform: translateY(0); }
+        .header h1 { 
+            font-size: 22px; 
+            font-weight: 700; 
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
-        
-        .header h1 { font-size: 20px; font-weight: 700; letter-spacing: 0.5px; }
-        
+
         .user-info { 
             display: flex; 
             align-items: center; 
-            gap: 10px; 
-            font-size: 13px; 
+            gap: 12px; 
+            font-size: 14px; 
+            background: rgba(0,0,0,0.2);
+            padding: 8px 16px;
+            border-radius: 30px;
+            backdrop-filter: blur(5px);
         }
-        
+
         .status-dot { 
             width: 10px; 
             height: 10px; 
@@ -162,22 +298,22 @@
             animation: pulse 2s infinite;
             box-shadow: 0 0 10px #4ade80;
         }
-        
+
         @keyframes pulse { 
             0%, 100% { opacity: 1; box-shadow: 0 0 10px #4ade80; } 
             50% { opacity: 0.5; box-shadow: 0 0 5px #4ade80; } 
         }
-        
+
+        /* ========== MESSAGES AREA ========== */
         #messages { 
             flex: 1;
             overflow-y: auto; 
-            padding: 20px; 
+            padding: 24px; 
             display: flex; 
             flex-direction: column; 
-            gap: 12px;
-            background: linear-gradient(to bottom, #0a0a18 0%, #0f0f2e 100%);
+            gap: 16px;
+            background: rgba(10, 10, 24, 0.8);
             scroll-behavior: smooth;
-            align-items: center;
         }
 
         .msg-wrapper { 
@@ -185,1104 +321,2004 @@
             flex-direction: column;
             align-items: flex-start;
             width: 100%;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .msg-wrapper.mine {
             align-items: flex-end;
         }
 
-        .msg-username {
-            font-size: 12px;
-            color: #aaa;
+        .msg-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
             margin-bottom: 4px;
-            font-weight: 600;
+            font-size: 12px;
+        }
+
+        .msg-username {
+            font-weight: 700;
+            color: #a0a0ff;
             letter-spacing: 0.5px;
         }
 
-        .msg-wrapper.mine .msg-username {
-            color: #667eea;
+        .msg-timestamp {
+            color: #888;
+            font-size: 10px;
         }
-        
+
         .msg { 
-            background: #4a4a5e;
-            padding: 12px 16px; 
+            background: rgba(74, 74, 94, 0.8);
+            backdrop-filter: blur(5px);
+            padding: 12px 18px; 
             border-radius: 18px; 
-            max-width: 70%;
+            max-width: 80%;
             word-wrap: break-word;
-            animation: slideIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3), inset 0 0 10px rgba(255,255,255,0.05);
-            border: 1px solid rgba(100, 100, 120, 0.3);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            border: 1px solid rgba(255,255,255,0.1);
             transition: all 0.2s;
-            color: #e0e0e0;
+            color: #fff;
+            line-height: 1.5;
             position: relative;
         }
 
-        .msg.admin-message {
-            border: 2px solid #ffd700;
-            background: #5a4a7e;
-        }
-
-        .msg.admin-message::before {
-            content: "👑";
-            position: absolute;
-            top: -10px;
-            left: -10px;
-            font-size: 16px;
-            background: #ffd700;
-            color: black;
-            border-radius: 50%;
-            width: 24px;
-            height: 24px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border: 2px solid white;
-        }
-
         .msg:hover { 
-            box-shadow: 0 6px 20px rgba(100, 100, 120, 0.3), inset 0 0 10px rgba(255,255,255,0.1);
             transform: translateY(-2px);
-        }
-
-        @keyframes slideIn { 
-            from { opacity: 0; transform: translateY(10px) scale(0.95); } 
-            to { opacity: 1; transform: translateY(0) scale(1); } 
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
         }
 
         .msg.mine { 
-            background: #4169e1;
-            text-shadow: none;
-            border: 1px solid rgba(65, 105, 225, 0.5);
-            color: #ffffff;
-        }
-
-        .msg.mine:hover { 
-            background: #5179f1;
-            box-shadow: 0 6px 20px rgba(65, 105, 225, 0.4), inset 0 0 10px rgba(255,255,255,0.1);
+            background: linear-gradient(135deg, #4169e1 0%, #6a5acd 100%);
+            border: 1px solid rgba(255,255,255,0.3);
         }
 
         .msg.system {
-            background: #2a2a3e;
+            background: rgba(42, 42, 62, 0.9);
             border: 1px solid #667eea;
             color: #b0b0e0;
-            font-size: 13px;
             font-style: italic;
             align-self: center;
+            max-width: 90%;
+            text-align: center;
+        }
+
+        .msg.private {
+            background: rgba(128, 0, 128, 0.3);
+            border-left: 4px solid #ff00ff;
+        }
+
+        .msg.file-share {
+            background: rgba(0, 128, 128, 0.3);
+            border-left: 4px solid #00ffff;
+            cursor: pointer;
+        }
+
+        .msg.file-share:hover {
+            background: rgba(0, 128, 128, 0.5);
+        }
+
+        .file-icon {
+            font-size: 24px;
+            margin-right: 10px;
+        }
+
+        .file-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .file-name {
+            font-weight: bold;
+            color: #00ffff;
+        }
+
+        .file-size {
+            font-size: 11px;
+            color: #aaa;
+        }
+
+        /* ========== INPUT AREA ========== */
+        #input-area { 
+            padding: 20px; 
+            background: rgba(17, 17, 17, 0.95);
+            backdrop-filter: blur(10px);
+            border-top: 2px solid #667eea;
+            flex-shrink: 0;
         }
 
         .input-row {
             display: flex;
-            gap: 10px;
-            animation: fadeInUp 0.5s ease-out 0.2s both;
-        }
-
-        @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        #input-area { 
-            display: flex; 
-            flex-direction: column;
-            gap: 10px;
-            padding: 15px; 
-            background: #111; 
-            border-top: 2px solid #667eea;
-            color: white; 
-            border-radius: 10px; 
-            outline: none;
-            font-size: 14px;
-            transition: all 0.3s;
+            gap: 12px;
+            margin-bottom: 12px;
         }
 
         #messageInput { 
-            background: #333; 
-            border: 2px solid #444;
-            padding: 12px 15px; 
-            color: white; 
-            border-radius: 8px; 
-            outline: none;
-            font-size: 14px;
             flex: 1;
-        }
-
-        input:focus { 
-            border-color: #667eea; 
-            box-shadow: 0 0 0 4px rgba(102,126,234,0.2), inset 0 0 10px rgba(102,126,234,0.1);
-        }
-
-        button { 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border: none; 
-            padding: 12px 25px; 
+            background: rgba(51, 51, 51, 0.8); 
+            border: 2px solid #444;
+            padding: 14px 18px; 
             color: white; 
-            cursor: pointer; 
-            border-radius: 10px; 
+            border-radius: 30px; 
+            outline: none;
+            font-size: 15px;
+            transition: all 0.3s;
+        }
+
+        #messageInput:focus { 
+            border-color: #667eea; 
+            box-shadow: 0 0 0 4px rgba(102,126,234,0.2);
+            background: rgba(51, 51, 51, 0.95);
+        }
+
+        .action-btn {
+            background: rgba(102, 126, 234, 0.2);
+            border: 2px solid #667eea;
+            padding: 12px 18px;
+            color: white;
+            border-radius: 30px;
+            cursor: pointer;
             font-weight: bold;
             transition: all 0.3s;
-            white-space: nowrap;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-            position: relative;
-            overflow: hidden;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
         }
 
-        button::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-            transition: left 0.5s;
+        .action-btn:hover {
+            background: #667eea;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102,126,234,0.4);
         }
 
-        button:hover::before {
-            left: 100%;
+        .action-btn.danger {
+            background: rgba(192, 57, 43, 0.2);
+            border-color: #c0392b;
         }
 
+        .action-btn.danger:hover {
+            background: #c0392b;
+        }
+
+        .action-btn.success {
+            background: rgba(46, 204, 113, 0.2);
+            border-color: #2ecc71;
+        }
+
+        .action-btn.success:hover {
+            background: #2ecc71;
+        }
+
+        /* ========== EMOJI PANEL ========== */
         .emoji-panel {
-            background: linear-gradient(135deg, #1a1a3e 0%, #2a2a4e 100%);
-            padding: 12px;
-            border-radius: 12px;
+            background: rgba(26, 26, 62, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 16px;
+            border-radius: 16px;
             border: 1px solid #667eea;
             display: none;
             grid-template-columns: repeat(8, 1fr);
-            gap: 5px;
-            max-height: 180px;
+            gap: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 12px;
+        }
+
+        .emoji-panel.show { 
+            display: grid; 
+        }
+
+        .emoji-item {
+            font-size: 28px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 12px;
+            transition: all 0.2s;
+            text-align: center;
+            background: rgba(255,255,255,0.05);
+        }
+
+        .emoji-item:hover { 
+            background: rgba(102, 126, 234, 0.4); 
+            transform: scale(1.3) rotate(10deg);
+        }
+
+        /* ========== MODALS ========== */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            backdrop-filter: blur(5px);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: #1a1a2e;
+            padding: 30px;
+            border-radius: 20px;
+            border: 2px solid #667eea;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
             overflow-y: auto;
             animation: scaleIn 0.3s ease-out;
         }
 
         @keyframes scaleIn {
-            from { opacity: 0; transform: scale(0.95); }
-            to { opacity: 1; transform: scale(1); }
+            from { transform: scale(0.8); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
         }
 
-        .emoji-panel.show { display: grid; }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
 
-        .emoji-item {
+        .modal-title {
+            font-size: 20px;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: #fff;
             font-size: 24px;
             cursor: pointer;
-            padding: 8px;
-            border-radius: 8px;
-            transition: all 0.2s;
-            text-align: center;
+            padding: 5px 10px;
         }
 
-        .emoji-item:hover { 
-            background: rgba(102, 126, 234, 0.3); 
-            transform: scale(1.3) rotate(10deg);
+        .modal-body {
+            color: #fff;
         }
 
-        button:hover { 
-            transform: translateY(-2px); 
-            box-shadow: 0 5px 15px rgba(102,126,234,0.4); 
-        }
-
-        button:active { 
-            transform: translateY(0); 
-        }
-
-        .emoji-btn { 
-            padding: 12px 15px; 
-        }
-
-        #messages::-webkit-scrollbar { width: 8px; }
-        #messages::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); border-radius: 4px; }
-        #messages::-webkit-scrollbar-thumb { background: linear-gradient(to bottom, #667eea, #764ba2); border-radius: 4px; }
-        #messages::-webkit-scrollbar-thumb:hover { background: linear-gradient(to bottom, #7a8ff5, #8a5bb2); }
-
-        #room-content::-webkit-scrollbar { width: 8px; }
-        #room-content::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); border-radius: 4px; }
-        #room-content::-webkit-scrollbar-thumb { background: linear-gradient(to bottom, #667eea, #764ba2); border-radius: 4px; }
-        #room-content::-webkit-scrollbar-thumb:hover { background: linear-gradient(to bottom, #7a8ff5, #8a5bb2); }
-
-        .room-item-btn {
+        .user-list-item {
             display: flex;
-            gap: 5px;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            border-bottom: 1px solid #333;
+            transition: all 0.2s;
         }
 
-        .delete-btn {
-            background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
-            padding: 8px 12px;
-            font-size: 12px;
-            box-shadow: 0 4px 15px rgba(220, 38, 38, 0.3);
+        .user-list-item:hover {
+            background: rgba(102, 126, 234, 0.1);
         }
 
-        .delete-btn:hover {
-            box-shadow: 0 7px 25px rgba(220, 38, 38, 0.5);
+        .user-info-modal {
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
 
-        .admin-tag {
-            background: #ffd700;
-            color: #000;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 10px;
+        .user-rank-badge {
+            font-size: 11px;
+            padding: 4px 8px;
+            border-radius: 12px;
+        }
+
+        .user-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        /* ========== ROOMS LIST ========== */
+        #room-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+            background: rgba(15, 15, 15, 0.95);
+        }
+
+        .room-card {
+            background: rgba(34, 34, 34, 0.8);
+            padding: 20px;
+            border-radius: 16px;
+            border: 1px solid #444;
+            margin-bottom: 16px;
+            transition: all 0.3s;
+            backdrop-filter: blur(5px);
+        }
+
+        .room-card:hover {
+            border-color: #667eea;
+            transform: translateX(5px);
+            background: rgba(34, 34, 34, 0.95);
+        }
+
+        .room-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .room-name {
+            font-size: 18px;
             font-weight: bold;
-            margin-left: 5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
+        .room-stats {
+            display: flex;
+            gap: 16px;
+            color: #888;
+            font-size: 13px;
+        }
+
+        .room-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        /* ========== VOICE CHAT ========== */
+        .voice-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(46, 204, 113, 0.2);
+            padding: 6px 12px;
+            border-radius: 20px;
+            margin-left: 12px;
+            border: 1px solid #2ecc71;
+        }
+
+        .voice-wave {
+            display: flex;
+            gap: 3px;
+        }
+
+        .voice-wave span {
+            width: 4px;
+            height: 4px;
+            background: #2ecc71;
+            border-radius: 2px;
+            animation: wave 1s infinite;
+        }
+
+        .voice-wave span:nth-child(2) { animation-delay: 0.2s; }
+        .voice-wave span:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes wave {
+            0%, 100% { height: 4px; }
+            50% { height: 12px; }
+        }
+
+        /* ========== SCROLLBARS ========== */
+        #messages::-webkit-scrollbar,
+        #room-content::-webkit-scrollbar,
+        .modal-content::-webkit-scrollbar {
+            width: 8px;
+        }
+        #messages::-webkit-scrollbar-track,
+        #room-content::-webkit-scrollbar-track,
+        .modal-content::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.3);
+            border-radius: 4px;
+        }
+        #messages::-webkit-scrollbar-thumb,
+        #room-content::-webkit-scrollbar-thumb,
+        .modal-content::-webkit-scrollbar-thumb {
+            background: linear-gradient(to bottom, #667eea, #764ba2);
+            border-radius: 4px;
+        }
+
+        /* ========== RESPONSIVE ========== */
         @media (max-width: 600px) {
-            #chat-container { height: 100vh; border-radius: 0; }
-            .msg { max-width: 85%; }
+            body { padding: 10px; }
+            #chat-container { height: 98vh; border-radius: 16px; }
+            .msg { max-width: 90%; }
+            .header h1 { font-size: 18px; }
+            .user-info { padding: 6px 12px; }
+            .action-btn span { display: none; }
+        }
+
+        /* ========== ANIMATIONS ========== */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        .shake {
+            animation: shake 0.3s ease-in-out;
+        }
+
+        .typing-indicator {
+            display: flex;
+            gap: 4px;
+            padding: 8px 12px;
+            background: rgba(102, 126, 234, 0.1);
+            border-radius: 20px;
+            margin-bottom: 8px;
+        }
+
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            background: #667eea;
+            border-radius: 50%;
+            animation: typing 1.4s infinite;
+        }
+
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes typing {
+            0%, 60%, 100% { transform: translateY(0); opacity: 0.6; }
+            30% { transform: translateY(-10px); opacity: 1; }
         }
     </style>
 </head>
-<body>
+<body data-theme="default">
+    <div id="chat-container">
+        <!-- ========== AUTH SCREEN ========== -->
+        <div id="auth-screen" style="display: flex; flex-direction: column; height: 100%;">
+            <div class="header">
+                <h1>🕳️ BLACK HOLE V2</h1>
+                <div style="font-size: 14px; opacity: 0.9;">⚡ ENTER THE VOID</div>
+            </div>
+            
+            <div style="flex: 1; display: flex; justify-content: center; align-items: center; padding: 20px; background: rgba(15,15,15,0.95);">
+                <div style="width: 100%; max-width: 400px;">
+                    <!-- Login Form -->
+                    <div id="loginForm" style="background: rgba(34,34,34,0.8); backdrop-filter: blur(10px); padding: 30px; border-radius: 20px; border: 1px solid #667eea; margin-bottom: 15px;">
+                        <div style="font-weight: bold; margin-bottom: 20px; font-size: 18px; color: #fff; text-align: center;">🔐 LOGIN</div>
+                        <div style="display: flex; flex-direction: column; gap: 15px;">
+                            <input id="loginUsername" placeholder="Username..." maxlength="30" style="background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 14px 18px; color: white; border-radius: 30px; outline: none; font-size: 15px;" />
+                            <input id="loginPassword" placeholder="Password..." maxlength="30" type="password" style="background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 14px 18px; color: white; border-radius: 30px; outline: none; font-size: 15px;" />
+                            <button onclick="handleLogin()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; padding: 14px; color: white; border-radius: 30px; font-weight: bold; cursor: pointer; margin-top: 5px; font-size: 16px;">🚀 LOGIN</button>
+                            <div style="text-align: center; color: #aaa; font-size: 14px;">Don't have an account? <span onclick="switchToRegister()" style="cursor: pointer; color: #667eea; text-decoration: underline;">Register</span></div>
+                        </div>
+                    </div>
 
-<div id="chat-container">
-    <!-- Auth Screen -->
-    <div id="auth-screen" style="display: flex; flex-direction: column; height: 100%;">
-        <div class="header" style="flex-shrink: 0;">
-            <h1>💬 Black Hole Chat</h1>
-            <div style="font-size: 13px; opacity: 0.9;">Login or Register</div>
+                    <!-- Register Form -->
+                    <div id="registerForm" style="display: none; background: rgba(34,34,34,0.8); backdrop-filter: blur(10px); padding: 30px; border-radius: 20px; border: 1px solid #667eea;">
+                        <div style="font-weight: bold; margin-bottom: 20px; font-size: 18px; color: #fff; text-align: center;">📝 REGISTER</div>
+                        <div style="display: flex; flex-direction: column; gap: 15px;">
+                            <input id="regUsername" placeholder="Choose username..." maxlength="30" style="background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 14px 18px; color: white; border-radius: 30px; outline: none; font-size: 15px;" />
+                            <input id="regPassword" placeholder="Choose password..." maxlength="30" type="password" style="background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 14px 18px; color: white; border-radius: 30px; outline: none; font-size: 15px;" />
+                            <input id="regConfirmPassword" placeholder="Confirm password..." maxlength="30" type="password" style="background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 14px 18px; color: white; border-radius: 30px; outline: none; font-size: 15px;" />
+                            <button onclick="handleRegister()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; padding: 14px; color: white; border-radius: 30px; font-weight: bold; cursor: pointer; margin-top: 5px; font-size: 16px;">✨ REGISTER</button>
+                            <div style="text-align: center; color: #aaa; font-size: 14px;">Already have an account? <span onclick="switchToLogin()" style="cursor: pointer; color: #667eea; text-decoration: underline;">Login</span></div>
+                        </div>
+                    </div>
+                    
+                    <div id="authMessage" style="text-align: center; color: #ff6b6b; margin-top: 20px; font-size: 14px; display: none;"></div>
+                </div>
+            </div>
         </div>
-        
-        <div style="flex: 1; display: flex; justify-content: center; align-items: center; padding: 20px; background: #0f0f0f;">
-            <div style="width: 100%; max-width: 400px;">
-                <!-- Login Form -->
-                <div id="loginForm" style="background: #222; padding: 25px; border-radius: 12px; border: 1px solid #333; margin-bottom: 15px;">
-                    <div style="font-weight: bold; margin-bottom: 15px; font-size: 16px; color: #ccc; text-align: center;">Login</div>
+
+        <!-- ========== ROOM SELECTION SCREEN ========== -->
+        <div id="room-screen" style="display: none; flex-direction: column; height: 100%;">
+            <div class="header" style="justify-content: space-between;">
+                <h1>🕳️ BLACK HOLE <span id="rank-indicator-header" style="display: none;"></span></h1>
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <div class="user-info">
+                        <span class="status-dot"></span>
+                        <span id="loggedInUsername">User</span>
+                        <span id="rank-badge-header" style="display: none;"></span>
+                    </div>
+                    <button onclick="handleLogout()" class="action-btn danger" style="padding: 8px 16px;">
+                        <span>🚪</span> LOGOUT
+                    </button>
+                </div>
+            </div>
+            
+            <div id="room-content">
+                <!-- Create Room Section -->
+                <div class="room-card">
+                    <div style="font-weight: bold; margin-bottom: 16px; font-size: 16px; color: #ccc;">🏗️ CREATE NEW ROOM</div>
                     <div style="display: flex; flex-direction: column; gap: 12px;">
-                        <input id="loginUsername" placeholder="Username..." maxlength="30" style="background: #333; border: 2px solid #444; padding: 12px 15px; color: white; border-radius: 8px; outline: none; font-size: 14px;" />
-                        <input id="loginPassword" placeholder="Password..." maxlength="30" type="password" style="background: #333; border: 2px solid #444; padding: 12px 15px; color: white; border-radius: 8px; outline: none; font-size: 14px;" />
-                        <button onclick="handleLogin()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; padding: 12px; color: white; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 5px;">Login</button>
-                        <div style="text-align: center; color: #aaa; font-size: 13px;">Don't have an account? <span onclick="switchToRegister()" style="cursor: pointer; color: #667eea; text-decoration: underline;">Register</span></div>
+                        <input id="newRoomName" placeholder="Room name..." maxlength="30" style="background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 12px 16px; color: white; border-radius: 30px; outline: none; font-size: 14px;" />
+                        <input id="newRoomPassword" placeholder="Password (optional)..." maxlength="30" type="password" style="background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 12px 16px; color: white; border-radius: 30px; outline: none; font-size: 14px;" />
+                        <select id="roomTheme" style="background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 12px 16px; color: white; border-radius: 30px; outline: none; font-size: 14px;">
+                            <option value="default">Default Theme</option>
+                            <option value="dark">Dark</option>
+                            <option value="neon">Neon</option>
+                            <option value="midnight">Midnight</option>
+                            <option value="cyberpunk">Cyberpunk</option>
+                            <option value="vintage">Vintage</option>
+                        </select>
+                        <button onclick="createRoom()" class="action-btn success" style="width: 100%;">
+                            <span>✨</span> CREATE ROOM
+                        </button>
                     </div>
                 </div>
 
-                <!-- Register Form -->
-                <div id="registerForm" style="display: none; background: #222; padding: 25px; border-radius: 12px; border: 1px solid #333;">
-                    <div style="font-weight: bold; margin-bottom: 15px; font-size: 16px; color: #ccc; text-align: center;">Register</div>
-                    <div style="display: flex; flex-direction: column; gap: 12px;">
-                        <input id="regUsername" placeholder="Choose username..." maxlength="30" style="background: #333; border: 2px solid #444; padding: 12px 15px; color: white; border-radius: 8px; outline: none; font-size: 14px;" />
-                        <input id="regPassword" placeholder="Choose password..." maxlength="30" type="password" style="background: #333; border: 2px solid #444; padding: 12px 15px; color: white; border-radius: 8px; outline: none; font-size: 14px;" />
-                        <input id="regConfirmPassword" placeholder="Confirm password..." maxlength="30" type="password" style="background: #333; border: 2px solid #444; padding: 12px 15px; color: white; border-radius: 8px; outline: none; font-size: 14px;" />
-                        <button onclick="handleRegister()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; padding: 12px; color: white; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 5px;">Register</button>
-                        <div style="text-align: center; color: #aaa; font-size: 13px;">Already have an account? <span onclick="switchToLogin()" style="cursor: pointer; color: #667eea; text-decoration: underline;">Login</span></div>
+                <!-- Available Rooms Section -->
+                <div>
+                    <div style="font-weight: bold; margin-bottom: 16px; font-size: 16px; color: #ccc;">📋 AVAILABLE ROOMS</div>
+                    <div id="rooms-list" style="display: flex; flex-direction: column; gap: 12px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== CHAT SCREEN ========== -->
+        <div id="chat-screen" style="display: none; flex-direction: column; height: 100%;">
+            <div class="header">
+                <div>
+                    <h1 style="margin-bottom: 4px;">
+                        🕳️ <span id="current-room">Room</span>
+                        <span id="voice-indicator" class="voice-indicator" style="display: none;">
+                            <span>🎤</span>
+                            <div class="voice-wave">
+                                <span></span><span></span><span></span>
+                            </div>
+                        </span>
+                    </h1>
+                    <div style="font-size: 13px; opacity: 0.8; display: flex; align-items: center; gap: 10px;">
+                        <span><span id="members-count">0</span> members</span>
+                        <span id="room-theme-indicator" style="background: rgba(255,255,255,0.1); padding: 4px 8px; border-radius: 12px;">🎨 default</span>
                     </div>
+                </div>
+                <div class="user-info">
+                    <span class="status-dot"></span>
+                    <span id="username-display">User</span>
+                    <span id="rank-badge-chat" style="display: none;"></span>
+                </div>
+            </div>
+            
+            <div id="messages"></div>
+            
+            <div id="input-area">
+                <!-- Voice Chat Controls -->
+                <div style="display: flex; gap: 10px; margin-bottom: 12px;" id="voice-controls">
+                    <button onclick="toggleVoiceChat()" id="voiceBtn" class="action-btn" style="flex: 1;">
+                        <span>🎤</span> <span id="voiceBtnText">JOIN VOICE</span>
+                    </button>
+                    <button onclick="showUserList()" class="action-btn" style="flex: 1;">
+                        <span>👥</span> USERS
+                    </button>
+                    <button onclick="showFileUpload()" id="fileUploadBtn" class="action-btn" style="flex: 1; display: none;">
+                        <span>📁</span> SHARE
+                    </button>
+                </div>
+
+                <!-- Message Input -->
+                <div class="input-row">
+                    <input id="messageInput" placeholder="Type message... /help for commands" autocomplete="off">
+                    <button class="action-btn" onclick="toggleEmojiPanel()" title="Emoji">😊</button>
+                    <button onclick="sendMessage()" class="action-btn success" style="min-width: 80px;">
+                        <span>📤</span> SEND
+                    </button>
                 </div>
                 
-                <div id="authMessage" style="text-align: center; color: #ff6b6b; margin-top: 15px; font-size: 13px; display: none;"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Room Selection Screen -->
-    <div id="room-screen" style="display: none; flex-direction: column; height: 100%;">
-        <div class="header" style="flex-shrink: 0; justify-content: space-between;">
-            <h1>💬 Black Hole Chat <span id="admin-indicator-header" style="display: none;" class="admin-badge">ADMIN</span></h1>
-            <button onclick="handleLogout()" style="background: #c0392b; padding: 8px 15px; font-size: 12px; font-weight: bold; border-radius: 6px;">Logout: <span id="loggedInUsername">User</span><span id="admin-badge-logout" style="display: none;" class="admin-tag">ADMIN</span></button>
-        </div>
-        
-        <div id="room-content" style="flex: 1; overflow-y: auto; padding: 20px; background: #0f0f0f;">
-            <!-- Create Room Section -->
-            <div style="background: #222; padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #333;">
-                <div style="font-weight: bold; margin-bottom: 12px; font-size: 14px; color: #ccc;">Create New Room</div>
-                <div style="display: flex; flex-direction: column; gap: 10px;">
-                    <input id="newRoomName" placeholder="Room name..." maxlength="30" style="background: #333; border: 2px solid #444; padding: 10px 15px; color: white; border-radius: 8px; outline: none; font-size: 14px;" />
-                    <input id="newRoomPassword" placeholder="Password (optional)..." maxlength="30" type="password" style="background: #333; border: 2px solid #444; padding: 10px 15px; color: white; border-radius: 8px; outline: none; font-size: 14px;" />
-                    <button onclick="createRoom()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; padding: 12px; color: white; border-radius: 8px; font-weight: bold; cursor: pointer;">Create Room</button>
-                </div>
-            </div>
-
-            <!-- Available Rooms Section -->
-            <div>
-                <div style="font-weight: bold; margin-bottom: 12px; font-size: 14px; color: #ccc;">Available Rooms</div>
-                <div id="rooms-list" style="display: flex; flex-direction: column; gap: 10px;">
-                    <div style="text-align: center; color: #666; padding: 20px;">Loading rooms...</div>
+                <!-- Emoji Panel -->
+                <div class="emoji-panel" id="emojiPanel"></div>
+                
+                <!-- Room Actions -->
+                <div class="input-row" style="margin-top: 12px;">
+                    <button onclick="leaveRoom()" class="action-btn danger" style="flex: 1;">
+                        <span>🚪</span> LEAVE ROOM
+                    </button>
+                    <button onclick="showPrivateMessages()" class="action-btn" style="flex: 1;">
+                        <span>💌</span> PRIVATE
+                    </button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Chat Screen -->
-    <div id="chat-screen" style="display: none; flex-direction: column; height: 100%;">
-        <div class="header" style="flex-shrink: 0;">
-            <div>
-                <h1 style="margin-bottom: 4px;">💬 <span id="current-room">Room</span></h1>
-                <div class="room-name" style="font-size: 13px; opacity: 0.8;"><span id="members-count">0</span> members</div>
+    <!-- ========== MODALS ========== -->
+
+    <!-- User List Modal -->
+    <div id="userListModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">👥 Room Members</div>
+                <button class="modal-close" onclick="closeModal('userListModal')">×</button>
             </div>
-            <div class="user-info">
-                <span class="status-dot"></span>
-                <span id="username-display">User</span>
-                <span id="admin-badge-chat" style="display: none;" class="admin-badge">ADMIN</span>
-            </div>
-        </div>
-        <div id="messages" style="flex: 1; overflow-y: auto; padding: 20px; background: #0f0f0f; display: flex; flex-direction: column; gap: 12px;"></div>
-        <div id="input-area">
-            <div class="input-row">
-                <input id="messageInput" placeholder="Type a message... (/help for commands)" autocomplete="off">
-                <button class="emoji-btn" onclick="toggleEmojiPanel()" title="Emoji">😊</button>
-                <button onclick="sendMessage()" style="min-width: 70px;">Send</button>
-            </div>
-            <div class="emoji-panel" id="emojiPanel"></div>
-            <div class="input-row" style="margin-top: 10px;">
-                <button onclick="leaveRoom()" style="background: #c0392b; flex: 1;">Leave Room</button>
+            <div class="modal-body" id="userListContent">
+                Loading...
             </div>
         </div>
     </div>
-</div>
 
-<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-<script>
-    // ============================================
-    // 🎮 BLACK HOLE CHAT - CLIENT
-    // ============================================
-    
-    const socket = io();
-    const msgContainer = document.getElementById('messages');
-    const input = document.getElementById('messageInput');
-    const emojiPanel = document.getElementById('emojiPanel');
-    const authScreen = document.getElementById('auth-screen');
-    const roomScreen = document.getElementById('room-screen');
-    const chatScreen = document.getElementById('chat-screen');
-    const roomsList = document.getElementById('rooms-list');
-    const usernameDisplay = document.getElementById('username-display');
-    const loggedInUsernameDisplay = document.getElementById('loggedInUsername');
-    const authMessage = document.getElementById('authMessage');
-
-    let currentUsername = 'User';
-    let currentRoom = null;
-    let isAdmin = false;
-    const bannedUsers = {};
-
-    // ========== EMOJIS ==========
-    const emojis = ['😀', '😂', '😍', '🥰', '😎', '🤔', '😢', '🎉', '👍', '❤️', '🔥', '✨', '🌟', '💯', '😱', '🤯', '🎊', '🎈', '🚀', '💪', '😘', '🙏', '👏', '🎵', '🍕', '🍔', '🍉', '🎮'];
-
-    // Load emojis
-    emojis.forEach(emoji => {
-        const emojiItem = document.createElement('div');
-        emojiItem.className = 'emoji-item';
-        emojiItem.textContent = emoji;
-        emojiItem.onclick = () => {
-            input.value += emoji;
-            input.focus();
-        };
-        emojiPanel.appendChild(emojiItem);
-    });
-
-    function toggleEmojiPanel() {
-        emojiPanel.classList.toggle('show');
-        input.focus();
-    }
-
-    // ========== AUTH UI ==========
-    function switchToRegister() {
-        document.getElementById('loginForm').style.display = 'none';
-        document.getElementById('registerForm').style.display = 'block';
-        authMessage.style.display = 'none';
-    }
-
-    function switchToLogin() {
-        document.getElementById('registerForm').style.display = 'none';
-        document.getElementById('loginForm').style.display = 'block';
-        authMessage.style.display = 'none';
-    }
-
-    function showAuthMessage(msg, isError = true) {
-        authMessage.textContent = msg;
-        authMessage.style.color = isError ? '#ff6b6b' : '#4ade80';
-        authMessage.style.display = 'block';
-    }
-
-    // ========== AUTH HANDLERS ==========
-    function handleLogin() {
-        const username = document.getElementById('loginUsername').value.trim();
-        const password = document.getElementById('loginPassword').value;
-
-        if (!username || !password) {
-            showAuthMessage('Please enter both username and password');
-            return;
-        }
-
-        socket.emit('login', { username, password });
-    }
-
-    function handleRegister() {
-        const username = document.getElementById('regUsername').value.trim();
-        const password = document.getElementById('regPassword').value;
-        const confirmPassword = document.getElementById('regConfirmPassword').value;
-
-        if (!username || !password || !confirmPassword) {
-            showAuthMessage('Please fill in all fields');
-            return;
-        }
-
-        if (password !== confirmPassword) {
-            showAuthMessage('Passwords do not match');
-            return;
-        }
-
-        socket.emit('register', { username, password });
-    }
-
-    function handleLogout() {
-        if (currentRoom) {
-            socket.emit('leave_room');
-        }
-        socket.emit('logout');
-        currentUsername = 'User';
-        currentRoom = null;
-        isAdmin = false;
-        authScreen.style.display = 'flex';
-        roomScreen.style.display = 'none';
-        chatScreen.style.display = 'none';
-        switchToLogin();
-    }
-
-    // ========== SOCKET AUTH EVENTS ==========
-    socket.on('auth_success', (data) => {
-        currentUsername = data.username;
-        isAdmin = data.isAdmin || false;
-        
-        loggedInUsernameDisplay.textContent = data.username;
-        usernameDisplay.textContent = data.username;
-        
-        // Show admin badges
-        if (isAdmin) {
-            document.getElementById('admin-indicator-header').style.display = 'inline';
-            document.getElementById('admin-badge-logout').style.display = 'inline';
-            document.getElementById('admin-badge-chat').style.display = 'inline';
-        }
-        
-        showAuthMessage(data.message, false);
-        setTimeout(() => {
-            authScreen.style.display = 'none';
-            roomScreen.style.display = 'flex';
-            loadRooms();
-        }, 500);
-    });
-
-    socket.on('auth_error', (data) => {
-        showAuthMessage(data.message);
-    });
-
-    socket.on('logged_out', () => {
-        currentUsername = 'User';
-        isAdmin = false;
-        authScreen.style.display = 'flex';
-        roomScreen.style.display = 'none';
-        chatScreen.style.display = 'none';
-        switchToLogin();
-    });
-
-    socket.on('admin_granted', (data) => {
-        isAdmin = true;
-        document.getElementById('admin-indicator-header').style.display = 'inline';
-        document.getElementById('admin-badge-logout').style.display = 'inline';
-        document.getElementById('admin-badge-chat').style.display = 'inline';
-        addSystemMessage('👑 ' + data.message);
-    });
-
-    // ========== ROOMS ==========
-    function loadRooms() {
-        socket.emit('get_rooms');
-    }
-
-    socket.on('rooms_list', (rooms) => {
-        roomsList.innerHTML = '';
-        if (rooms.length === 0) {
-            roomsList.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">No rooms available. Create one!</div>';
-            return;
-        }
-        rooms.forEach(room => {
-            const roomDiv = document.createElement('div');
-            roomDiv.style.cssText = 'background: #222; padding: 15px; border-radius: 8px; border: 1px solid #444; cursor: pointer; transition: all 0.2s; display: flex; justify-content: space-between; align-items: center;';
-            
-            const info = document.createElement('div');
-            info.innerHTML = `
-                <div style="font-weight: bold; margin-bottom: 4px;">
-                    ${room.name}${room.hasPassword ? ' 🔒' : ''}
-                    ${room.isDefault ? '<span class="admin-badge">DEFAULT</span>' : ''}
+    <!-- Private Messages Modal -->
+    <div id="privateMessagesModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">💌 Private Messages</div>
+                <button class="modal-close" onclick="closeModal('privateMessagesModal')">×</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 20px;">
+                    <input type="text" id="pmRecipient" placeholder="Username..." style="width: 100%; background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 12px; color: white; border-radius: 30px; margin-bottom: 10px;">
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="pmMessage" placeholder="Message..." style="flex: 1; background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 12px; color: white; border-radius: 30px;">
+                        <button onclick="sendPrivateMessage()" class="action-btn success">SEND</button>
+                    </div>
                 </div>
-                <div style="font-size: 12px; color: #888;">${room.members} member${room.members !== 1 ? 's' : ''}</div>
-            `;
-            
-            const button = document.createElement('button');
-            button.textContent = 'Join';
-            button.style.cssText = 'background: #667eea; border: none; padding: 8px 16px; color: white; border-radius: 6px; cursor: pointer; font-weight: bold;';
-            button.onclick = () => {
-                if (room.hasPassword) {
-                    joinRoomWithPassword(room.name);
-                } else {
-                    joinRoom(room.name, '');
-                }
+                <div id="privateMessagesList" style="max-height: 300px; overflow-y: auto;">
+                    Select a user to view messages
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- File Upload Modal -->
+    <div id="fileUploadModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">📁 Share File</div>
+                <button class="modal-close" onclick="closeModal('fileUploadModal')">×</button>
+            </div>
+            <div class="modal-body">
+                <div style="border: 2px dashed #667eea; border-radius: 16px; padding: 30px; text-align: center; margin-bottom: 20px; cursor: pointer;" onclick="document.getElementById('fileInput').click()">
+                    <div style="font-size: 48px; margin-bottom: 10px;">📎</div>
+                    <div style="color: #ccc;">Click to upload or drag and drop</div>
+                    <div style="font-size: 12px; color: #888; margin-top: 10px;">Max size: 5MB (Images, PDF, TXT)</div>
+                </div>
+                <input type="file" id="fileInput" style="display: none;" onchange="handleFileSelect(this.files[0])">
+                <div id="filePreview" style="display: none; background: rgba(102,126,234,0.1); padding: 15px; border-radius: 12px; margin-bottom: 20px;">
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <span id="fileIcon" style="font-size: 32px;">📄</span>
+                        <div style="flex: 1;">
+                            <div id="fileName" style="font-weight: bold;"></div>
+                            <div id="fileSize" style="font-size: 12px; color: #888;"></div>
+                        </div>
+                    </div>
+                </div>
+                <button onclick="uploadFile()" class="action-btn success" style="width: 100%;" id="uploadBtn">UPLOAD FILE</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Grant Rank Modal (Admin/Owner only) -->
+    <div id="grantRankModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">👑 Grant Rank</div>
+                <button class="modal-close" onclick="closeModal('grantRankModal')">×</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 20px;">
+                    <input type="text" id="grantUsername" placeholder="Username..." style="width: 100%; background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 12px; color: white; border-radius: 30px; margin-bottom: 15px;">
+                    <select id="grantRankSelect" style="width: 100%; background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 12px; color: white; border-radius: 30px; margin-bottom: 15px;">
+                        <option value="moderator">🛡️ Moderator</option>
+                        <option value="vip">⭐ VIP</option>
+                        <option value="member">👤 Member</option>
+                    </select>
+                    <input type="password" id="grantPassword" placeholder="Admin Password (if not owner)" style="width: 100%; background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 12px; color: white; border-radius: 30px; margin-bottom: 15px;">
+                    <button onclick="grantRank()" class="action-btn success" style="width: 100%;">GRANT RANK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Theme Selector Modal -->
+    <div id="themeModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">🎨 Theme Selector</div>
+                <button class="modal-close" onclick="closeModal('themeModal')">×</button>
+            </div>
+            <div class="modal-body">
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+                    <button onclick="changeTheme('default')" class="action-btn">Default</button>
+                    <button onclick="changeTheme('dark')" class="action-btn">Dark</button>
+                    <button onclick="changeTheme('light')" class="action-btn">Light</button>
+                    <button onclick="changeTheme('neon')" class="action-btn">Neon</button>
+                    <button onclick="changeTheme('midnight')" class="action-btn">Midnight</button>
+                    <button onclick="changeTheme('sunset')" class="action-btn">Sunset</button>
+                    <button onclick="changeTheme('forest')" class="action-btn">Forest</button>
+                    <button onclick="changeTheme('ocean')" class="action-btn">Ocean</button>
+                    <button onclick="changeTheme('cyberpunk')" class="action-btn">Cyberpunk</button>
+                    <button onclick="changeTheme('vintage')" class="action-btn">Vintage</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script>
+        // ========== BLACK HOLE CHAT V2 - FULL CLIENT ==========
+        
+        // Socket.IO connection
+        const socket = io();
+        
+        // ========== GLOBAL VARIABLES ==========
+        let currentUsername = 'User';
+        let currentRoom = null;
+        let currentRank = 'member';
+        let currentTheme = 'default';
+        let isAdmin = false;
+        let isModerator = false;
+        let isVip = false;
+        let isOwner = false;
+        
+        // Voice chat
+        let voiceChat = null;
+        let isVoiceActive = false;
+        
+        // File upload
+        let selectedFile = null;
+        
+        // UI Elements
+        const msgContainer = document.getElementById('messages');
+        const input = document.getElementById('messageInput');
+        const emojiPanel = document.getElementById('emojiPanel');
+        const authScreen = document.getElementById('auth-screen');
+        const roomScreen = document.getElementById('room-screen');
+        const chatScreen = document.getElementById('chat-screen');
+        const roomsList = document.getElementById('rooms-list');
+        const usernameDisplay = document.getElementById('username-display');
+        const loggedInUsernameDisplay = document.getElementById('loggedInUsername');
+        const authMessage = document.getElementById('authMessage');
+        
+        // ========== EMOJIS ==========
+        const emojis = ['😀', '😂', '😍', '🥰', '😎', '🤔', '😢', '🎉', '👍', '❤️', '🔥', '✨', '🌟', '💯', '😱', '🤯', '🎊', '🎈', '🚀', '💪', '😘', '🙏', '👏', '🎵', '🍕', '🍔', '🍉', '🎮', '👾', '🤖', '👽', '💀', '👑', '⚡', '🌊', '🌈', '☄️', '🕳️', '🌀', '🎭', '🎪', '🎨'];
+        
+        // Load emojis
+        emojis.forEach(emoji => {
+            const emojiItem = document.createElement('div');
+            emojiItem.className = 'emoji-item';
+            emojiItem.textContent = emoji;
+            emojiItem.onclick = () => {
+                input.value += emoji;
+                input.focus();
             };
+            emojiPanel.appendChild(emojiItem);
+        });
+        
+        // ========== RANK UTILITIES ==========
+        function getRankBadge(rank) {
+            const rankMap = {
+                'owner': { class: 'rank-owner', text: 'OWNER' },
+                'admin': { class: 'rank-admin', text: 'ADMIN' },
+                'moderator': { class: 'rank-moderator', text: 'MOD' },
+                'vip': { class: 'rank-vip', text: 'VIP' },
+                'member': { class: 'rank-member', text: 'MEMBER' }
+            };
+            const rankInfo = rankMap[rank] || rankMap.member;
+            return `<span class="${rankInfo.class}">${rankInfo.text}</span>`;
+        }
+        
+        function updateRankUI(rank) {
+            currentRank = rank;
+            isOwner = rank === 'owner';
+            isAdmin = rank === 'admin' || rank === 'owner';
+            isModerator = rank === 'moderator' || rank === 'admin' || rank === 'owner';
+            isVip = rank === 'vip' || rank === 'moderator' || rank === 'admin' || rank === 'owner';
             
-            const btnContainer = document.createElement('div');
-            btnContainer.className = 'room-item-btn';
-            btnContainer.style.cssText = 'display: flex; gap: 5px;';
-            btnContainer.appendChild(button);
+            // Update rank badges
+            const badgeHeader = document.getElementById('rank-badge-header');
+            const badgeChat = document.getElementById('rank-badge-chat');
+            const rankIndicator = document.getElementById('rank-indicator-header');
             
-            // Show delete button for all rooms except Main (admins can delete any room)
-            if (room.name !== 'Main') {
-                const deleteButton = document.createElement('button');
-                deleteButton.textContent = '🗑️ Delete';
-                deleteButton.className = 'delete-btn';
-                deleteButton.style.cssText = 'background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); border: none; padding: 8px 12px; color: white; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 12px;';
-                deleteButton.onclick = (e) => {
-                    e.stopPropagation();
-                    deleteRoom(room.name);
-                };
-                btnContainer.appendChild(deleteButton);
+            if (badgeHeader) badgeHeader.innerHTML = getRankBadge(rank);
+            if (badgeChat) badgeChat.innerHTML = getRankBadge(rank);
+            if (rankIndicator) rankIndicator.innerHTML = getRankBadge(rank);
+            
+            // Show/hide file upload button based on rank
+            const fileUploadBtn = document.getElementById('fileUploadBtn');
+            if (fileUploadBtn) {
+                fileUploadBtn.style.display = isVip ? 'flex' : 'none';
             }
             
-            roomDiv.appendChild(info);
-            roomDiv.appendChild(btnContainer);
-            roomsList.appendChild(roomDiv);
-        });
-    });
-
-    function deleteRoom(roomName) {
-        if (isAdmin) {
-            // Admins don't need password
-            socket.emit('delete_room', { roomName, password: '' });
-        } else {
-            const password = prompt(`Enter admin password to delete "${roomName}":`);
-            if (password === null) return;
-            socket.emit('delete_room', { roomName, password });
-        }
-    }
-
-    socket.on('room_created', () => loadRooms());
-    socket.on('room_deleted', () => loadRooms());
-
-    function createRoom() {
-        const roomName = document.getElementById('newRoomName').value.trim();
-        const password = document.getElementById('newRoomPassword').value;
-
-        if (!roomName) {
-            alert('Please enter a room name');
-            return;
-        }
-
-        socket.emit('create_room', { roomName, password });
-        document.getElementById('newRoomName').value = '';
-        document.getElementById('newRoomPassword').value = '';
-    }
-
-    function joinRoomWithPassword(roomName) {
-        const password = prompt('Enter room password:');
-        if (password === null) return;
-        joinRoom(roomName, password);
-    }
-
-    function joinRoom(roomName, password) {
-        currentRoom = roomName;
-        socket.emit('join_room', { roomName, password });
-    }
-
-    socket.on('error', (data) => {
-        alert('Error: ' + data.message);
-    });
-
-    socket.on('command_error', (data) => {
-        addSystemMessage(data.message);
-    });
-
-    socket.on('command_success', (data) => {
-        addSystemMessage(data.message);
-    });
-
-    socket.on('joined_room', (data) => {
-        currentRoom = data.roomName;
-        usernameDisplay.textContent = data.username;
-        document.getElementById('current-room').textContent = data.roomName;
-        document.getElementById('members-count').textContent = '1';
-        msgContainer.innerHTML = '';
-        roomScreen.style.display = 'none';
-        chatScreen.style.display = 'flex';
-        input.focus();
-    });
-
-    socket.on('room_history', (data) => {
-        msgContainer.innerHTML = '';
-        data.messages.forEach(msg => {
-            addMessage(msg.username, msg.message, msg.isAdmin);
-        });
-    });
-
-    socket.on('user_joined', (data) => {
-        document.getElementById('members-count').textContent = data.members;
-        addSystemMessage(`👋 ${data.username} joined the room`);
-    });
-
-    socket.on('user_left', (data) => {
-        document.getElementById('members-count').textContent = data.members;
-        if (data.username) {
-            addSystemMessage(`👋 ${data.username} left the room`);
-        }
-    });
-
-    socket.on('chat message', (data) => {
-        addMessage(data.username, data.message, data.isAdmin);
-    });
-
-    function addMessage(username, message, isAdminMsg = false) {
-        const wrapper = document.createElement('div');
-        wrapper.className = 'msg-wrapper';
-        if (username === currentUsername) {
-            wrapper.classList.add('mine');
-        }
-        
-        const userLabel = document.createElement('div');
-        userLabel.className = 'msg-username';
-        userLabel.textContent = username;
-        if (isAdminMsg) {
-            userLabel.innerHTML += ' <span class="admin-tag">ADMIN</span>';
-        }
-        wrapper.appendChild(userLabel);
-        
-        const item = document.createElement('div');
-        item.className = 'msg';
-        if (username === currentUsername) {
-            item.classList.add('mine');
-        }
-        if (username === 'System') {
-            item.classList.add('system');
-        }
-        if (isAdminMsg) {
-            item.classList.add('admin-message');
-        }
-        item.textContent = message;
-        wrapper.appendChild(item);
-        
-        msgContainer.appendChild(wrapper);
-        msgContainer.scrollTop = msgContainer.scrollHeight;
-    }
-
-    function addSystemMessage(message) {
-        const wrapper = document.createElement('div');
-        wrapper.className = 'msg-wrapper';
-        
-        const item = document.createElement('div');
-        item.className = 'msg system';
-        item.textContent = message;
-        wrapper.appendChild(item);
-        
-        msgContainer.appendChild(wrapper);
-        msgContainer.scrollTop = msgContainer.scrollHeight;
-    }
-
-    // ========== EFFECTS ==========
-    socket.on('room_effect', (data) => {
-        addSystemMessage(`✨ Admin ${data.triggeredBy} triggered effect: ${data.effect}`);
-        
-        switch(data.effect) {
-            case 'glitch':
-                document.body.classList.add('glitch');
-                setTimeout(() => document.body.classList.remove('glitch'), 5000);
-                break;
-            case 'flashbang':
-                document.body.classList.add('flashbang');
-                setTimeout(() => document.body.classList.remove('flashbang'), 1000);
-                break;
-            case 'black':
-                document.body.classList.add('black');
-                setTimeout(() => document.body.classList.remove('black'), 5000);
-                break;
-            case 'firework':
-                document.body.classList.add('firework');
-                setTimeout(() => document.body.classList.remove('firework'), 2000);
-                break;
-            case 'gameroom':
-                document.body.classList.add('gameroom');
-                setTimeout(() => document.body.classList.remove('gameroom'), 10000);
-                break;
-            case 'confetti':
-                for (let i = 0; i < 100; i++) {
-                    createConfetti();
+            // Show grant rank button for admin/owner
+            if (isAdmin || isOwner) {
+                // Add grant rank button to header if not exists
+                const header = document.querySelector('.header');
+                if (header && !document.getElementById('grantRankBtn')) {
+                    const grantBtn = document.createElement('button');
+                    grantBtn.id = 'grantRankBtn';
+                    grantBtn.className = 'action-btn success';
+                    grantBtn.style.padding = '8px 16px';
+                    grantBtn.innerHTML = '<span>👑</span> GRANT';
+                    grantBtn.onclick = () => showModal('grantRankModal');
+                    header.querySelector('.user-info').after(grantBtn);
                 }
-                break;
+            }
         }
-    });
-
-    function createConfetti() {
-        const confetti = document.createElement('div');
-        confetti.className = 'confetti';
-        confetti.style.left = Math.random() * 100 + 'vw';
-        confetti.style.background = `hsl(${Math.random() * 360}, 100%, 50%)`;
-        confetti.style.animationDelay = Math.random() * 2 + 's';
-        confetti.style.width = Math.random() * 10 + 5 + 'px';
-        confetti.style.height = Math.random() * 10 + 5 + 'px';
-        document.body.appendChild(confetti);
-        setTimeout(() => confetti.remove(), 3000);
-    }
-
-    // ========== MESSAGES ==========
-    function sendMessage() {
-        if (input.value.trim()) {
-            const messageText = input.value;
+        
+        // ========== VOICE CHAT CLASS ==========
+        class VoiceChatHandler {
+            constructor(socket, roomName, username) {
+                this.socket = socket;
+                this.roomName = roomName;
+                this.username = username;
+                this.localStream = null;
+                this.peerConnections = {};
+                this.isActive = false;
+                
+                this.configuration = {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                };
+            }
             
-            if (messageText.startsWith('/')) {
-                handleCommand(messageText);
-                input.value = '';
-                emojiPanel.classList.remove('show');
+            async start() {
+                try {
+                    this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                    this.isActive = true;
+                    
+                    this.socket.emit('join_voice', { roomName: this.roomName });
+                    
+                    this.socket.on('user_joined_voice', (data) => this.handleUserJoined(data));
+                    this.socket.on('voice_offer', (data) => this.handleVoiceOffer(data));
+                    this.socket.on('voice_answer', (data) => this.handleVoiceAnswer(data));
+                    this.socket.on('ice_candidate', (data) => this.handleIceCandidate(data));
+                    this.socket.on('user_left_voice', (data) => this.handleUserLeft(data));
+                    
+                    document.getElementById('voice-indicator').style.display = 'flex';
+                    document.getElementById('voiceBtnText').textContent = 'LEAVE VOICE';
+                    document.getElementById('voiceBtn').classList.add('danger');
+                    
+                    return true;
+                } catch (err) {
+                    console.error('Voice chat error:', err);
+                    alert('Could not access microphone. Please check permissions.');
+                    return false;
+                }
+            }
+            
+            stop() {
+                if (this.localStream) {
+                    this.localStream.getTracks().forEach(track => track.stop());
+                    this.localStream = null;
+                }
+                
+                Object.values(this.peerConnections).forEach(pc => pc.close());
+                this.peerConnections = {};
+                this.isActive = false;
+                
+                this.socket.emit('leave_voice', { roomName: this.roomName });
+                this.socket.off('user_joined_voice');
+                this.socket.off('voice_offer');
+                this.socket.off('voice_answer');
+                this.socket.off('ice_candidate');
+                this.socket.off('user_left_voice');
+                
+                document.getElementById('voice-indicator').style.display = 'none';
+                document.getElementById('voiceBtnText').textContent = 'JOIN VOICE';
+                document.getElementById('voiceBtn').classList.remove('danger');
+            }
+            
+            handleUserJoined(data) {
+                this.createPeerConnection(data.userId);
+            }
+            
+            handleUserLeft(data) {
+                if (this.peerConnections[data.userId]) {
+                    this.peerConnections[data.userId].close();
+                    delete this.peerConnections[data.userId];
+                }
+            }
+            
+            async createPeerConnection(targetId) {
+                const pc = new RTCPeerConnection(this.configuration);
+                this.peerConnections[targetId] = pc;
+                
+                this.localStream.getTracks().forEach(track => {
+                    pc.addTrack(track, this.localStream);
+                });
+                
+                pc.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        this.socket.emit('ice_candidate', {
+                            target: targetId,
+                            candidate: event.candidate
+                        });
+                    }
+                };
+                
+                pc.ontrack = (event) => {
+                    const audio = document.createElement('audio');
+                    audio.srcObject = event.streams[0];
+                    audio.autoplay = true;
+                    audio.controls = false;
+                    document.body.appendChild(audio);
+                };
+                
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                
+                this.socket.emit('voice_offer', {
+                    target: targetId,
+                    offer: offer,
+                    roomName: this.roomName
+                });
+                
+                return pc;
+            }
+            
+            async handleVoiceOffer(data) {
+                const pc = new RTCPeerConnection(this.configuration);
+                this.peerConnections[data.from] = pc;
+                
+                this.localStream.getTracks().forEach(track => {
+                    pc.addTrack(track, this.localStream);
+                });
+                
+                pc.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        this.socket.emit('ice_candidate', {
+                            target: data.from,
+                            candidate: event.candidate
+                        });
+                    }
+                };
+                
+                pc.ontrack = (event) => {
+                    const audio = document.createElement('audio');
+                    audio.srcObject = event.streams[0];
+                    audio.autoplay = true;
+                    audio.controls = false;
+                    document.body.appendChild(audio);
+                };
+                
+                await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                
+                this.socket.emit('voice_answer', {
+                    target: data.from,
+                    answer: answer
+                });
+            }
+            
+            async handleVoiceAnswer(data) {
+                const pc = this.peerConnections[data.from];
+                if (pc) {
+                    await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+                }
+            }
+            
+            handleIceCandidate(data) {
+                const pc = this.peerConnections[data.from];
+                if (pc) {
+                    pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+                }
+            }
+        }
+        
+        // ========== VOICE CHAT CONTROLS ==========
+        async function toggleVoiceChat() {
+            if (!currentRoom) {
+                alert('Join a room first!');
                 return;
             }
             
-            const messageData = { username: currentUsername, message: messageText };
-            socket.emit('chat message', messageData);
-            
-            addMessage(currentUsername, messageText, isAdmin);
-            input.value = '';
-            emojiPanel.classList.remove('show');
-            msgContainer.scrollTop = msgContainer.scrollHeight;
-        }
-    }
-
-    // ========== COMMANDS ==========
-    function handleCommand(commandText) {
-        const parts = commandText.split(' ');
-        const command = parts[0].toLowerCase();
-        const args = parts.slice(1);
-
-        switch(command) {
-            case '/help':
-                showCommandHelp();
-                break;
-            case '/clear':
-                handleClearCommand(args);
-                break;
-            case '/flip':
-                handleFlipCommand();
-                break;
-            case '/roll':
-                handleRollCommand(args);
-                break;
-            case '/ban':
-                handleBanCommand(args);
-                break;
-            case '/unban':
-                handleUnbanCommand(args);
-                break;
-            case '/delete':
-                handleDeleteCommand(args);
-                break;
-            case '/admin':
-                handleAdminCommand(args);
-                break;
-            case '/effect':
-                handleEffectCommand(args);
-                break;
-            default:
-                addSystemMessage(`Unknown command: ${command}. Type /help for available commands.`);
-        }
-    }
-
-    function showCommandHelp() {
-        let helpText = `🔹 **AVAILABLE COMMANDS** 🔹
-
-/help - Show this help message
-
-/clear <password> - Clear all messages (no password needed for admins)
-
-/flip - Flip a coin (heads/tails)
-
-/roll <min> <max> - Roll a random number
-
-/ban <username> [duration] <password> - Ban user (no password for admins)
-      Duration: 10m, 1h, 1d (default: 10m)
-
-/unban <username> <password> - Unban user (no password for admins)
-
-/delete <room_name> <password> - Delete any room (no password for admins)
-
-/admin <username> <ADMIN_PASSWORD> - Grant admin status to a user`;
-
-        // Admin-only commands
-        if (isAdmin) {
-            helpText += `
-
-🔸 **ADMIN COMMANDS** 🔸
-
-/effect <effect> - Trigger visual effect
-      Effects: glitch, flashbang, black, firework, gameroom, confetti`;
-        }
-
-        addSystemMessage(helpText);
-    }
-
-    function handleClearCommand(args) {
-        if (args.length === 0 && !isAdmin) {
-            addSystemMessage('Usage: /clear <admin_password>');
-            return;
-        }
-        const password = args.join(' ');
-        socket.emit('clear_messages', { roomName: currentRoom, password });
-    }
-
-    function handleFlipCommand() {
-        const result = Math.random() < 0.5 ? 'HEADS' : 'TAILS';
-        const message = `🪙 ${currentUsername} flipped a coin... ${result}!`;
-        socket.emit('chat message', { username: 'System', message });
-        addMessage('System', message);
-    }
-
-    function handleRollCommand(args) {
-        if (args.length < 2) {
-            addSystemMessage('Usage: /roll <min> <max>');
-            return;
-        }
-
-        const min = parseInt(args[0]);
-        const max = parseInt(args[1]);
-
-        if (isNaN(min) || isNaN(max)) {
-            addSystemMessage('Min and max must be numbers');
-            return;
-        }
-
-        if (min >= max) {
-            addSystemMessage('Min must be less than max');
-            return;
-        }
-
-        const result = Math.floor(Math.random() * (max - min + 1)) + min;
-        const message = `🎲 ${currentUsername} rolled a number... ${result}!`;
-        socket.emit('chat message', { username: 'System', message });
-        addMessage('System', message);
-    }
-
-    function handleBanCommand(args) {
-        if (args.length < 1) {
-            addSystemMessage('Usage: /ban <username> [duration] <password>');
-            return;
-        }
-
-        const targetUser = args[0];
-        let duration = '10m';
-        let password = '';
-
-        if (isAdmin) {
-            // Admins don't need password
-            if (args.length >= 2) {
-                const possibleDuration = args[1];
-                if (/^\d+[hmd]?$/.test(possibleDuration)) {
-                    duration = possibleDuration;
-                }
-            }
-            password = '';
-        } else {
-            if (args.length === 2) {
-                password = args[1];
-            } else if (args.length >= 3) {
-                const possibleDuration = args[1];
-                if (/^\d+[hmd]?$/.test(possibleDuration)) {
-                    duration = possibleDuration;
-                    password = args.slice(2).join(' ');
-                } else {
-                    password = args.slice(1).join(' ');
+            if (!voiceChat || !isVoiceActive) {
+                voiceChat = new VoiceChatHandler(socket, currentRoom, currentUsername);
+                const success = await voiceChat.start();
+                if (success) {
+                    isVoiceActive = true;
+                    addSystemMessage('🎤 You joined voice chat');
                 }
             } else {
-                addSystemMessage('Usage: /ban <username> [duration] <password>');
-                return;
-            }
-        }
-
-        socket.emit('ban_user', { 
-            roomName: currentRoom, 
-            bannedUser: targetUser, 
-            bannerName: currentUsername,
-            duration,
-            password
-        });
-    }
-
-    function handleUnbanCommand(args) {
-        if (args.length < 1) {
-            addSystemMessage('Usage: /unban <username> <password>');
-            return;
-        }
-
-        const targetUser = args[0];
-        let password = '';
-
-        if (isAdmin) {
-            password = '';
-        } else {
-            if (args.length < 2) {
-                addSystemMessage('Usage: /unban <username> <password>');
-                return;
-            }
-            password = args.slice(1).join(' ');
-        }
-
-        socket.emit('unban_user', { 
-            roomName: currentRoom, 
-            unbannedUser: targetUser, 
-            unbannerName: currentUsername,
-            password
-        });
-    }
-
-    function handleDeleteCommand(args) {
-        if (args.length < 1) {
-            addSystemMessage('Usage: /delete <room_name> <password>');
-            return;
-        }
-
-        const roomName = args[0];
-        let password = '';
-
-        if (isAdmin) {
-            password = '';
-        } else {
-            if (args.length < 2) {
-                addSystemMessage('Usage: /delete <room_name> <password>');
-                return;
-            }
-            password = args.slice(1).join(' ');
-        }
-
-        socket.emit('delete_room', { roomName, password });
-    }
-
-    function handleAdminCommand(args) {
-        if (args.length < 2) {
-            addSystemMessage('Usage: /admin <username> <ADMIN_PASSWORD>');
-            return;
-        }
-
-        const targetUser = args[0];
-        const password = args.slice(1).join(' ');
-
-        socket.emit('make_admin', { username: targetUser, password });
-    }
-
-    function handleEffectCommand(args) {
-        if (!isAdmin) {
-            addSystemMessage('❌ This command is for admins only!');
-            return;
-        }
-
-        if (args.length < 1) {
-            addSystemMessage('Usage: /effect <glitch|flashbang|black|firework|gameroom|confetti>');
-            return;
-        }
-
-        const effect = args[0].toLowerCase();
-        socket.emit('effect_command', { effect, roomName: currentRoom });
-    }
-
-    // ========== ROOM MANAGEMENT ==========
-    function leaveRoom() {
-        socket.emit('leave_room');
-        currentRoom = null;
-        roomScreen.style.display = 'flex';
-        chatScreen.style.display = 'none';
-        loadRooms();
-    }
-
-    // ========== EVENT LISTENERS ==========
-    socket.on('room_deleted_by_owner', (data) => {
-        addSystemMessage(`🗑️ Room "${data.roomName}" has been deleted by admin`);
-        if (currentRoom === data.roomName) {
-            setTimeout(() => {
-                leaveRoom();
-            }, 2000);
-        }
-    });
-
-    socket.on('messages_cleared', () => {
-        msgContainer.innerHTML = '';
-        addSystemMessage('🧹 All messages have been cleared');
-    });
-
-    socket.on('user_banned', (data) => {
-        let durationMs = 10 * 60 * 1000;
-        if (data.duration) {
-            const match = data.duration.match(/^(\d+)([hmd]?)$/);
-            if (match) {
-                const value = parseInt(match[1]);
-                const unit = match[2] || 'm';
-                if (unit === 'h') durationMs = value * 60 * 60 * 1000;
-                else if (unit === 'm') durationMs = value * 60 * 1000;
-                else if (unit === 'd') durationMs = value * 24 * 60 * 60 * 1000;
+                voiceChat.stop();
+                isVoiceActive = false;
+                voiceChat = null;
+                addSystemMessage('🎤 You left voice chat');
             }
         }
         
-        const expiresAt = Date.now() + durationMs;
-        if (!bannedUsers[currentRoom]) bannedUsers[currentRoom] = [];
-        bannedUsers[currentRoom] = bannedUsers[currentRoom].filter(b => b.user !== data.bannedUser);
-        bannedUsers[currentRoom].push({ user: data.bannedUser, expiresAt });
+        // ========== FILE UPLOAD ==========
+        function showFileUpload() {
+            if (!isVip) {
+                alert('❌ VIP+ only can share files');
+                return;
+            }
+            showModal('fileUploadModal');
+        }
         
-        if (data.bannedUser === currentUsername) {
-            addSystemMessage(`⛔ You have been banned from this room for ${data.duration || '10m'}`);
-            setTimeout(() => {
-                leaveRoom();
-            }, 2000);
-        }
-    });
-
-    socket.on('user_unbanned', (data) => {
-        if (bannedUsers[currentRoom]) {
-            bannedUsers[currentRoom] = bannedUsers[currentRoom].filter(b => b.user !== data.unbannedUser);
-        }
-        addSystemMessage(`✅ ${data.unbannedUser} has been unbanned by ${data.unbannerName}`);
-    });
-
-    socket.on('force_leave', (data) => {
-        if (data.reason === 'banned') {
-            addSystemMessage(`⛔ You have been banned from this room`);
-            setTimeout(() => {
-                leaveRoom();
-            }, 1000);
-        }
-    });
-
-    // ========== UI EVENT LISTENERS ==========
-    input.addEventListener("keypress", (e) => { 
-        if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            sendMessage();
-        }
-    });
-
-    document.addEventListener('click', (e) => {
-        if (!e.target.closest('.emoji-btn') && !e.target.closest('.emoji-panel')) {
-            emojiPanel.classList.remove('show');
-        }
-    });
-
-    // Auth form keyboard events
-    document.getElementById('loginUsername').addEventListener('keypress', (e) => { if (e.key === 'Enter') handleLogin(); });
-    document.getElementById('loginPassword').addEventListener('keypress', (e) => { if (e.key === 'Enter') handleLogin(); });
-    document.getElementById('regUsername').addEventListener('keypress', (e) => { if (e.key === 'Enter') handleRegister(); });
-    document.getElementById('regPassword').addEventListener('keypress', (e) => { if (e.key === 'Enter') handleRegister(); });
-    document.getElementById('regConfirmPassword').addEventListener('keypress', (e) => { if (e.key === 'Enter') handleRegister(); });
-
-    // ========== INITIAL CONNECTION ==========
-    socket.on('connect', () => {
-        console.log('Connected to server');
-        socket.emit('check_auth');
-    });
-
-    socket.on('auth_status', (data) => {
-        if (data.authenticated) {
-            currentUsername = data.username;
-            isAdmin = data.isAdmin || false;
-            loggedInUsernameDisplay.textContent = data.username;
-            usernameDisplay.textContent = data.username;
+        function handleFileSelect(file) {
+            if (!file) return;
             
-            if (isAdmin) {
-                document.getElementById('admin-indicator-header').style.display = 'inline';
-                document.getElementById('admin-badge-logout').style.display = 'inline';
-                document.getElementById('admin-badge-chat').style.display = 'inline';
+            // Check file size (5MB limit)
+            if (file.size > 5 * 1024 * 1024) {
+                alert('File too large! Max 5MB');
+                return;
             }
             
-            authScreen.style.display = 'none';
-            roomScreen.style.display = 'flex';
-            loadRooms();
-        } else {
+            // Check file type
+            const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf', 'text/plain'];
+            if (!allowedTypes.includes(file.type)) {
+                alert('File type not allowed! Only images, PDFs, and text files.');
+                return;
+            }
+            
+            selectedFile = file;
+            
+            // Update preview
+            document.getElementById('fileIcon').textContent = 
+                file.type.startsWith('image/') ? '🖼️' : 
+                file.type === 'application/pdf' ? '📕' : '📄';
+            document.getElementById('fileName').textContent = file.name;
+            document.getElementById('fileSize').textContent = 
+                file.size < 1024 ? `${file.size} B` :
+                file.size < 1024 * 1024 ? `${(file.size / 1024).toFixed(1)} KB` :
+                `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+            document.getElementById('filePreview').style.display = 'block';
+        }
+        
+        async function uploadFile() {
+            if (!selectedFile) {
+                alert('Please select a file');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            formData.append('username', currentUsername);
+            formData.append('roomName', currentRoom);
+            
+            document.getElementById('uploadBtn').disabled = true;
+            document.getElementById('uploadBtn').innerHTML = '<span>⏳</span> UPLOADING...';
+            
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    socket.emit('share_file', {
+                        fileUrl: result.fileUrl,
+                        fileName: result.fileName,
+                        fileType: result.fileType
+                    });
+                    closeModal('fileUploadModal');
+                    addSystemMessage(`📁 File shared: ${result.fileName}`);
+                } else {
+                    alert('Upload failed: ' + result.error);
+                }
+            } catch (err) {
+                console.error('Upload error:', err);
+                alert('Upload failed!');
+            } finally {
+                document.getElementById('uploadBtn').disabled = false;
+                document.getElementById('uploadBtn').innerHTML = '<span>📤</span> UPLOAD FILE';
+                selectedFile = null;
+                document.getElementById('filePreview').style.display = 'none';
+            }
+        }
+        
+        // ========== AUTH UI ==========
+        function switchToRegister() {
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('registerForm').style.display = 'block';
+            authMessage.style.display = 'none';
+        }
+        
+        function switchToLogin() {
+            document.getElementById('registerForm').style.display = 'none';
+            document.getElementById('loginForm').style.display = 'block';
+            authMessage.style.display = 'none';
+        }
+        
+        function showAuthMessage(msg, isError = true) {
+            authMessage.textContent = msg;
+            authMessage.style.color = isError ? '#ff6b6b' : '#4ade80';
+            authMessage.style.display = 'block';
+            setTimeout(() => {
+                authMessage.style.display = 'none';
+            }, 3000);
+        }
+        
+        // ========== AUTH HANDLERS ==========
+        function handleLogin() {
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            
+            if (!username || !password) {
+                showAuthMessage('Please enter both username and password');
+                return;
+            }
+            
+            socket.emit('login', { username, password });
+        }
+        
+        function handleRegister() {
+            const username = document.getElementById('regUsername').value.trim();
+            const password = document.getElementById('regPassword').value;
+            const confirmPassword = document.getElementById('regConfirmPassword').value;
+            
+            if (!username || !password || !confirmPassword) {
+                showAuthMessage('Please fill in all fields');
+                return;
+            }
+            
+            if (password !== confirmPassword) {
+                showAuthMessage('Passwords do not match');
+                return;
+            }
+            
+            socket.emit('register', { username, password });
+        }
+        
+        function handleLogout() {
+            if (currentRoom) {
+                socket.emit('leave_room');
+            }
+            if (isVoiceActive && voiceChat) {
+                voiceChat.stop();
+                isVoiceActive = false;
+            }
+            socket.emit('logout');
+            currentUsername = 'User';
+            currentRoom = null;
             authScreen.style.display = 'flex';
             roomScreen.style.display = 'none';
             chatScreen.style.display = 'none';
+            switchToLogin();
         }
-    });
-</script>
+        
+        // ========== SOCKET AUTH EVENTS ==========
+        socket.on('auth_success', (data) => {
+            currentUsername = data.username;
+            updateRankUI(data.rank);
+            
+            loggedInUsernameDisplay.textContent = data.username;
+            usernameDisplay.textContent = data.username;
+            
+            showAuthMessage(data.message, false);
+            setTimeout(() => {
+                authScreen.style.display = 'none';
+                roomScreen.style.display = 'flex';
+                loadRooms();
+            }, 500);
+        });
+        
+        socket.on('auth_error', (data) => {
+            showAuthMessage(data.message);
+        });
+        
+        socket.on('logged_out', () => {
+            currentUsername = 'User';
+            currentRank = 'member';
+            authScreen.style.display = 'flex';
+            roomScreen.style.display = 'none';
+            chatScreen.style.display = 'none';
+            switchToLogin();
+        });
+        
+        socket.on('rank_changed', (data) => {
+            if (data.newRank) {
+                updateRankUI(data.newRank);
+                addSystemMessage(`👑 Your rank has been updated to ${data.newRank} by ${data.grantedBy}`);
+            }
+        });
+        
+        // ========== ROOMS ==========
+        function loadRooms() {
+            socket.emit('get_rooms');
+        }
+        
+        socket.on('rooms_list', (rooms) => {
+            roomsList.innerHTML = '';
+            if (rooms.length === 0) {
+                roomsList.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">No rooms available. Create one!</div>';
+                return;
+            }
+            rooms.forEach(room => {
+                const roomCard = document.createElement('div');
+                roomCard.className = 'room-card';
+                
+                roomCard.innerHTML = `
+                    <div class="room-header">
+                        <div class="room-name">
+                            <span>${room.isDefault ? '🏠' : '🚪'}</span>
+                            ${room.name}
+                            ${room.hasPassword ? '<span style="color: #ffd700;">🔒</span>' : ''}
+                            ${room.isDefault ? '<span class="rank-owner">DEFAULT</span>' : ''}
+                            <span style="font-size: 12px; color: #888; margin-left: 8px;">🎨 ${room.theme || 'default'}</span>
+                        </div>
+                        <div class="room-stats">
+                            <span>👥 ${room.members}</span>
+                        </div>
+                    </div>
+                    <div class="room-actions">
+                        <button onclick="joinRoom('${room.name}', '')" class="action-btn success" style="flex: 1;">
+                            <span>🚪</span> JOIN
+                        </button>
+                        ${!room.isDefault && (isAdmin || isOwner) ? `
+                            <button onclick="deleteRoom('${room.name}')" class="action-btn danger">
+                                <span>🗑️</span> DELETE
+                            </button>
+                        ` : ''}
+                    </div>
+                `;
+                
+                roomsList.appendChild(roomCard);
+            });
+        });
+        
+        function createRoom() {
+            const roomName = document.getElementById('newRoomName').value.trim();
+            const password = document.getElementById('newRoomPassword').value;
+            const theme = document.getElementById('roomTheme').value;
+            
+            if (!roomName) {
+                alert('Please enter a room name');
+                return;
+            }
+            
+            socket.emit('create_room', { roomName, password, theme });
+            document.getElementById('newRoomName').value = '';
+            document.getElementById('newRoomPassword').value = '';
+        }
+        
+        function joinRoom(roomName, password) {
+            currentRoom = roomName;
+            socket.emit('join_room', { roomName, password });
+        }
+        
+        function deleteRoom(roomName) {
+            if (isAdmin || isOwner) {
+                socket.emit('delete_room', { roomName, password: '' });
+            } else {
+                const password = prompt('Enter admin password:');
+                if (password) socket.emit('delete_room', { roomName, password });
+            }
+        }
+        
+        socket.on('room_created', () => loadRooms());
+        socket.on('room_deleted', () => loadRooms());
+        
+        socket.on('joined_room', (data) => {
+            currentRoom = data.roomName;
+            usernameDisplay.textContent = data.username;
+            document.getElementById('current-room').textContent = data.roomName;
+            document.getElementById('members-count').textContent = '1';
+            document.getElementById('room-theme-indicator').innerHTML = `🎨 ${data.theme || 'default'}`;
+            msgContainer.innerHTML = '';
+            roomScreen.style.display = 'none';
+            chatScreen.style.display = 'flex';
+            input.focus();
+            
+            // Apply room theme
+            changeTheme(data.theme || 'default');
+        });
+        
+        socket.on('room_history', (data) => {
+            msgContainer.innerHTML = '';
+            data.messages.forEach(msg => {
+                if (msg.isPrivate) {
+                    addPrivateMessage(msg.username, msg.message, msg.recipient);
+                } else if (msg.fileUrl) {
+                    addFileMessage(msg.username, msg.fileUrl, msg.fileName, msg.fileType);
+                } else {
+                    addMessage(msg.username, msg.message, msg.rank);
+                }
+            });
+        });
+        
+        socket.on('user_joined', (data) => {
+            document.getElementById('members-count').textContent = data.members;
+            addSystemMessage(`👋 ${data.username} (${data.rank || 'member'}) joined the room`);
+        });
+        
+        socket.on('user_left', (data) => {
+            document.getElementById('members-count').textContent = data.members;
+            if (data.username) {
+                addSystemMessage(`👋 ${data.username} left the room`);
+            }
+        });
+        
+        // ========== MESSAGES ==========
+        socket.on('chat message', (data) => {
+            addMessage(data.username, data.message, data.rank);
+        });
+        
+        function addMessage(username, message, rank = 'member') {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'msg-wrapper';
+            if (username === currentUsername) {
+                wrapper.classList.add('mine');
+            }
+            
+            const header = document.createElement('div');
+            header.className = 'msg-header';
+            header.innerHTML = `
+                <span class="msg-username">${username}</span>
+                ${rank !== 'member' ? getRankBadge(rank) : ''}
+                <span class="msg-timestamp">${new Date().toLocaleTimeString()}</span>
+            `;
+            wrapper.appendChild(header);
+            
+            const item = document.createElement('div');
+            item.className = 'msg';
+            if (username === currentUsername) item.classList.add('mine');
+            if (username === 'System') item.classList.add('system');
+            item.textContent = message;
+            wrapper.appendChild(item);
+            
+            msgContainer.appendChild(wrapper);
+            msgContainer.scrollTop = msgContainer.scrollHeight;
+        }
+        
+        function addSystemMessage(message) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'msg-wrapper';
+            
+            const item = document.createElement('div');
+            item.className = 'msg system';
+            item.textContent = message;
+            wrapper.appendChild(item);
+            
+            msgContainer.appendChild(wrapper);
+            msgContainer.scrollTop = msgContainer.scrollHeight;
+        }
+        
+        function addPrivateMessage(from, message, to) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'msg-wrapper';
+            
+            const header = document.createElement('div');
+            header.className = 'msg-header';
+            header.innerHTML = `
+                <span class="msg-username">💌 ${from} → ${to}</span>
+                <span class="msg-timestamp">${new Date().toLocaleTimeString()}</span>
+            `;
+            wrapper.appendChild(header);
+            
+            const item = document.createElement('div');
+            item.className = 'msg private';
+            item.textContent = message;
+            wrapper.appendChild(item);
+            
+            msgContainer.appendChild(wrapper);
+            msgContainer.scrollTop = msgContainer.scrollHeight;
+        }
+        
+        function addFileMessage(username, fileUrl, fileName, fileType) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'msg-wrapper';
+            if (username === currentUsername) wrapper.classList.add('mine');
+            
+            const header = document.createElement('div');
+            header.className = 'msg-header';
+            header.innerHTML = `
+                <span class="msg-username">${username}</span>
+                <span class="msg-timestamp">${new Date().toLocaleTimeString()}</span>
+            `;
+            wrapper.appendChild(header);
+            
+            const item = document.createElement('div');
+            item.className = 'msg file-share';
+            item.onclick = () => window.open(fileUrl, '_blank');
+            
+            const fileIcon = fileType.startsWith('image/') ? '🖼️' : 
+                            fileType === 'application/pdf' ? '📕' : '📄';
+            
+            item.innerHTML = `
+                <div class="file-info">
+                    <span class="file-icon">${fileIcon}</span>
+                    <span class="file-name">${fileName}</span>
+                </div>
+            `;
+            wrapper.appendChild(item);
+            
+            msgContainer.appendChild(wrapper);
+            msgContainer.scrollTop = msgContainer.scrollHeight;
+        }
+        
+        function sendMessage() {
+            if (input.value.trim()) {
+                const messageText = input.value;
+                
+                if (messageText.startsWith('/')) {
+                    handleCommand(messageText);
+                    input.value = '';
+                    emojiPanel.classList.remove('show');
+                    return;
+                }
+                
+                socket.emit('chat message', { 
+                    username: currentUsername, 
+                    message: messageText 
+                });
+                
+                addMessage(currentUsername, messageText, currentRank);
+                input.value = '';
+                emojiPanel.classList.remove('show');
+            }
+        }
+        
+        // ========== PRIVATE MESSAGES ==========
+        function sendPrivateMessage() {
+            const recipient = document.getElementById('pmRecipient').value.trim();
+            const message = document.getElementById('pmMessage').value.trim();
+            
+            if (!recipient || !message) {
+                alert('Please enter recipient and message');
+                return;
+            }
+            
+            socket.emit('private_message', {
+                recipient,
+                message
+            });
+            
+            document.getElementById('pmMessage').value = '';
+            addPrivateMessage(currentUsername, message, recipient);
+        }
+        
+        socket.on('private_message', (data) => {
+            addPrivateMessage(data.from, data.message, currentUsername);
+            
+            // Update private messages list
+            const pmList = document.getElementById('privateMessagesList');
+            if (pmList) {
+                pmList.innerHTML += `
+                    <div style="padding: 10px; border-bottom: 1px solid #333;">
+                        <span style="color: #ff99ff;">💌 ${data.from}</span>
+                        <span style="color: #888; font-size: 11px; margin-left: 8px;">${data.timestamp}</span>
+                        <div style="margin-top: 5px;">${data.message}</div>
+                    </div>
+                `;
+            }
+        });
+        
+        socket.on('private_message_sent', (data) => {
+            addSystemMessage(`💌 Private message sent to ${data.to}`);
+        });
+        
+        socket.on('admin_private_message_log', (data) => {
+            if (isAdmin || isOwner) {
+                addSystemMessage(`👮 ADMIN LOG: ${data.from} → ${data.to}: ${data.message}`);
+            }
+        });
+        
+        // ========== COMMANDS ==========
+        function handleCommand(commandText) {
+            const parts = commandText.split(' ');
+            const command = parts[0].toLowerCase();
+            const args = parts.slice(1);
+            
+            switch(command) {
+                case '/help':
+                    showHelp();
+                    break;
+                case '/msg':
+                    handleMsgCommand(args);
+                    break;
+                case '/clear':
+                    handleClearCommand(args);
+                    break;
+                case '/flip':
+                    handleFlipCommand();
+                    break;
+                case '/roll':
+                    handleRollCommand(args);
+                    break;
+                case '/ban':
+                    handleBanCommand(args);
+                    break;
+                case '/unban':
+                    handleUnbanCommand(args);
+                    break;
+                case '/delete':
+                    handleDeleteCommand(args);
+                    break;
+                case '/effect':
+                    handleEffectCommand(args);
+                    break;
+                case '/theme':
+                    handleThemeCommand(args);
+                    break;
+                case '/grant':
+                    handleGrantCommand(args);
+                    break;
+                case '/rank':
+                    handleRankCommand(args);
+                    break;
+                default:
+                    addSystemMessage(`❌ Unknown command: ${command}. Type /help for commands.`);
+            }
+        }
+        
+        function showHelp() {
+            let helpText = `🔹 **BLACK HOLE CHAT V2 COMMANDS** 🔹\n\n`;
+            helpText += `💬 **Everyone:**\n`;
+            helpText += `  /msg <user> <text> - Send private message\n`;
+            helpText += `  /flip - Flip a coin\n`;
+            helpText += `  /roll <min> <max> - Roll random number\n\n`;
+            
+            if (isVip) {
+                helpText += `⭐ **VIP+ Commands:**\n`;
+                helpText += `  /theme <name> - Change theme (dark, neon, ocean, etc)\n`;
+                helpText += `  /file - Share files (click button)\n\n`;
+            }
+            
+            if (isModerator) {
+                helpText += `🛡️ **Moderator+ Commands:**\n`;
+                helpText += `  /clear - Clear all messages\n`;
+                helpText += `  /ban <user> <duration> - Ban user (10m, 1h, 1d)\n\n`;
+            }
+            
+            if (isAdmin) {
+                helpText += `👮 **Admin+ Commands:**\n`;
+                helpText += `  /unban <user> - Unban user\n`;
+                helpText += `  /delete <room> - Delete any room\n`;
+                helpText += `  /grant <user> <rank> - Grant mod/vip/member\n\n`;
+            }
+            
+            if (isOwner) {
+                helpText += `👑 **Owner Commands:**\n`;
+                helpText += `  /grant <user> admin - Grant admin rank\n\n`;
+            }
+            
+            if (isAdmin || isOwner) {
+                helpText += `🎮 **Effect Commands (Admin+):**\n`;
+                helpText += `  /effect glitch - Glitch effect\n`;
+                helpText += `  /effect flashbang - Flash effect\n`;
+                helpText += `  /effect black - Black screen\n`;
+                helpText += `  /effect hack - Hacker mode\n`;
+                helpText += `  /effect matrix - Matrix code rain\n`;
+                helpText += `  /effect rainbow - Rainbow mode\n`;
+                helpText += `  /effect neon - Neon pulse\n`;
+                helpText += `  /effect firework - Fireworks\n`;
+                helpText += `  /effect confetti - Confetti\n`;
+                helpText += `  /effect gameroom - Gamer mode\n`;
+            }
+            
+            addSystemMessage(helpText);
+        }
+        
+        function handleMsgCommand(args) {
+            if (args.length < 2) {
+                addSystemMessage('Usage: /msg <username> <message>');
+                return;
+            }
+            
+            const recipient = args[0];
+            const message = args.slice(1).join(' ');
+            
+            socket.emit('private_message', { recipient, message });
+        }
+        
+        function handleClearCommand(args) {
+            if (isModerator) {
+                socket.emit('clear_messages', { 
+                    roomName: currentRoom, 
+                    password: '' 
+                });
+            } else {
+                const password = args.join(' ');
+                socket.emit('clear_messages', { 
+                    roomName: currentRoom, 
+                    password 
+                });
+            }
+        }
+        
+        function handleFlipCommand() {
+            const result = Math.random() < 0.5 ? 'HEADS' : 'TAILS';
+            socket.emit('chat message', { 
+                username: 'System', 
+                message: `🪙 ${currentUsername} flipped a coin... ${result}!` 
+            });
+        }
+        
+        function handleRollCommand(args) {
+            if (args.length < 2) {
+                addSystemMessage('Usage: /roll <min> <max>');
+                return;
+            }
+            
+            const min = parseInt(args[0]);
+            const max = parseInt(args[1]);
+            
+            if (isNaN(min) || isNaN(max) || min >= max) {
+                addSystemMessage('Invalid range');
+                return;
+            }
+            
+            const result = Math.floor(Math.random() * (max - min + 1)) + min;
+            socket.emit('chat message', { 
+                username: 'System', 
+                message: `🎲 ${currentUsername} rolled... ${result}!` 
+            });
+        }
+        
+        function handleBanCommand(args) {
+            if (!isModerator && !isAdmin && !isOwner) {
+                addSystemMessage('❌ You do not have permission to ban users');
+                return;
+            }
+            
+            if (args.length < 1) {
+                addSystemMessage('Usage: /ban <username> [duration]');
+                return;
+            }
+            
+            const targetUser = args[0];
+            let duration = '10m';
+            
+            if (args.length >= 2 && /^\d+[hmd]?$/.test(args[1])) {
+                duration = args[1];
+            }
+            
+            socket.emit('ban_user', {
+                roomName: currentRoom,
+                bannedUser: targetUser,
+                duration,
+                bannerName: currentUsername,
+                password: ''
+            });
+        }
+        
+        function handleUnbanCommand(args) {
+            if (!isAdmin && !isOwner) {
+                addSystemMessage('❌ Only admins can unban users');
+                return;
+            }
+            
+            if (args.length < 1) {
+                addSystemMessage('Usage: /unban <username>');
+                return;
+            }
+            
+            socket.emit('unban_user', {
+                roomName: currentRoom,
+                unbannedUser: args[0],
+                unbannerName: currentUsername,
+                password: ''
+            });
+        }
+        
+        function handleDeleteCommand(args) {
+            if (!isAdmin && !isOwner) {
+                addSystemMessage('❌ Only admins can delete rooms');
+                return;
+            }
+            
+            if (args.length < 1) {
+                addSystemMessage('Usage: /delete <roomname>');
+                return;
+            }
+            
+            socket.emit('delete_room', {
+                roomName: args[0],
+                password: ''
+            });
+        }
+        
+        function handleEffectCommand(args) {
+            if (!isAdmin && !isOwner) {
+                addSystemMessage('❌ Only admins can use effects');
+                return;
+            }
+            
+            if (args.length < 1) {
+                addSystemMessage('Usage: /effect <name>');
+                return;
+            }
+            
+            const effect = args[0].toLowerCase();
+            socket.emit('effect_command', {
+                effect,
+                roomName: currentRoom
+            });
+        }
+        
+        function handleThemeCommand(args) {
+            if (!isVip) {
+                addSystemMessage('❌ VIP+ only can change themes');
+                return;
+            }
+            
+            if (args.length < 1) {
+                addSystemMessage('Usage: /theme <name>');
+                return;
+            }
+            
+            const theme = args[0].toLowerCase();
+            changeTheme(theme);
+            socket.emit('change_theme', {
+                theme,
+                scope: 'personal'
+            });
+        }
+        
+        function handleGrantCommand(args) {
+            if (!isAdmin && !isOwner) {
+                addSystemMessage('❌ Only admins can grant ranks');
+                return;
+            }
+            
+            if (args.length < 2) {
+                addSystemMessage('Usage: /grant <username> <rank>');
+                return;
+            }
+            
+            const targetUser = args[0];
+            const newRank = args[1].toLowerCase();
+            
+            const validRanks = isOwner ? ['admin', 'moderator', 'vip', 'member'] : ['moderator', 'vip', 'member'];
+            
+            if (!validRanks.includes(newRank)) {
+                addSystemMessage(`❌ You can only grant: ${validRanks.join(', ')}`);
+                return;
+            }
+            
+            socket.emit('grant_rank', {
+                targetUser,
+                newRank,
+                password: isOwner ? '' : prompt('Enter admin password:')
+            });
+        }
+        
+        function handleRankCommand(args) {
+            addSystemMessage(`Your rank: ${currentRank.toUpperCase()}`);
+        }
+        
+        // ========== EFFECTS ==========
+        socket.on('room_effect', (data) => {
+            addSystemMessage(`✨ ${data.triggeredBy} triggered effect: ${data.effect}`);
+            
+            // Remove existing effect classes
+            document.body.classList.remove('glitch', 'flashbang', 'black', 'hack', 'matrix', 
+                'rainbow', 'neon', 'firework', 'gameroom');
+            
+            switch(data.effect) {
+                case 'glitch':
+                    document.body.classList.add('glitch');
+                    setTimeout(() => document.body.classList.remove('glitch'), 5000);
+                    break;
+                case 'flashbang':
+                    document.body.classList.add('flashbang');
+                    setTimeout(() => document.body.classList.remove('flashbang'), 1000);
+                    break;
+                case 'black':
+                    document.body.classList.add('black');
+                    setTimeout(() => document.body.classList.remove('black'), 5000);
+                    break;
+                case 'hack':
+                    document.body.classList.add('hack');
+                    setTimeout(() => document.body.classList.remove('hack'), 10000);
+                    break;
+                case 'matrix':
+                    document.body.classList.add('matrix');
+                    setTimeout(() => document.body.classList.remove('matrix'), 10000);
+                    break;
+                case 'rainbow':
+                    document.body.classList.add('rainbow');
+                    setTimeout(() => document.body.classList.remove('rainbow'), 5000);
+                    break;
+                case 'neon':
+                    document.body.classList.add('neon');
+                    setTimeout(() => document.body.classList.remove('neon'), 5000);
+                    break;
+                case 'firework':
+                    document.body.classList.add('firework');
+                    setTimeout(() => document.body.classList.remove('firework'), 2000);
+                    break;
+                case 'gameroom':
+                    document.body.classList.add('gameroom');
+                    setTimeout(() => document.body.classList.remove('gameroom'), 10000);
+                    break;
+                case 'confetti':
+                    for (let i = 0; i < 100; i++) {
+                        createConfetti();
+                    }
+                    break;
+            }
+        });
+        
+        function createConfetti() {
+            const confetti = document.createElement('div');
+            confetti.className = 'confetti';
+            confetti.style.left = Math.random() * 100 + 'vw';
+            confetti.style.background = `hsl(${Math.random() * 360}, 100%, 50%)`;
+            confetti.style.animationDelay = Math.random() * 2 + 's';
+            confetti.style.width = Math.random() * 10 + 5 + 'px';
+            confetti.style.height = Math.random() * 10 + 5 + 'px';
+            document.body.appendChild(confetti);
+            setTimeout(() => confetti.remove(), 3000);
+        }
+        
+        // ========== THEMES ==========
+        function changeTheme(theme) {
+            document.body.setAttribute('data-theme', theme);
+            currentTheme = theme;
+            addSystemMessage(`🎨 Theme changed to: ${theme}`);
+        }
+        
+        // ========== MODALS ==========
+        function showModal(modalId) {
+            document.getElementById(modalId).classList.add('show');
+        }
+        
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('show');
+        }
+        
+        function showUserList() {
+            // Implement user list fetching
+            showModal('userListModal');
+            document.getElementById('userListContent').innerHTML = `
+                <div style="text-align: center; color: #888; padding: 20px;">
+                    Loading users...
+                </div>
+            `;
+        }
+        
+        function showPrivateMessages() {
+            showModal('privateMessagesModal');
+        }
+        
+        function grantRank() {
+            const username = document.getElementById('grantUsername').value.trim();
+            const rank = document.getElementById('grantRankSelect').value;
+            const password = document.getElementById('grantPassword').value;
+            
+            if (!username || !rank) {
+                alert('Please fill in all fields');
+                return;
+            }
+            
+            socket.emit('grant_rank', {
+                targetUser: username,
+                newRank: rank,
+                password: isOwner ? '' : password
+            });
+            
+            closeModal('grantRankModal');
+            document.getElementById('grantUsername').value = '';
+            document.getElementById('grantPassword').value = '';
+        }
+        
+        // ========== ROOM MANAGEMENT ==========
+        function leaveRoom() {
+            if (isVoiceActive && voiceChat) {
+                voiceChat.stop();
+                isVoiceActive = false;
+            }
+            socket.emit('leave_room');
+            currentRoom = null;
+            roomScreen.style.display = 'flex';
+            chatScreen.style.display = 'none';
+            loadRooms();
+        }
+        
+        // ========== SOCKET EVENT HANDLERS ==========
+        socket.on('error', (data) => {
+            alert('❌ ' + data.message);
+        });
+        
+        socket.on('command_error', (data) => {
+            addSystemMessage('❌ ' + data.message);
+        });
+        
+        socket.on('command_success', (data) => {
+            addSystemMessage('✅ ' + data.message);
+        });
+        
+        socket.on('messages_cleared', () => {
+            msgContainer.innerHTML = '';
+            addSystemMessage('🧹 All messages cleared');
+        });
+        
+        socket.on('user_banned', (data) => {
+            if (data.bannedUser === currentUsername) {
+                addSystemMessage(`⛔ You have been banned for ${data.duration || '10m'}`);
+                setTimeout(() => leaveRoom(), 2000);
+            }
+        });
+        
+        socket.on('user_unbanned', (data) => {
+            addSystemMessage(`✅ ${data.unbannedUser} unbanned by ${data.unbannerName}`);
+        });
+        
+        socket.on('force_leave', (data) => {
+            if (data.reason === 'banned') {
+                addSystemMessage('⛔ You have been banned from this room');
+                setTimeout(() => leaveRoom(), 1000);
+            }
+        });
+        
+        socket.on('room_deleted_by_owner', (data) => {
+            addSystemMessage(`🗑️ Room "${data.roomName}" has been deleted`);
+            if (currentRoom === data.roomName) {
+                setTimeout(() => leaveRoom(), 2000);
+            }
+        });
+        
+        socket.on('theme_applied', (data) => {
+            if (data.scope === 'room') {
+                addSystemMessage(`🎨 Room theme changed to ${data.theme} by ${data.changedBy}`);
+                document.body.setAttribute('data-theme', data.theme);
+                document.getElementById('room-theme-indicator').innerHTML = `🎨 ${data.theme}`;
+            }
+        });
+        
+        socket.on('system_notification', (data) => {
+            addSystemMessage(data.message);
+        });
+        
+        // ========== UI EVENT LISTENERS ==========
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+        
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.emoji-btn') && !e.target.closest('.emoji-panel')) {
+                emojiPanel.classList.remove('show');
+            }
+        });
+        
+        // Auth form keyboard events
+        document.getElementById('loginUsername').addEventListener('keypress', (e) => { 
+            if (e.key === 'Enter') handleLogin(); 
+        });
+        document.getElementById('loginPassword').addEventListener('keypress', (e) => { 
+            if (e.key === 'Enter') handleLogin(); 
+        });
+        document.getElementById('regUsername').addEventListener('keypress', (e) => { 
+            if (e.key === 'Enter') handleRegister(); 
+        });
+        document.getElementById('regPassword').addEventListener('keypress', (e) => { 
+            if (e.key === 'Enter') handleRegister(); 
+        });
+        document.getElementById('regConfirmPassword').addEventListener('keypress', (e) => { 
+            if (e.key === 'Enter') handleRegister(); 
+        });
+        
+        // ========== INITIAL CONNECTION ==========
+        socket.on('connect', () => {
+            console.log('✅ Connected to Black Hole Chat V2');
+            socket.emit('check_auth');
+        });
+        
+        socket.on('auth_status', (data) => {
+            if (data.authenticated) {
+                currentUsername = data.username;
+                updateRankUI(data.rank);
+                loggedInUsernameDisplay.textContent = data.username;
+                usernameDisplay.textContent = data.username;
+                authScreen.style.display = 'none';
+                roomScreen.style.display = 'flex';
+                loadRooms();
+                
+                if (data.theme) {
+                    changeTheme(data.theme);
+                }
+            } else {
+                authScreen.style.display = 'flex';
+                roomScreen.style.display = 'none';
+                chatScreen.style.display = 'none';
+            }
+        });
+        
+        socket.on('disconnect', () => {
+            addSystemMessage('⚠️ Disconnected from server. Reconnecting...');
+        });
+    </script>
 </body>
 </html>
