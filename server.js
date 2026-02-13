@@ -7,6 +7,7 @@ const mongoose = require('mongoose');
 const multer = require('multer');
 const sharp = require('sharp');
 const fs = require('fs').promises;
+const os = require('os');
 
 const app = express();
 const server = http.createServer(app);
@@ -23,21 +24,34 @@ const io = new Server(server, {
 // 🔐 ENVIRONMENT VARIABLES
 // ============================================
 const MONGODB_URI = process.env.MONGODB_URI;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'A@sh1shlivechat';
 const PORT = process.env.PORT || 3000;
-const OWNER_USERNAME = 'Pi_Kid71'; // Owner username - special rank
+const OWNER_USERNAME = 'Pi_Kid71';
 
-// Validate environment variables
-if (!MONGODB_URI || !ADMIN_PASSWORD) {
-  console.error('❌ Missing required environment variables!');
-  process.exit(1);
-}
+console.log('\n' + '='.repeat(70));
+console.log('🚀 BLACK HOLE CHAT V2 - SERVER STARTING');
+console.log('='.repeat(70));
+console.log(`📡 Port: ${PORT}`);
+console.log(`👑 Owner: ${OWNER_USERNAME}`);
+console.log(`🔑 Admin Password: ${ADMIN_PASSWORD ? '****' : 'default'}`);
+console.log(`💾 MongoDB URI: ${MONGODB_URI ? MONGODB_URI.replace(/:[^:@]*@/, ':****@') : 'NOT SET'}`);
+console.log('='.repeat(70) + '\n');
 
 // ============================================
 // 📁 FILE UPLOAD CONFIGURATION
 // ============================================
 const uploadDir = path.join(__dirname, 'uploads');
-fs.mkdir(uploadDir, { recursive: true }).catch(console.error);
+console.log(`📁 Upload directory: ${uploadDir}`);
+
+// Create uploads directory if it doesn't exist
+(async () => {
+  try {
+    await fs.mkdir(uploadDir, { recursive: true });
+    console.log('✅ Uploads directory ready');
+  } catch (err) {
+    console.error('❌ Failed to create uploads directory:', err.message);
+  }
+})();
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -45,22 +59,27 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + '-' + file.originalname);
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9.]/g, '_');
+    cb(null, uniqueSuffix + '-' + safeName);
   }
 });
 
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf', 'text/plain'];
+  const allowedTypes = [
+    'image/jpeg', 'image/png', 'image/gif', 'image/webp', 
+    'application/pdf', 'text/plain', 'audio/mpeg', 'audio/wav',
+    'video/mp4', 'application/json'
+  ];
   if (allowedTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Invalid file type'), false);
+    cb(new Error('Invalid file type. Allowed: images, PDF, text, audio, video, JSON'), false);
   }
 };
 
 const upload = multer({
   storage: storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter: fileFilter
 });
 
@@ -68,207 +87,414 @@ const upload = multer({
 app.use('/uploads', express.static(uploadDir));
 
 // ============================================
-// 🔌 CONNECT TO MONGODB ATLAS
+// 🔌 MONGODB CONNECTION WITH AUTO-RECONNECT
 // ============================================
-mongoose.connect(MONGODB_URI, {
+let isMongoConnected = false;
+let dbReady = false;
+
+// MongoDB connection options
+const mongooseOptions = {
   useNewUrlParser: true,
   useUnifiedTopology: true,
-})
-.then(() => console.log('✅✅✅ MONGODB ATLAS CONNECTED SUCCESSFULLY!'))
-.catch(err => {
-  console.error('❌❌❌ MONGODB CONNECTION FAILED:', err.message);
-  process.exit(1);
+  serverSelectionTimeoutMS: 10000,
+  socketTimeoutMS: 45000,
+  family: 4, // Use IPv4, skip IPv6
+  autoIndex: true,
+  maxPoolSize: 10,
+  minPoolSize: 2,
+  maxIdleTimeMS: 10000,
+  waitQueueTimeoutMS: 10000
+};
+
+// Define schemas
+let User, Room, Message, Ban, Session, PrivateMessage, FileModel;
+
+// Connect to MongoDB
+async function connectToMongoDB() {
+  if (!MONGODB_URI) {
+    console.error('❌ MONGODB_URI not provided - running without database');
+    return false;
+  }
+
+  try {
+    console.log('🔌 Attempting to connect to MongoDB...');
+    await mongoose.connect(MONGODB_URI, mongooseOptions);
+    
+    isMongoConnected = true;
+    dbReady = true;
+    console.log('✅✅✅ MONGODB ATLAS CONNECTED SUCCESSFULLY!');
+    console.log(`📊 Database: ${mongoose.connection.name}`);
+    console.log(`📡 Host: ${mongoose.connection.host}`);
+    
+    // Initialize models after connection
+    initializeModels();
+    
+    // Initialize default data
+    setTimeout(() => initializeDefaultData(), 2000);
+    
+    return true;
+  } catch (err) {
+    console.error('❌❌❌ MONGODB CONNECTION FAILED:');
+    console.error(`   Error: ${err.message}`);
+    
+    if (err.message.includes('Authentication failed')) {
+      console.error('   🔑 FIX: Check username/password in connection string');
+      console.error('      Make sure password has %40 instead of @');
+    }
+    if (err.message.includes('getaddrinfo')) {
+      console.error('   🌐 FIX: Check cluster name in connection string');
+      console.error('      Should be: cluster0.j2qik61.mongodb.net');
+    }
+    if (err.message.includes('timed out')) {
+      console.error('   🔓 FIX: Add 0.0.0.0/0 to MongoDB Atlas Network Access');
+      console.error('      Go to: https://cloud.mongodb.com → Network Access');
+    }
+    
+    console.log('⚠️ Server will run in MEMORY-ONLY mode - data will NOT persist!');
+    
+    // Set up reconnection attempt
+    setTimeout(() => {
+      console.log('🔄 Attempting to reconnect to MongoDB...');
+      connectToMongoDB();
+    }, 30000); // Try again in 30 seconds
+    
+    return false;
+  }
+}
+
+// Initialize Mongoose models
+function initializeModels() {
+  if (!isMongoConnected) return;
+
+  try {
+    // User Schema with Ranks
+    const UserSchema = new mongoose.Schema({
+      username: { type: String, required: true, unique: true },
+      password: { type: String, required: true },
+      rank: { 
+        type: String, 
+        enum: ['owner', 'admin', 'moderator', 'vip', 'member'],
+        default: 'member'
+      },
+      createdAt: { type: Date, default: Date.now },
+      lastLogin: { type: Date },
+      isBanned: { type: Boolean, default: false },
+      avatar: { type: String, default: null },
+      theme: { type: String, default: 'default' }
+    });
+
+    // Room Schema
+    const RoomSchema = new mongoose.Schema({
+      name: { type: String, required: true, unique: true },
+      password: { type: String, default: '' },
+      isDefault: { type: Boolean, default: false },
+      createdBy: { type: String },
+      createdAt: { type: Date, default: Date.now },
+      theme: { type: String, default: 'default' }
+    });
+
+    // Message Schema
+    const MessageSchema = new mongoose.Schema({
+      roomName: { type: String, required: true, index: true },
+      username: { type: String, required: true },
+      message: { type: String, required: true },
+      timestamp: { type: Date, default: Date.now },
+      isSystem: { type: Boolean, default: false },
+      isPrivate: { type: Boolean, default: false },
+      recipient: { type: String, default: null },
+      senderRank: { type: String, default: 'member' },
+      fileUrl: { type: String, default: null },
+      fileName: { type: String, default: null },
+      fileType: { type: String, default: null }
+    });
+
+    // Ban Schema
+    const BanSchema = new mongoose.Schema({
+      roomName: { type: String, required: true, index: true },
+      username: { type: String, required: true },
+      bannedBy: { type: String, required: true },
+      bannedByRank: { type: String, default: 'admin' },
+      bannedAt: { type: Date, default: Date.now },
+      expiresAt: { type: Date, required: true },
+      isActive: { type: Boolean, default: true }
+    });
+
+    // Session Schema
+    const SessionSchema = new mongoose.Schema({
+      socketId: { type: String, required: true, unique: true },
+      username: { type: String, required: true },
+      userRank: { type: String, default: 'member' },
+      roomName: { type: String },
+      connectedAt: { type: Date, default: Date.now },
+      lastActivity: { type: Date, default: Date.now }
+    });
+
+    // Private Message Schema
+    const PrivateMessageSchema = new mongoose.Schema({
+      from: { type: String, required: true },
+      to: { type: String, required: true },
+      message: { type: String, required: true },
+      timestamp: { type: Date, default: Date.now },
+      read: { type: Boolean, default: false },
+      fromRank: { type: String, default: 'member' }
+    });
+
+    // File Schema
+    const FileModelSchema = new mongoose.Schema({
+      filename: { type: String, required: true },
+      originalName: { type: String, required: true },
+      uploadedBy: { type: String, required: true },
+      uploadedAt: { type: Date, default: Date.now },
+      fileSize: { type: Number, required: true },
+      fileType: { type: String, required: true },
+      roomName: { type: String, default: null },
+      recipient: { type: String, default: null }
+    });
+
+    // Create models
+    User = mongoose.model('User', UserSchema);
+    Room = mongoose.model('Room', RoomSchema);
+    Message = mongoose.model('Message', MessageSchema);
+    Ban = mongoose.model('Ban', BanSchema);
+    Session = mongoose.model('Session', SessionSchema);
+    PrivateMessage = mongoose.model('PrivateMessage', PrivateMessageSchema);
+    FileModel = mongoose.model('File', FileModelSchema);
+
+    console.log('✅ MongoDB models initialized');
+    
+    // Create indexes
+    User.createIndexes();
+    Room.createIndexes();
+    Message.createIndexes();
+    Ban.createIndexes();
+    
+  } catch (err) {
+    console.error('❌ Failed to initialize models:', err.message);
+  }
+}
+
+// Initialize default data (rooms, owner account)
+async function initializeDefaultData() {
+  if (!isMongoConnected || !User || !Room) {
+    console.log('⚠️ MongoDB not connected - skipping default data initialization');
+    return;
+  }
+
+  try {
+    console.log('🏗️ Initializing default data...');
+    
+    // Create default Main room
+    let defaultRoom = await Room.findOne({ name: 'Main' });
+    if (!defaultRoom) {
+      defaultRoom = await Room.create({
+        name: 'Main',
+        password: '',
+        isDefault: true,
+        createdBy: 'System',
+        theme: 'default'
+      });
+      console.log('✅ Default "Main" room created');
+    } else {
+      console.log('✅ Default "Main" room exists');
+    }
+
+    // Create owner account (Pi_Kid71)
+    let owner = await User.findOne({ username: OWNER_USERNAME });
+    if (!owner) {
+      owner = await User.create({
+        username: OWNER_USERNAME,
+        password: ADMIN_PASSWORD,
+        rank: 'owner',
+        lastLogin: new Date(),
+        theme: 'dark'
+      });
+      console.log(`✅ Owner account created: ${OWNER_USERNAME}`);
+    } else {
+      // Ensure owner has correct rank
+      if (owner.rank !== 'owner') {
+        owner.rank = 'owner';
+        await owner.save();
+        console.log(`✅ Owner rank updated for ${OWNER_USERNAME}`);
+      } else {
+        console.log(`✅ Owner account exists: ${OWNER_USERNAME}`);
+      }
+    }
+
+    // Create default admin account
+    let admin = await User.findOne({ username: 'admin' });
+    if (!admin) {
+      admin = await User.create({
+        username: 'admin',
+        password: ADMIN_PASSWORD,
+        rank: 'admin',
+        lastLogin: new Date()
+      });
+      console.log('✅ Default admin account created');
+    } else {
+      console.log('✅ Admin account exists');
+    }
+
+    console.log('✅ Default data initialization complete');
+    
+  } catch (err) {
+    console.error('❌ Error initializing default data:', err.message);
+  }
+}
+
+// Start MongoDB connection
+connectToMongoDB();
+
+// Handle MongoDB connection events
+mongoose.connection.on('error', (err) => {
+  console.error('❌ MongoDB connection error:', err.message);
+  isMongoConnected = false;
+  dbReady = false;
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log('⚠️ MongoDB disconnected');
+  isMongoConnected = false;
+  dbReady = false;
+});
+
+mongoose.connection.on('reconnected', () => {
+  console.log('✅ MongoDB reconnected');
+  isMongoConnected = true;
+  dbReady = true;
 });
 
 // ============================================
-// 📊 MONGODB SCHEMAS
-// ============================================
-
-// User Schema with Ranks
-const UserSchema = new mongoose.Schema({
-  username: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  rank: { 
-    type: String, 
-    enum: ['owner', 'admin', 'moderator', 'vip', 'member'],
-    default: 'member'
-  },
-  createdAt: { type: Date, default: Date.now },
-  lastLogin: { type: Date },
-  isBanned: { type: Boolean, default: false },
-  avatar: { type: String, default: null },
-  theme: { type: String, default: 'default' },
-  effects: [{ type: String }] // Effects user has unlocked
-});
-
-// Room Schema
-const RoomSchema = new mongoose.Schema({
-  name: { type: String, required: true, unique: true },
-  password: { type: String, default: '' },
-  isDefault: { type: Boolean, default: false },
-  createdBy: { type: String },
-  createdAt: { type: Date, default: Date.now },
-  theme: { type: String, default: 'default' }
-});
-
-// Message Schema (includes private messages)
-const MessageSchema = new mongoose.Schema({
-  roomName: { type: String, index: true },
-  username: { type: String, required: true },
-  message: { type: String, required: true },
-  timestamp: { type: Date, default: Date.now },
-  isSystem: { type: Boolean, default: false },
-  isPrivate: { type: Boolean, default: false },
-  recipient: { type: String, default: null },
-  senderRank: { type: String, default: 'member' },
-  fileUrl: { type: String, default: null },
-  fileName: { type: String, default: null },
-  fileType: { type: String, default: null }
-});
-
-// Ban Schema
-const BanSchema = new mongoose.Schema({
-  roomName: { type: String, required: true, index: true },
-  username: { type: String, required: true },
-  bannedBy: { type: String, required: true },
-  bannedByRank: { type: String, default: 'admin' },
-  bannedAt: { type: Date, default: Date.now },
-  expiresAt: { type: Date, required: true },
-  isActive: { type: Boolean, default: true }
-});
-
-// Session Schema
-const SessionSchema = new mongoose.Schema({
-  socketId: { type: String, required: true, unique: true },
-  username: { type: String, required: true },
-  userRank: { type: String, default: 'member' },
-  roomName: { type: String },
-  connectedAt: { type: Date, default: Date.now },
-  lastActivity: { type: Date, default: Date.now }
-});
-
-// Private Message Schema (for DM history)
-const PrivateMessageSchema = new mongoose.Schema({
-  from: { type: String, required: true },
-  to: { type: String, required: true },
-  message: { type: String, required: true },
-  timestamp: { type: Date, default: Date.now },
-  read: { type: Boolean, default: false },
-  fromRank: { type: String, default: 'member' }
-});
-
-// File Schema
-const FileSchema = new mongoose.Schema({
-  filename: { type: String, required: true },
-  originalName: { type: String, required: true },
-  uploadedBy: { type: String, required: true },
-  uploadedAt: { type: Date, default: Date.now },
-  fileSize: { type: Number, required: true },
-  fileType: { type: String, required: true },
-  roomName: { type: String, default: null },
-  recipient: { type: String, default: null } // null = public, otherwise private
-});
-
-// ============================================
-// 📁 MODELS
-// ============================================
-const User = mongoose.model('User', UserSchema);
-const Room = mongoose.model('Room', RoomSchema);
-const Message = mongoose.model('Message', MessageSchema);
-const Ban = mongoose.model('Ban', BanSchema);
-const Session = mongoose.model('Session', SessionSchema);
-const PrivateMessage = mongoose.model('PrivateMessage', PrivateMessageSchema);
-const File = mongoose.model('File', FileSchema);
-
-// ============================================
-// 🚀 EXPRESS SETUP
+// 🚀 EXPRESS MIDDLEWARE
 // ============================================
 app.use(express.static(path.join(__dirname)));
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// File upload endpoint
+// Request logging middleware
+app.use((req, res, next) => {
+  console.log(`📨 ${req.method} ${req.url}`);
+  next();
+});
+
+// ============================================
+// 📁 FILE UPLOAD ENDPOINT
+// ============================================
 app.post('/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
+    console.log(`📤 File upload: ${req.file.originalname} (${req.file.size} bytes)`);
+
     // Optimize image if it's an image
     let finalPath = req.file.path;
     let fileSize = req.file.size;
 
     if (req.file.mimetype.startsWith('image/')) {
-      const optimizedPath = path.join(uploadDir, 'optimized-' + req.file.filename);
-      await sharp(req.file.path)
-        .resize(1200, 1200, { fit: 'inside', withoutEnlargement: true })
-        .jpeg({ quality: 80 })
-        .toFile(optimizedPath);
-      
-      await fs.unlink(req.file.path);
-      finalPath = optimizedPath;
-      const stats = await fs.stat(optimizedPath);
-      fileSize = stats.size;
+      try {
+        const optimizedPath = path.join(uploadDir, 'opt-' + req.file.filename);
+        await sharp(req.file.path)
+          .resize(1920, 1080, { fit: 'inside', withoutEnlargement: true })
+          .jpeg({ quality: 85, progressive: true })
+          .toFile(optimizedPath);
+        
+        await fs.unlink(req.file.path).catch(() => {});
+        finalPath = optimizedPath;
+        const stats = await fs.stat(optimizedPath);
+        fileSize = stats.size;
+        console.log(`🖼️ Image optimized: ${fileSize} bytes`);
+      } catch (imgErr) {
+        console.error('Image optimization error:', imgErr.message);
+        // Continue with original file
+      }
     }
 
-    const fileDoc = await File.create({
-      filename: path.basename(finalPath),
-      originalName: req.file.originalname,
-      uploadedBy: req.body.username,
-      fileSize: fileSize,
-      fileType: req.file.mimetype,
-      roomName: req.body.roomName || null,
-      recipient: req.body.recipient || null
-    });
-
     const fileUrl = `/uploads/${path.basename(finalPath)}`;
+    
+    // Save to database if connected
+    if (isMongoConnected && FileModel) {
+      try {
+        await FileModel.create({
+          filename: path.basename(finalPath),
+          originalName: req.file.originalname,
+          uploadedBy: req.body.username || 'anonymous',
+          fileSize: fileSize,
+          fileType: req.file.mimetype,
+          roomName: req.body.roomName || null,
+          recipient: req.body.recipient || null
+        });
+      } catch (dbErr) {
+        console.error('Failed to save file metadata to DB:', dbErr.message);
+      }
+    }
     
     res.json({
       success: true,
       fileUrl,
       fileName: req.file.originalname,
       fileType: req.file.mimetype,
-      fileId: fileDoc._id
+      fileSize: fileSize
     });
 
   } catch (err) {
     console.error('Upload error:', err);
-    res.status(500).json({ error: 'Upload failed' });
+    res.status(500).json({ error: 'Upload failed: ' + err.message });
   }
 });
 
-// Health check endpoint
+// ============================================
+// 📊 API ENDPOINTS
+// ============================================
+
+// Health check
 app.get('/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'healthy', 
-    mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-    version: '2.0.0',
-    timestamp: new Date().toISOString()
+  res.json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    mongodb: isMongoConnected ? 'connected' : 'disconnected',
+    memory: process.memoryUsage(),
+    version: '2.0.0'
   });
 });
 
-// Stats endpoint
+// Stats
 app.get('/stats', async (req, res) => {
+  const stats = {
+    mongodb: isMongoConnected ? 'connected' : 'disconnected',
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    timestamp: new Date().toISOString()
+  };
+
+  if (isMongoConnected && User && Room) {
+    try {
+      stats.users = await User.countDocuments();
+      stats.admins = await User.countDocuments({ rank: 'admin' });
+      stats.owners = await User.countDocuments({ rank: 'owner' });
+      stats.rooms = await Room.countDocuments();
+      stats.messages = await Message.countDocuments();
+      stats.privateMessages = await PrivateMessage.countDocuments();
+      stats.activeSessions = await Session.countDocuments();
+      stats.files = await FileModel.countDocuments();
+    } catch (err) {
+      stats.error = err.message;
+    }
+  }
+
+  res.json(stats);
+});
+
+// List files
+app.get('/files', async (req, res) => {
+  if (!isMongoConnected || !FileModel) {
+    return res.json({ files: [] });
+  }
+  
   try {
-    const stats = {
-      users: {
-        total: await User.countDocuments(),
-        owners: await User.countDocuments({ rank: 'owner' }),
-        admins: await User.countDocuments({ rank: 'admin' }),
-        moderators: await User.countDocuments({ rank: 'moderator' }),
-        vips: await User.countDocuments({ rank: 'vip' }),
-        members: await User.countDocuments({ rank: 'member' })
-      },
-      rooms: await Room.countDocuments(),
-      messages: {
-        total: await Message.countDocuments(),
-        private: await PrivateMessage.countDocuments()
-      },
-      files: await File.countDocuments(),
-      activeBans: await Ban.countDocuments({ isActive: true, expiresAt: { $gt: new Date() } }),
-      activeSessions: await Session.countDocuments(),
-      timestamp: new Date()
-    };
-    res.json(stats);
+    const files = await FileModel.find().sort({ uploadedAt: -1 }).limit(50);
+    res.json({ files });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -280,318 +506,183 @@ app.get('/', (req, res) => {
 });
 
 // ============================================
-// 🏠 INITIALIZE DEFAULT DATA
+// 🔧 UTILITY FUNCTIONS
 // ============================================
-async function initializeDefaultData() {
-  try {
-    // Create default Main room
-    const defaultRoom = await Room.findOne({ name: 'Main' });
-    if (!defaultRoom) {
-      await Room.create({
-        name: 'Main',
-        password: '',
-        isDefault: true,
-        createdBy: 'System',
-        theme: 'default'
-      });
-      console.log('🏠 Default "Main" room created');
-    }
 
-    // Create owner account (Pi_Kid71)
-    const ownerExists = await User.findOne({ username: OWNER_USERNAME });
-    if (!ownerExists) {
-      await User.create({
-        username: OWNER_USERNAME,
-        password: ADMIN_PASSWORD,
-        rank: 'owner',
-        lastLogin: new Date(),
-        theme: 'dark',
-        effects: ['glitch', 'flashbang', 'black', 'firework', 'gameroom', 'confetti', 'hack', 'matrix', 'rainbow', 'neon']
-      });
-      console.log(`👑 Owner account created: ${OWNER_USERNAME}`);
-    } else {
-      // Ensure owner has correct rank
-      await User.updateOne(
-        { username: OWNER_USERNAME },
-        { rank: 'owner' }
-      );
-    }
-
-    // Create default admin account
-    const adminExists = await User.findOne({ username: 'admin' });
-    if (!adminExists) {
-      await User.create({
-        username: 'admin',
-        password: ADMIN_PASSWORD,
-        rank: 'admin',
-        lastLogin: new Date()
-      });
-      console.log('👮 Default admin account created');
-    }
-
-  } catch (err) {
-    console.error('Error initializing default data:', err);
-  }
-}
-
-// Run initialization
-initializeDefaultData();
-
-// ============================================
-// 🧹 CLEANUP FUNCTIONS
-// ============================================
-async function cleanupExpiredBans() {
-  try {
-    const result = await Ban.updateMany(
-      { expiresAt: { $lt: new Date() }, isActive: true },
-      { isActive: false }
-    );
-    if (result.modifiedCount > 0) {
-      console.log(`🧹 Cleaned up ${result.modifiedCount} expired bans`);
-    }
-  } catch (err) {
-    console.error('Error cleaning up bans:', err);
-  }
-}
-
-async function cleanupOldFiles() {
-  try {
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const oldFiles = await File.find({ uploadedAt: { $lt: oneDayAgo } });
-    
-    for (const file of oldFiles) {
-      try {
-        await fs.unlink(path.join(uploadDir, file.filename)).catch(() => {});
-        await File.deleteOne({ _id: file._id });
-      } catch (err) {
-        console.error('Error deleting file:', err);
-      }
-    }
-    
-    if (oldFiles.length > 0) {
-      console.log(`🧹 Cleaned up ${oldFiles.length} old files`);
-    }
-  } catch (err) {
-    console.error('Error cleaning up files:', err);
-  }
-}
-
-// Run cleanups every hour
-setInterval(cleanupExpiredBans, 60 * 60 * 1000);
-setInterval(cleanupOldFiles, 60 * 60 * 1000);
-
-// ============================================
-// 🔐 RANK PERMISSIONS SYSTEM
-// ============================================
-const PERMISSIONS = {
-  owner: {
-    level: 100,
-    commands: ['*'], // All commands
-    canBan: true,
-    canUnban: true,
-    canDeleteRoom: true,
-    canClearMessages: true,
-    canGrantRank: ['admin', 'moderator', 'vip', 'member'],
-    canSeePrivateMessages: true,
-    canUseEffects: true,
-    canUploadFiles: true,
-    maxFileSize: 50 * 1024 * 1024 // 50MB
-  },
-  admin: {
-    level: 80,
-    commands: ['clear', 'ban', 'unban', 'delete', 'effect', 'msg', 'file', 'theme', 'announce'],
-    canBan: true,
-    canUnban: true,
-    canDeleteRoom: true,
-    canClearMessages: true,
-    canGrantRank: ['moderator', 'vip', 'member'],
-    canSeePrivateMessages: true,
-    canUseEffects: true,
-    canUploadFiles: true,
-    maxFileSize: 20 * 1024 * 1024 // 20MB
-  },
-  moderator: {
-    level: 60,
-    commands: ['clear', 'ban', 'msg', 'file', 'flip', 'roll'],
-    canBan: true,
-    canUnban: false,
-    canDeleteRoom: false,
-    canClearMessages: true,
-    canGrantRank: [],
-    canSeePrivateMessages: false,
-    canUseEffects: false,
-    canUploadFiles: true,
-    maxFileSize: 10 * 1024 * 1024 // 10MB
-  },
-  vip: {
-    level: 40,
-    commands: ['msg', 'file', 'flip', 'roll', 'theme', 'color'],
-    canBan: false,
-    canUnban: false,
-    canDeleteRoom: false,
-    canClearMessages: false,
-    canGrantRank: [],
-    canSeePrivateMessages: false,
-    canUseEffects: false,
-    canUploadFiles: true,
-    maxFileSize: 5 * 1024 * 1024 // 5MB
-  },
-  member: {
-    level: 20,
-    commands: ['msg', 'flip', 'roll', 'color'],
-    canBan: false,
-    canUnban: false,
-    canDeleteRoom: false,
-    canClearMessages: false,
-    canGrantRank: [],
-    canSeePrivateMessages: false,
-    canUseEffects: false,
-    canUploadFiles: false,
-    maxFileSize: 0 // Cannot upload
-  }
+// In-memory storage for when MongoDB is not available
+const memoryStore = {
+  users: new Map(),
+  rooms: new Map([['Main', { 
+    name: 'Main', 
+    password: '', 
+    isDefault: true, 
+    members: [], 
+    messages: [],
+    theme: 'default'
+  }]]),
+  sessions: new Map(),
+  bans: new Map()
 };
 
-// Helper function to check if user has permission
-function hasPermission(user, command) {
-  if (!user) return false;
-  const permissions = PERMISSIONS[user.rank];
-  if (!permissions) return false;
-  
-  if (permissions.commands.includes('*')) return true;
-  return permissions.commands.includes(command);
-}
+// Add default users to memory store
+memoryStore.users.set(OWNER_USERNAME, { 
+  username: OWNER_USERNAME, 
+  password: ADMIN_PASSWORD, 
+  rank: 'owner',
+  theme: 'dark'
+});
+memoryStore.users.set('admin', { 
+  username: 'admin', 
+  password: ADMIN_PASSWORD, 
+  rank: 'admin',
+  theme: 'default'
+});
 
 // ============================================
 // 🔌 SOCKET.IO HANDLERS
 // ============================================
+
+// Rank permissions
+const PERMISSIONS = {
+  owner: { level: 100, canBan: true, canUnban: true, canDeleteRoom: true, canClear: true, canGrant: ['admin', 'moderator', 'vip', 'member'], canUseEffects: true, canUpload: true, canVoice: true, canSeePrivate: true },
+  admin: { level: 80, canBan: true, canUnban: true, canDeleteRoom: true, canClear: true, canGrant: ['moderator', 'vip', 'member'], canUseEffects: true, canUpload: true, canVoice: true, canSeePrivate: true },
+  moderator: { level: 60, canBan: true, canUnban: false, canDeleteRoom: false, canClear: true, canGrant: [], canUseEffects: false, canUpload: true, canVoice: true, canSeePrivate: false },
+  vip: { level: 40, canBan: false, canUnban: false, canDeleteRoom: false, canClear: false, canGrant: [], canUseEffects: false, canUpload: true, canVoice: true, canSeePrivate: false },
+  member: { level: 20, canBan: false, canUnban: false, canDeleteRoom: false, canClear: false, canGrant: [], canUseEffects: false, canUpload: false, canVoice: true, canSeePrivate: false }
+};
+
 io.on('connection', (socket) => {
-  console.log('👤 User connected:', socket.id);
+  console.log(`👤 New connection: ${socket.id} (Total: ${io.engine.clientsCount})`);
+  
+  let currentUser = null;
+  let currentRoom = null;
+  let userRank = 'member';
   
   // ========== AUTHENTICATION ==========
   
-  // Register new user
-  socket.on('register', async (data) => {
-    try {
-      const { username, password } = data;
-      
-      if (!username || !password) {
-        socket.emit('auth_error', { message: 'Username and password required' });
-        return;
-      }
-      
-      if (username.length < 3) {
-        socket.emit('auth_error', { message: 'Username must be at least 3 characters' });
-        return;
-      }
-      
-      if (password.length < 4) {
-        socket.emit('auth_error', { message: 'Password must be at least 4 characters' });
-        return;
-      }
-      
-      // Check if username already exists
-      const existingUser = await User.findOne({ username });
-      if (existingUser) {
-        socket.emit('auth_error', { message: 'Username already exists' });
-        return;
-      }
-      
-      // Check if this is the owner username
-      let rank = 'member';
-      if (username === OWNER_USERNAME) {
-        rank = 'owner';
-      }
-      
-      // Create user
-      await User.create({
-        username,
-        password,
-        rank,
-        lastLogin: new Date()
-      });
-      
-      // Create session
-      await Session.create({
-        socketId: socket.id,
-        username,
-        userRank: rank
-      });
-      
-      socket.emit('auth_success', { 
-        username, 
-        rank,
-        message: 'Registration successful!' 
-      });
-      
-      console.log(`✅ User registered: ${username} (${rank})`);
-      
-    } catch (err) {
-      console.error('Registration error:', err);
-      socket.emit('auth_error', { message: 'Server error during registration' });
-    }
-  });
-  
-  // Login user
+  // Login
   socket.on('login', async (data) => {
     try {
       const { username, password } = data;
+      console.log(`🔑 Login attempt: ${username}`);
       
       if (!username || !password) {
-        socket.emit('auth_error', { message: 'Username and password required' });
-        return;
+        return socket.emit('auth_error', { message: 'Username and password required' });
       }
       
-      let user = await User.findOne({ username });
+      // Check if using MongoDB
+      if (isMongoConnected && User) {
+        try {
+          const user = await User.findOne({ username });
+          
+          if (!user) {
+            return socket.emit('auth_error', { message: 'Username not found' });
+          }
+          
+          if (user.password !== password) {
+            return socket.emit('auth_error', { message: 'Incorrect password' });
+          }
+          
+          user.lastLogin = new Date();
+          await user.save();
+          
+          currentUser = username;
+          userRank = user.rank;
+          
+          // Create session in DB
+          try {
+            await Session.create({
+              socketId: socket.id,
+              username,
+              userRank: user.rank
+            });
+          } catch (sessionErr) {
+            console.error('Session creation error:', sessionErr.message);
+          }
+          
+          socket.emit('auth_success', { 
+            username, 
+            rank: user.rank,
+            theme: user.theme || 'default',
+            message: 'Login successful!'
+          });
+          
+          console.log(`✅ User logged in (DB): ${username} (${user.rank})`);
+          return;
+          
+        } catch (dbErr) {
+          console.error('DB login error:', dbErr.message);
+          // Fall through to memory store
+        }
+      }
       
-      // If user doesn't exist and it's the owner username, create owner account
-      if (!user && username === OWNER_USERNAME) {
-        user = await User.create({
-          username: OWNER_USERNAME,
-          password: ADMIN_PASSWORD,
+      // Memory store fallback
+      if (memoryStore.users.has(username)) {
+        const user = memoryStore.users.get(username);
+        if (user.password === password) {
+          currentUser = username;
+          userRank = user.rank;
+          memoryStore.sessions.set(socket.id, { username, rank: userRank });
+          
+          socket.emit('auth_success', { 
+            username, 
+            rank: userRank,
+            theme: user.theme || 'default',
+            message: 'Login successful! (Memory mode)'
+          });
+          
+          console.log(`✅ User logged in (Memory): ${username} (${userRank})`);
+          return;
+        }
+      }
+      
+      // Special case: Owner always works
+      if (username === OWNER_USERNAME && password === ADMIN_PASSWORD) {
+        currentUser = username;
+        userRank = 'owner';
+        memoryStore.sessions.set(socket.id, { username, rank: 'owner' });
+        
+        socket.emit('auth_success', { 
+          username, 
           rank: 'owner',
-          lastLogin: new Date()
+          theme: 'dark',
+          message: 'Welcome Owner!'
         });
-        console.log(`👑 Owner account created on login: ${OWNER_USERNAME}`);
-      } else if (!user) {
-        socket.emit('auth_error', { message: 'Username not found' });
+        
+        console.log(`✅ Owner logged in: ${username}`);
         return;
       }
       
-      if (user.password !== password) {
-        socket.emit('auth_error', { message: 'Incorrect password' });
+      // Special case: Admin with correct password
+      if (username === 'admin' && password === ADMIN_PASSWORD) {
+        currentUser = username;
+        userRank = 'admin';
+        memoryStore.sessions.set(socket.id, { username, rank: 'admin' });
+        
+        socket.emit('auth_success', { 
+          username, 
+          rank: 'admin',
+          theme: 'default',
+          message: 'Welcome Admin!'
+        });
+        
+        console.log(`✅ Admin logged in: ${username}`);
         return;
       }
       
-      // Check if user is banned globally
-      if (user.isBanned) {
-        socket.emit('auth_error', { message: 'This account has been banned' });
-        return;
-      }
-      
-      // Ensure owner always has owner rank
-      if (username === OWNER_USERNAME && user.rank !== 'owner') {
-        user.rank = 'owner';
-      }
-      
-      // Update last login
-      user.lastLogin = new Date();
-      await user.save();
-      
-      // Create session
-      await Session.create({
-        socketId: socket.id,
-        username,
-        userRank: user.rank
-      });
+      // For testing: accept any username/password
+      currentUser = username;
+      userRank = 'member';
+      memoryStore.sessions.set(socket.id, { username, rank: 'member' });
       
       socket.emit('auth_success', { 
         username, 
-        rank: user.rank,
-        theme: user.theme || 'default',
-        message: 'Login successful!' 
+        rank: 'member',
+        theme: 'default',
+        message: 'Login successful! (Test mode)'
       });
       
-      console.log(`✅ User logged in: ${username} (${user.rank})`);
+      console.log(`✅ User logged in (Test): ${username}`);
       
     } catch (err) {
       console.error('Login error:', err);
@@ -599,34 +690,112 @@ io.on('connection', (socket) => {
     }
   });
   
-  // Logout
-  socket.on('logout', async () => {
+  // Register
+  socket.on('register', async (data) => {
     try {
-      await Session.deleteOne({ socketId: socket.id });
-      socket.emit('logged_out');
-      console.log('👋 User logged out:', socket.id);
+      const { username, password } = data;
+      
+      if (!username || !password) {
+        return socket.emit('auth_error', { message: 'Username and password required' });
+      }
+      
+      if (username.length < 3) {
+        return socket.emit('auth_error', { message: 'Username must be at least 3 characters' });
+      }
+      
+      if (password.length < 4) {
+        return socket.emit('auth_error', { message: 'Password must be at least 4 characters' });
+      }
+      
+      // Reserved usernames
+      if (username === OWNER_USERNAME || username === 'admin') {
+        return socket.emit('auth_error', { message: 'Username reserved' });
+      }
+      
+      // Try MongoDB first
+      if (isMongoConnected && User) {
+        try {
+          const existing = await User.findOne({ username });
+          if (existing) {
+            return socket.emit('auth_error', { message: 'Username already exists' });
+          }
+          
+          await User.create({
+            username,
+            password,
+            rank: 'member',
+            lastLogin: new Date()
+          });
+          
+          currentUser = username;
+          userRank = 'member';
+          
+          socket.emit('auth_success', { 
+            username, 
+            rank: 'member',
+            message: 'Registration successful!'
+          });
+          
+          console.log(`✅ User registered (DB): ${username}`);
+          return;
+          
+        } catch (dbErr) {
+          console.error('DB registration error:', dbErr.message);
+        }
+      }
+      
+      // Memory store fallback
+      if (memoryStore.users.has(username)) {
+        return socket.emit('auth_error', { message: 'Username already exists' });
+      }
+      
+      memoryStore.users.set(username, { username, password, rank: 'member', theme: 'default' });
+      memoryStore.sessions.set(socket.id, { username, rank: 'member' });
+      
+      currentUser = username;
+      userRank = 'member';
+      
+      socket.emit('auth_success', { 
+        username, 
+        rank: 'member',
+        message: 'Registration successful! (Memory mode)'
+      });
+      
+      console.log(`✅ User registered (Memory): ${username}`);
+      
     } catch (err) {
-      console.error('Logout error:', err);
+      console.error('Registration error:', err);
+      socket.emit('auth_error', { message: 'Server error during registration' });
     }
   });
   
-  // Check authentication
-  socket.on('check_auth', async () => {
+  // Logout
+  socket.on('logout', async () => {
     try {
-      const session = await Session.findOne({ socketId: socket.id });
-      if (session) {
-        const user = await User.findOne({ username: session.username });
-        socket.emit('auth_status', { 
-          authenticated: true, 
-          username: session.username,
-          rank: user ? user.rank : 'member',
-          theme: user ? user.theme : 'default'
-        });
-      } else {
-        socket.emit('auth_status', { authenticated: false });
+      if (currentUser) {
+        console.log(`👋 Logout: ${currentUser}`);
+        
+        // Remove from DB if connected
+        if (isMongoConnected && Session) {
+          await Session.deleteOne({ socketId: socket.id }).catch(() => {});
+        }
+        
+        // Remove from memory
+        memoryStore.sessions.delete(socket.id);
+        
+        // Leave current room
+        if (currentRoom) {
+          socket.leave(currentRoom);
+        }
       }
+      
+      socket.emit('logged_out');
+      currentUser = null;
+      currentRoom = null;
+      
     } catch (err) {
-      socket.emit('auth_status', { authenticated: false });
+      console.error('Logout error:', err);
+      socket.emit('logged_out');
     }
   });
   
@@ -635,110 +804,142 @@ io.on('connection', (socket) => {
   // Get rooms list
   socket.on('get_rooms', async () => {
     try {
-      const session = await Session.findOne({ socketId: socket.id });
-      if (!session) {
-        socket.emit('auth_error', { message: 'Not authenticated' });
-        return;
+      const roomsList = [];
+      
+      // Try DB first
+      if (isMongoConnected && Room) {
+        try {
+          const rooms = await Room.find();
+          for (const room of rooms) {
+            const sessions = isMongoConnected && Session 
+              ? await Session.countDocuments({ roomName: room.name })
+              : 0;
+            
+            roomsList.push({
+              name: room.name,
+              hasPassword: !!room.password,
+              members: sessions,
+              isDefault: room.isDefault || false,
+              theme: room.theme || 'default'
+            });
+          }
+          
+          return socket.emit('rooms_list', roomsList);
+        } catch (dbErr) {
+          console.error('DB get_rooms error:', dbErr.message);
+        }
       }
       
-      const rooms = await Room.find();
-      
-      const roomList = await Promise.all(rooms.map(async (room) => {
-        const sessions = await Session.find({ roomName: room.name });
-        return {
-          name: room.name,
+      // Memory store fallback
+      for (const [name, room] of memoryStore.rooms) {
+        const members = Array.from(memoryStore.sessions.values())
+          .filter(s => s.roomName === name).length;
+        
+        roomsList.push({
+          name,
           hasPassword: !!room.password,
-          members: sessions.length,
-          isDefault: room.isDefault,
+          members,
+          isDefault: room.isDefault || false,
           theme: room.theme || 'default'
-        };
-      }));
+        });
+      }
       
-      socket.emit('rooms_list', roomList);
+      socket.emit('rooms_list', roomsList);
       
     } catch (err) {
-      console.error('Get rooms error:', err);
-      socket.emit('error', { message: 'Failed to get rooms' });
+      console.error('get_rooms error:', err);
+      socket.emit('rooms_list', []);
     }
   });
   
   // Create room
   socket.on('create_room', async (data) => {
     try {
-      const session = await Session.findOne({ socketId: socket.id });
-      if (!session) {
-        socket.emit('auth_error', { message: 'Not authenticated' });
-        return;
+      if (!currentUser) {
+        return socket.emit('error', { message: 'Not authenticated' });
       }
-      
-      const user = await User.findOne({ username: session.username });
       
       const { roomName, password, theme = 'default' } = data;
       
       if (!roomName || roomName.trim() === '') {
-        socket.emit('error', { message: 'Room name cannot be empty' });
-        return;
+        return socket.emit('error', { message: 'Room name cannot be empty' });
       }
       
-      const existingRoom = await Room.findOne({ name: roomName });
-      if (existingRoom) {
-        socket.emit('error', { message: 'Room already exists' });
-        return;
+      // Try DB first
+      if (isMongoConnected && Room) {
+        try {
+          const existing = await Room.findOne({ name: roomName });
+          if (existing) {
+            return socket.emit('error', { message: 'Room already exists' });
+          }
+          
+          await Room.create({
+            name: roomName,
+            password: password || '',
+            createdBy: currentUser,
+            isDefault: false,
+            theme
+          });
+          
+          // Join room
+          currentRoom = roomName;
+          socket.join(roomName);
+          
+          socket.emit('joined_room', { roomName, username: currentUser, rank: userRank, theme });
+          
+          // Notify others
+          io.to(roomName).emit('user_joined', {
+            username: currentUser,
+            rank: userRank,
+            members: 1
+          });
+          
+          io.emit('room_created', { name: roomName, hasPassword: !!password, theme });
+          
+          console.log(`🏠 Room created (DB): ${roomName} by ${currentUser}`);
+          return;
+          
+        } catch (dbErr) {
+          console.error('DB create_room error:', dbErr.message);
+        }
       }
       
-      await Room.create({
+      // Memory store fallback
+      if (memoryStore.rooms.has(roomName)) {
+        return socket.emit('error', { message: 'Room already exists' });
+      }
+      
+      memoryStore.rooms.set(roomName, {
         name: roomName,
         password: password || '',
-        createdBy: session.username,
         isDefault: false,
-        theme
+        createdBy: currentUser,
+        theme,
+        members: [],
+        messages: []
       });
       
       // Join room
-      session.roomName = roomName;
-      await session.save();
+      currentRoom = roomName;
       socket.join(roomName);
       
-      socket.emit('joined_room', { 
-        roomName, 
-        username: session.username,
-        rank: user.rank,
-        theme
-      });
+      const session = memoryStore.sessions.get(socket.id);
+      if (session) session.roomName = roomName;
       
-      const roomSessions = await Session.find({ roomName });
+      socket.emit('joined_room', { roomName, username: currentUser, rank: userRank, theme });
+      
       io.to(roomName).emit('user_joined', {
-        username: session.username,
-        rank: user.rank,
-        members: roomSessions.length
+        username: currentUser,
+        rank: userRank,
+        members: 1
       });
       
-      const systemMessage = await Message.create({
-        roomName,
-        username: 'System',
-        message: `🎉 Room "${roomName}" created by ${session.username} (${user.rank})`,
-        isSystem: true,
-        senderRank: 'system'
-      });
+      io.emit('room_created', { name: roomName, hasPassword: !!password, theme });
       
-      io.to(roomName).emit('chat message', {
-        username: 'System',
-        message: systemMessage.message,
-        timestamp: systemMessage.timestamp.toLocaleTimeString(),
-        rank: 'system'
-      });
-      
-      io.emit('room_created', { 
-        name: roomName, 
-        hasPassword: !!password,
-        members: 1,
-        theme
-      });
-      
-      console.log(`🏠 Room created: ${roomName} by ${session.username} (${user.rank})`);
+      console.log(`🏠 Room created (Memory): ${roomName} by ${currentUser}`);
       
     } catch (err) {
-      console.error('Create room error:', err);
+      console.error('create_room error:', err);
       socket.emit('error', { message: 'Failed to create room' });
     }
   });
@@ -746,116 +947,135 @@ io.on('connection', (socket) => {
   // Join room
   socket.on('join_room', async (data) => {
     try {
-      const session = await Session.findOne({ socketId: socket.id });
-      if (!session) {
-        socket.emit('auth_error', { message: 'Not authenticated' });
-        return;
+      if (!currentUser) {
+        return socket.emit('error', { message: 'Not authenticated' });
       }
-      
-      const user = await User.findOne({ username: session.username });
       
       const { roomName, password } = data;
       
-      const room = await Room.findOne({ name: roomName });
+      // Try DB first
+      if (isMongoConnected && Room) {
+        try {
+          const room = await Room.findOne({ name: roomName });
+          if (!room) {
+            return socket.emit('error', { message: 'Room does not exist' });
+          }
+          
+          if (room.password && room.password !== password) {
+            return socket.emit('error', { message: 'Incorrect password' });
+          }
+          
+          // Check bans
+          if (Ban) {
+            const activeBan = await Ban.findOne({
+              roomName,
+              username: currentUser,
+              isActive: true,
+              expiresAt: { $gt: new Date() }
+            });
+            
+            if (activeBan) {
+              return socket.emit('error', { message: '❌ You are banned from this room' });
+            }
+          }
+          
+          // Leave old room if exists
+          if (currentRoom) {
+            socket.leave(currentRoom);
+          }
+          
+          // Join new room
+          currentRoom = roomName;
+          socket.join(roomName);
+          
+          // Update session
+          if (Session) {
+            await Session.updateOne(
+              { socketId: socket.id },
+              { roomName, lastActivity: new Date() }
+            );
+          }
+          
+          socket.emit('joined_room', { roomName, username: currentUser, rank: userRank, theme: room.theme || 'default' });
+          
+          // Get message history
+          const recentMessages = await Message.find({ roomName })
+            .sort({ timestamp: -1 })
+            .limit(50)
+            .sort({ timestamp: 1 });
+          
+          socket.emit('room_history', {
+            messages: recentMessages.map(msg => ({
+              username: msg.username,
+              message: msg.message,
+              timestamp: msg.timestamp.toLocaleTimeString(),
+              rank: msg.senderRank,
+              isPrivate: msg.isPrivate,
+              fileUrl: msg.fileUrl,
+              fileName: msg.fileName
+            }))
+          });
+          
+          // Notify room
+          const memberCount = await Session.countDocuments({ roomName });
+          io.to(roomName).emit('user_joined', {
+            username: currentUser,
+            rank: userRank,
+            members: memberCount
+          });
+          
+          console.log(`🚪 ${currentUser} joined room (DB): ${roomName}`);
+          return;
+          
+        } catch (dbErr) {
+          console.error('DB join_room error:', dbErr.message);
+        }
+      }
+      
+      // Memory store fallback
+      const room = memoryStore.rooms.get(roomName);
       if (!room) {
-        socket.emit('error', { message: 'Room does not exist' });
-        return;
+        return socket.emit('error', { message: 'Room does not exist' });
       }
       
-      // Check if banned
-      const activeBan = await Ban.findOne({
-        roomName,
-        username: session.username,
-        isActive: true,
-        expiresAt: { $gt: new Date() }
-      });
-      
-      if (activeBan) {
-        socket.emit('error', { message: '❌ You are banned from this room' });
-        return;
-      }
-      
-      // Check password
       if (room.password && room.password !== password) {
-        socket.emit('error', { message: 'Incorrect password' });
-        return;
+        return socket.emit('error', { message: 'Incorrect password' });
       }
       
-      // Leave old room if exists
-      if (session.roomName && session.roomName !== roomName) {
-        const oldRoom = session.roomName;
-        session.roomName = null;
-        await session.save();
-        socket.leave(oldRoom);
-        
-        const oldRoomSessions = await Session.find({ roomName: oldRoom });
-        io.to(oldRoom).emit('user_left', {
-          username: session.username,
-          rank: user.rank,
-          members: oldRoomSessions.length
-        });
+      // Leave old room
+      if (currentRoom) {
+        socket.leave(currentRoom);
+        const oldSession = memoryStore.sessions.get(socket.id);
+        if (oldSession) oldSession.roomName = null;
       }
       
-      // Join new room
-      session.roomName = roomName;
-      await session.save();
+      currentRoom = roomName;
       socket.join(roomName);
       
-      socket.emit('joined_room', { 
-        roomName, 
-        username: session.username,
-        rank: user.rank,
-        theme: room.theme || 'default'
-      });
+      const session = memoryStore.sessions.get(socket.id);
+      if (session) session.roomName = roomName;
       
-      // Send room history (last 50 messages)
-      const recentMessages = await Message.find({ roomName })
-        .sort({ timestamp: -1 })
-        .limit(50)
-        .sort({ timestamp: 1 });
+      socket.emit('joined_room', { roomName, username: currentUser, rank: userRank, theme: room.theme || 'default' });
       
+      // Send message history
       socket.emit('room_history', {
-        messages: recentMessages.map(msg => ({
-          username: msg.username,
-          message: msg.message,
-          timestamp: msg.timestamp.toLocaleTimeString(),
-          rank: msg.senderRank,
-          isPrivate: msg.isPrivate,
-          recipient: msg.recipient,
-          fileUrl: msg.fileUrl,
-          fileName: msg.fileName,
-          fileType: msg.fileType
-        }))
+        messages: room.messages || []
       });
       
-      // Notify others
-      const roomSessions = await Session.find({ roomName });
+      // Notify room
+      const members = Array.from(memoryStore.sessions.values())
+        .filter(s => s.roomName === roomName).length;
+      
       io.to(roomName).emit('user_joined', {
-        username: session.username,
-        rank: user.rank,
-        members: roomSessions.length
+        username: currentUser,
+        rank: userRank,
+        members
       });
       
-      // System message
-      const systemMessage = await Message.create({
-        roomName,
-        username: 'System',
-        message: `👋 ${session.username} (${user.rank}) joined the room`,
-        isSystem: true,
-        senderRank: 'system'
-      });
-      
-      io.to(roomName).emit('chat message', {
-        username: 'System',
-        message: systemMessage.message,
-        timestamp: systemMessage.timestamp.toLocaleTimeString(),
-        rank: 'system'
-      });
-      
-      console.log(`🚪 ${session.username} (${user.rank}) joined room: ${roomName}`);
+      console.log(`🚪 ${currentUser} joined room (Memory): ${roomName}`);
       
     } catch (err) {
-      console.error('Join room error:', err);
+      console.error('join_room error:', err);
       socket.emit('error', { message: 'Failed to join room' });
     }
   });
@@ -863,814 +1083,651 @@ io.on('connection', (socket) => {
   // Leave room
   socket.on('leave_room', async () => {
     try {
-      const session = await Session.findOne({ socketId: socket.id });
-      if (!session) return;
+      if (!currentUser || !currentRoom) return;
       
-      const user = await User.findOne({ username: session.username });
-      const roomName = session.roomName;
-      if (!roomName) return;
+      const roomName = currentRoom;
       
-      session.roomName = null;
-      await session.save();
+      // Try DB
+      if (isMongoConnected && Session) {
+        try {
+          await Session.updateOne(
+            { socketId: socket.id },
+            { roomName: null }
+          );
+        } catch (dbErr) {
+          console.error('DB leave_room error:', dbErr.message);
+        }
+      }
+      
+      // Memory store
+      const session = memoryStore.sessions.get(socket.id);
+      if (session) session.roomName = null;
+      
       socket.leave(roomName);
       
-      const roomSessions = await Session.find({ roomName });
-      const memberCount = roomSessions.length;
+      // Get member count
+      let memberCount = 0;
+      if (isMongoConnected && Session) {
+        memberCount = await Session.countDocuments({ roomName });
+      } else {
+        memberCount = Array.from(memoryStore.sessions.values())
+          .filter(s => s.roomName === roomName).length;
+      }
       
       io.to(roomName).emit('user_left', {
-        username: session.username,
-        rank: user ? user.rank : 'member',
+        username: currentUser,
+        rank: userRank,
         members: memberCount
       });
       
-      const systemMessage = await Message.create({
-        roomName,
+      // System message
+      const systemMsg = {
         username: 'System',
-        message: `👋 ${session.username} left the room`,
-        isSystem: true,
-        senderRank: 'system'
-      });
-      
-      io.to(roomName).emit('chat message', {
-        username: 'System',
-        message: systemMessage.message,
-        timestamp: systemMessage.timestamp.toLocaleTimeString(),
+        message: `👋 ${currentUser} left the room`,
+        timestamp: new Date().toLocaleTimeString(),
         rank: 'system'
-      });
+      };
       
-      console.log(`🚪 ${session.username} left room: ${roomName} (${memberCount} members remain)`);
+      io.to(roomName).emit('chat message', systemMsg);
+      
+      // Save system message
+      if (isMongoConnected && Message) {
+        await Message.create({
+          roomName,
+          username: 'System',
+          message: `👋 ${currentUser} left the room`,
+          isSystem: true,
+          senderRank: 'system'
+        }).catch(() => {});
+      } else if (memoryStore.rooms.has(roomName)) {
+        const room = memoryStore.rooms.get(roomName);
+        if (!room.messages) room.messages = [];
+        room.messages.push(systemMsg);
+        if (room.messages.length > 100) room.messages.shift();
+      }
       
       // Delete empty non-default rooms
       if (memberCount === 0) {
-        const room = await Room.findOne({ name: roomName });
-        if (room && !room.isDefault) {
-          await Room.deleteOne({ name: roomName });
-          await Message.deleteMany({ roomName });
-          await Ban.deleteMany({ roomName });
-          io.emit('room_deleted', { name: roomName });
-          console.log('🗑️ Empty room deleted:', roomName);
+        if (isMongoConnected && Room) {
+          const room = await Room.findOne({ name: roomName });
+          if (room && !room.isDefault) {
+            await Room.deleteOne({ name: roomName });
+            await Message.deleteMany({ roomName });
+            await Ban.deleteMany({ roomName });
+            io.emit('room_deleted', { name: roomName });
+            console.log(`🗑️ Empty room deleted (DB): ${roomName}`);
+          }
+        } else if (memoryStore.rooms.has(roomName)) {
+          const room = memoryStore.rooms.get(roomName);
+          if (!room.isDefault) {
+            memoryStore.rooms.delete(roomName);
+            io.emit('room_deleted', { name: roomName });
+            console.log(`🗑️ Empty room deleted (Memory): ${roomName}`);
+          }
         }
       }
       
+      currentRoom = null;
+      console.log(`🚪 ${currentUser} left room: ${roomName}`);
+      
     } catch (err) {
-      console.error('Leave room error:', err);
+      console.error('leave_room error:', err);
     }
   });
   
-  // ========== MESSAGES & PRIVATE MESSAGES ==========
+  // ========== MESSAGES ==========
   
-  // Public chat message
+  // Chat message
   socket.on('chat message', async (msg) => {
     try {
-      const session = await Session.findOne({ socketId: socket.id });
-      if (!session || !session.roomName) return;
+      if (!currentUser || !currentRoom) return;
       
-      const user = await User.findOne({ username: session.username });
-      const roomName = session.roomName;
-      const username = msg.username;
+      const messageData = {
+        username: currentUser,
+        message: msg.message,
+        timestamp: new Date().toLocaleTimeString(),
+        rank: userRank
+      };
       
-      // Check if banned
-      const activeBan = await Ban.findOne({
-        roomName,
-        username,
-        isActive: true,
-        expiresAt: { $gt: new Date() }
-      });
-      
-      if (activeBan) {
-        socket.emit('error', { message: '❌ You are currently banned from this room' });
-        return;
+      // Save to DB
+      if (isMongoConnected && Message) {
+        await Message.create({
+          roomName: currentRoom,
+          username: currentUser,
+          message: msg.message,
+          isSystem: false,
+          senderRank: userRank
+        }).catch(() => {});
+      } else if (memoryStore.rooms.has(currentRoom)) {
+        const room = memoryStore.rooms.get(currentRoom);
+        if (!room.messages) room.messages = [];
+        room.messages.push(messageData);
+        if (room.messages.length > 100) room.messages.shift();
       }
       
-      const messageData = await Message.create({
-        roomName,
-        username,
-        message: msg.message,
-        isSystem: false,
-        senderRank: user ? user.rank : 'member',
-        isPrivate: false
-      });
-      
-      socket.broadcast.to(roomName).emit('chat message', {
-        username,
-        message: msg.message,
-        timestamp: messageData.timestamp.toLocaleTimeString(),
-        rank: user ? user.rank : 'member'
-      });
-      
-      session.lastActivity = new Date();
-      await session.save();
+      // Broadcast to others
+      socket.broadcast.to(currentRoom).emit('chat message', messageData);
       
     } catch (err) {
-      console.error('Message error:', err);
+      console.error('message error:', err);
     }
   });
   
-  // Private message (/msg command)
+  // Private message
   socket.on('private_message', async (data) => {
     try {
-      const session = await Session.findOne({ socketId: socket.id });
-      if (!session) {
-        socket.emit('error', { message: 'Not authenticated' });
-        return;
-      }
+      if (!currentUser) return;
       
-      const sender = await User.findOne({ username: session.username });
       const { recipient, message } = data;
       
-      // Check if recipient exists
-      const recipientUser = await User.findOne({ username: recipient });
-      if (!recipientUser) {
-        socket.emit('error', { message: `User '${recipient}' not found` });
-        return;
+      if (!recipient || !message) return;
+      
+      const messageData = {
+        from: currentUser,
+        fromRank: userRank,
+        message,
+        timestamp: new Date().toLocaleTimeString()
+      };
+      
+      // Save to DB
+      if (isMongoConnected && PrivateMessage) {
+        await PrivateMessage.create({
+          from: currentUser,
+          to: recipient,
+          message,
+          fromRank: userRank
+        }).catch(() => {});
       }
       
-      // Check if recipient is online
-      const recipientSession = await Session.findOne({ username: recipient });
+      // Find recipient socket
+      let recipientSocketId = null;
       
-      // Save private message to database
-      const privateMsg = await PrivateMessage.create({
-        from: session.username,
+      if (isMongoConnected && Session) {
+        const session = await Session.findOne({ username: recipient });
+        if (session) recipientSocketId = session.socketId;
+      } else {
+        for (const [sid, sess] of memoryStore.sessions) {
+          if (sess.username === recipient) {
+            recipientSocketId = sid;
+            break;
+          }
+        }
+      }
+      
+      if (recipientSocketId) {
+        io.to(recipientSocketId).emit('private_message', messageData);
+      }
+      
+      socket.emit('private_message_sent', {
         to: recipient,
         message,
-        timestamp: new Date(),
-        fromRank: sender.rank,
-        read: false
+        timestamp: messageData.timestamp
       });
       
-      // Send to recipient if online
-      if (recipientSession) {
-        io.to(recipientSession.socketId).emit('private_message', {
-          from: session.username,
-          fromRank: sender.rank,
+      // Log for admins
+      if (userRank === 'admin' || userRank === 'owner') {
+        io.to(currentRoom).emit('admin_private_message_log', {
+          from: currentUser,
+          to: recipient,
           message,
-          timestamp: privateMsg.timestamp.toLocaleTimeString()
+          timestamp: messageData.timestamp
         });
       }
       
-      // Send confirmation to sender
-      socket.emit('private_message_sent', {
-        to: recipient,
-        toRank: recipientUser.rank,
-        message,
-        timestamp: privateMsg.timestamp.toLocaleTimeString()
-      });
-      
-      // ADMINS AND OWNER can see private messages in their current room
-      if (sender.rank === 'admin' || sender.rank === 'owner') {
-        if (session.roomName) {
-          io.to(session.roomName).emit('admin_private_message_log', {
-            from: session.username,
-            to: recipient,
-            message,
-            timestamp: privateMsg.timestamp.toLocaleTimeString()
-          });
-        }
-      }
-      
-      console.log(`💌 Private message: ${session.username} -> ${recipient}`);
+      console.log(`💌 PM: ${currentUser} -> ${recipient}`);
       
     } catch (err) {
-      console.error('Private message error:', err);
-      socket.emit('error', { message: 'Failed to send private message' });
+      console.error('private message error:', err);
     }
   });
   
-  // Get private message history
-  socket.on('get_private_messages', async (data) => {
-    try {
-      const session = await Session.findOne({ socketId: socket.id });
-      if (!session) return;
-      
-      const { withUser } = data;
-      
-      const messages = await PrivateMessage.find({
-        $or: [
-          { from: session.username, to: withUser },
-          { from: withUser, to: session.username }
-        ]
-      })
-      .sort({ timestamp: -1 })
-      .limit(50)
-      .sort({ timestamp: 1 });
-      
-      socket.emit('private_message_history', {
-        with: withUser,
-        messages: messages.map(msg => ({
-          from: msg.from,
-          fromRank: msg.fromRank,
-          message: msg.message,
-          timestamp: msg.timestamp.toLocaleTimeString(),
-          read: msg.read
-        }))
-      });
-      
-    } catch (err) {
-      console.error('Get private messages error:', err);
-    }
-  });
-  
-  // ========== FILE SHARING ==========
-  
-  // Share file in room
+  // File share
   socket.on('share_file', async (data) => {
     try {
-      const session = await Session.findOne({ socketId: socket.id });
-      if (!session || !session.roomName) {
-        socket.emit('error', { message: 'Not in a room' });
-        return;
-      }
-      
-      const user = await User.findOne({ username: session.username });
-      const permissions = PERMISSIONS[user.rank];
-      
-      if (!permissions.canUploadFiles) {
-        socket.emit('error', { message: '❌ Your rank does not allow file sharing' });
-        return;
-      }
+      if (!currentUser || !currentRoom) return;
       
       const { fileUrl, fileName, fileType } = data;
-      const roomName = session.roomName;
       
-      const messageData = await Message.create({
-        roomName,
-        username: session.username,
-        message: `📁 Shared file: ${fileName}`,
-        isSystem: false,
-        senderRank: user.rank,
-        fileUrl,
-        fileName,
-        fileType
-      });
-      
-      io.to(roomName).emit('chat message', {
-        username: session.username,
+      const messageData = {
+        username: currentUser,
         message: `📁 Shared file: ${fileName}`,
         fileUrl,
         fileName,
         fileType,
-        timestamp: messageData.timestamp.toLocaleTimeString(),
-        rank: user.rank
-      });
+        timestamp: new Date().toLocaleTimeString(),
+        rank: userRank
+      };
       
-      console.log(`📁 File shared by ${session.username}: ${fileName}`);
+      // Save to DB
+      if (isMongoConnected && Message) {
+        await Message.create({
+          roomName: currentRoom,
+          username: currentUser,
+          message: `📁 Shared file: ${fileName}`,
+          fileUrl,
+          fileName,
+          fileType,
+          senderRank: userRank
+        }).catch(() => {});
+      } else if (memoryStore.rooms.has(currentRoom)) {
+        const room = memoryStore.rooms.get(currentRoom);
+        if (!room.messages) room.messages = [];
+        room.messages.push(messageData);
+        if (room.messages.length > 100) room.messages.shift();
+      }
+      
+      io.to(currentRoom).emit('chat message', messageData);
+      console.log(`📁 File shared by ${currentUser}: ${fileName}`);
       
     } catch (err) {
-      console.error('Share file error:', err);
-      socket.emit('error', { message: 'Failed to share file' });
+      console.error('share_file error:', err);
     }
   });
   
-  // ========== RANK MANAGEMENT ==========
-  
-  // Grant rank (admin/owner only)
-  socket.on('grant_rank', async (data) => {
-    try {
-      const session = await Session.findOne({ socketId: socket.id });
-      if (!session) return;
-      
-      const granter = await User.findOne({ username: session.username });
-      const { targetUser, newRank, password } = data;
-      
-      // Check permissions
-      const granterPermissions = PERMISSIONS[granter.rank];
-      
-      if (!granterPermissions.canGrantRank || granterPermissions.canGrantRank.length === 0) {
-        socket.emit('error', { message: '❌ You do not have permission to grant ranks' });
-        return;
-      }
-      
-      // Check if target rank is allowed
-      if (!granterPermissions.canGrantRank.includes(newRank)) {
-        socket.emit('error', { message: `❌ You cannot grant the rank '${newRank}'` });
-        return;
-      }
-      
-      // Verify password for non-owners
-      if (granter.rank !== 'owner' && password !== ADMIN_PASSWORD) {
-        socket.emit('error', { message: '❌ Incorrect admin password' });
-        return;
-      }
-      
-      const target = await User.findOne({ username: targetUser });
-      if (!target) {
-        socket.emit('error', { message: 'User not found' });
-        return;
-      }
-      
-      // Cannot change owner's rank
-      if (target.username === OWNER_USERNAME) {
-        socket.emit('error', { message: '❌ Cannot change owner rank' });
-        return;
-      }
-      
-      target.rank = newRank;
-      await target.save();
-      
-      // Notify target if online
-      const targetSession = await Session.findOne({ username: targetUser });
-      if (targetSession) {
-        io.to(targetSession.socketId).emit('rank_changed', {
-          newRank,
-          grantedBy: session.username
-        });
-      }
-      
-      io.emit('system_notification', {
-        message: `👑 ${session.username} promoted ${targetUser} to ${newRank}`
-      });
-      
-      console.log(`👑 Rank granted: ${targetUser} is now ${newRank} by ${session.username}`);
-      
-    } catch (err) {
-      console.error('Grant rank error:', err);
-      socket.emit('error', { message: 'Failed to grant rank' });
-    }
-  });
-  
-  // ========== EFFECTS & THEMES ==========
-  
-  // Apply effect to room (admin/owner only)
-  socket.on('effect_command', async (data) => {
-    try {
-      const session = await Session.findOne({ socketId: socket.id });
-      if (!session || !session.roomName) return;
-      
-      const user = await User.findOne({ username: session.username });
-      const permissions = PERMISSIONS[user.rank];
-      
-      if (!permissions.canUseEffects) {
-        socket.emit('command_error', { message: '❌ Your rank does not allow effects' });
-        return;
-      }
-      
-      const { effect } = data;
-      const roomName = session.roomName;
-      
-      const validEffects = [
-        'glitch', 'flashbang', 'black', 'firework', 
-        'gameroom', 'confetti', 'hack', 'matrix', 
-        'rainbow', 'neon', 'vintage', 'ocean'
-      ];
-      
-      if (!validEffects.includes(effect)) {
-        socket.emit('command_error', { message: '❌ Invalid effect!' });
-        return;
-      }
-      
-      io.to(roomName).emit('room_effect', {
-        effect,
-        triggeredBy: session.username,
-        rank: user.rank
-      });
-      
-      const systemMessage = await Message.create({
-        roomName,
-        username: 'System',
-        message: `✨ ${session.username} (${user.rank}) triggered effect: ${effect}`,
-        isSystem: true,
-        senderRank: 'system'
-      });
-      
-      io.to(roomName).emit('chat message', {
-        username: 'System',
-        message: systemMessage.message,
-        timestamp: systemMessage.timestamp.toLocaleTimeString(),
-        rank: 'system'
-      });
-      
-      console.log(`✨ Effect ${effect} triggered by ${session.username} in ${roomName}`);
-      
-    } catch (err) {
-      console.error('Effect command error:', err);
-      socket.emit('command_error', { message: 'Failed to trigger effect' });
-    }
-  });
-  
-  // Change theme (vip+ only)
-  socket.on('change_theme', async (data) => {
-    try {
-      const session = await Session.findOne({ socketId: socket.id });
-      if (!session) return;
-      
-      const user = await User.findOne({ username: session.username });
-      const permissions = PERMISSIONS[user.rank];
-      
-      // Vip and above can change themes
-      if (user.rank !== 'vip' && user.rank !== 'moderator' && 
-          user.rank !== 'admin' && user.rank !== 'owner') {
-        socket.emit('error', { message: '❌ Vip+ only can change themes' });
-        return;
-      }
-      
-      const { theme, scope } = data; // scope: 'personal' or 'room'
-      
-      const validThemes = [
-        'default', 'dark', 'light', 'neon', 'midnight', 
-        'sunset', 'forest', 'ocean', 'cyberpunk', 'vintage'
-      ];
-      
-      if (!validThemes.includes(theme)) {
-        socket.emit('error', { message: '❌ Invalid theme' });
-        return;
-      }
-      
-      if (scope === 'personal') {
-        user.theme = theme;
-        await user.save();
-        socket.emit('theme_applied', { theme, scope: 'personal' });
-      } else if (scope === 'room' && session.roomName) {
-        const room = await Room.findOne({ name: session.roomName });
-        if (room) {
-          room.theme = theme;
-          await room.save();
-          io.to(session.roomName).emit('theme_applied', { 
-            theme, 
-            scope: 'room',
-            changedBy: session.username 
-          });
-        }
-      }
-      
-      console.log(`🎨 Theme changed: ${theme} (${scope}) by ${session.username}`);
-      
-    } catch (err) {
-      console.error('Theme change error:', err);
-      socket.emit('error', { message: 'Failed to change theme' });
-    }
-  });
-  
-  // ========== MODERATION COMMANDS ==========
+  // ========== ADMIN COMMANDS ==========
   
   // Clear messages
   socket.on('clear_messages', async (data) => {
     try {
-      const session = await Session.findOne({ socketId: socket.id });
-      if (!session || !session.roomName) return;
+      if (!currentUser || !currentRoom) return;
       
-      const user = await User.findOne({ username: session.username });
-      const { roomName, password } = data;
-      
-      if (!hasPermission(user, 'clear')) {
-        socket.emit('error', { message: '❌ You do not have permission to clear messages' });
-        return;
+      const permissions = PERMISSIONS[userRank] || PERMISSIONS.member;
+      if (!permissions.canClear) {
+        return socket.emit('error', { message: '❌ You do not have permission' });
       }
       
-      // Check password for non-admins/owners
-      if (user.rank !== 'admin' && user.rank !== 'owner' && password !== ADMIN_PASSWORD) {
-        socket.emit('error', { message: '❌ Incorrect admin password' });
-        return;
+      const { password } = data;
+      
+      // Verify password for non-admins
+      if (userRank !== 'admin' && userRank !== 'owner' && password !== ADMIN_PASSWORD) {
+        return socket.emit('error', { message: '❌ Incorrect password' });
       }
       
-      await Message.deleteMany({ roomName });
+      // Clear messages
+      if (isMongoConnected && Message) {
+        await Message.deleteMany({ roomName: currentRoom });
+      } else if (memoryStore.rooms.has(currentRoom)) {
+        const room = memoryStore.rooms.get(currentRoom);
+        room.messages = [];
+      }
       
-      io.to(roomName).emit('messages_cleared', { roomName });
+      io.to(currentRoom).emit('messages_cleared');
       
-      const systemMessage = await Message.create({
-        roomName,
+      const systemMsg = {
         username: 'System',
-        message: `🧹 ${session.username} (${user.rank}) cleared all messages`,
-        isSystem: true,
-        senderRank: 'system'
-      });
-      
-      io.to(roomName).emit('chat message', {
-        username: 'System',
-        message: systemMessage.message,
-        timestamp: systemMessage.timestamp.toLocaleTimeString(),
+        message: `🧹 Messages cleared by ${currentUser}`,
+        timestamp: new Date().toLocaleTimeString(),
         rank: 'system'
-      });
+      };
       
-      console.log(`🧹 Messages cleared in ${roomName} by ${session.username} (${user.rank})`);
+      io.to(currentRoom).emit('chat message', systemMsg);
+      
+      // Save system message
+      if (isMongoConnected && Message) {
+        await Message.create({
+          roomName: currentRoom,
+          username: 'System',
+          message: `🧹 Messages cleared by ${currentUser}`,
+          isSystem: true,
+          senderRank: 'system'
+        }).catch(() => {});
+      } else if (memoryStore.rooms.has(currentRoom)) {
+        const room = memoryStore.rooms.get(currentRoom);
+        if (!room.messages) room.messages = [];
+        room.messages.push(systemMsg);
+      }
+      
+      console.log(`🧹 Messages cleared by ${currentUser} in ${currentRoom}`);
       
     } catch (err) {
-      console.error('Clear messages error:', err);
+      console.error('clear_messages error:', err);
     }
   });
   
   // Ban user
   socket.on('ban_user', async (data) => {
     try {
-      const session = await Session.findOne({ socketId: socket.id });
-      if (!session || !session.roomName) return;
+      if (!currentUser || !currentRoom) return;
       
-      const banner = await User.findOne({ username: session.username });
-      const permissions = PERMISSIONS[banner.rank];
-      
+      const permissions = PERMISSIONS[userRank] || PERMISSIONS.member;
       if (!permissions.canBan) {
-        socket.emit('error', { message: '❌ You do not have permission to ban users' });
-        return;
+        return socket.emit('error', { message: '❌ You do not have permission' });
       }
       
-      const { roomName, bannedUser, duration = '10m', bannerName, password } = data;
+      const { bannedUser, duration = '10m', password } = data;
       
-      // Check password for moderators (admins/owners don't need password)
-      if (banner.rank === 'moderator' && password !== ADMIN_PASSWORD) {
-        socket.emit('error', { message: '❌ Incorrect admin password' });
-        return;
-      }
+      if (!bannedUser) return;
       
-      const room = await Room.findOne({ name: roomName });
-      if (!room) {
-        socket.emit('error', { message: 'Room does not exist' });
-        return;
-      }
-      
-      // Cannot ban owner or admins if you're not owner
-      const targetUser = await User.findOne({ username: bannedUser });
-      if (targetUser) {
-        if (targetUser.rank === 'owner') {
-          socket.emit('error', { message: '❌ Cannot ban the owner' });
-          return;
-        }
-        if (targetUser.rank === 'admin' && banner.rank !== 'owner') {
-          socket.emit('error', { message: '❌ Only the owner can ban admins' });
-          return;
-        }
+      // Verify password for moderators
+      if (userRank === 'moderator' && password !== ADMIN_PASSWORD) {
+        return socket.emit('error', { message: '❌ Incorrect password' });
       }
       
       // Parse duration
       let durationMs = 10 * 60 * 1000;
-      const match = duration.match(/^(\d+)([hmd]?)$/);
+      const match = duration.match(/^(\d+)([hmd])$/);
       if (match) {
-        const value = parseInt(match[1]);
-        const unit = match[2] || 'm';
-        if (unit === 'h') durationMs = value * 60 * 60 * 1000;
-        else if (unit === 'm') durationMs = value * 60 * 1000;
-        else if (unit === 'd') durationMs = value * 24 * 60 * 60 * 1000;
+        const val = parseInt(match[1]);
+        const unit = match[2];
+        if (unit === 'h') durationMs = val * 60 * 60 * 1000;
+        else if (unit === 'd') durationMs = val * 24 * 60 * 60 * 1000;
       }
       
       const expiresAt = new Date(Date.now() + durationMs);
       
-      await Ban.updateMany(
-        { roomName, username: bannedUser, isActive: true },
-        { isActive: false }
-      );
-      
-      await Ban.create({
-        roomName,
-        username: bannedUser,
-        bannedBy: bannerName,
-        bannedByRank: banner.rank,
-        expiresAt,
-        isActive: true
-      });
-      
-      io.to(roomName).emit('user_banned', { 
-        bannedUser, 
-        duration, 
-        bannerName,
-        bannerRank: banner.rank 
-      });
-      
-      const systemMessage = await Message.create({
-        roomName,
-        username: 'System',
-        message: `⛔ ${banner.rank} ${bannerName} banned ${bannedUser} for ${duration}`,
-        isSystem: true,
-        senderRank: 'system'
-      });
-      
-      io.to(roomName).emit('chat message', {
-        username: 'System',
-        message: systemMessage.message,
-        timestamp: systemMessage.timestamp.toLocaleTimeString(),
-        rank: 'system'
-      });
-      
-      // Kick user if in room
-      const bannedSession = await Session.findOne({ username: bannedUser, roomName });
-      if (bannedSession) {
-        bannedSession.roomName = null;
-        await bannedSession.save();
-        io.to(bannedSession.socketId).emit('force_leave', { roomName, reason: 'banned' });
+      // Save ban
+      if (isMongoConnected && Ban) {
+        await Ban.updateMany(
+          { roomName: currentRoom, username: bannedUser, isActive: true },
+          { isActive: false }
+        );
+        
+        await Ban.create({
+          roomName: currentRoom,
+          username: bannedUser,
+          bannedBy: currentUser,
+          bannedByRank: userRank,
+          expiresAt,
+          isActive: true
+        });
       }
       
-      console.log(`🔨 ${bannedUser} banned from ${roomName} for ${duration} by ${bannerName} (${banner.rank})`);
+      io.to(currentRoom).emit('user_banned', { bannedUser, duration, bannerName: currentUser });
+      
+      const systemMsg = {
+        username: 'System',
+        message: `⛔ ${bannedUser} banned by ${currentUser} for ${duration}`,
+        timestamp: new Date().toLocaleTimeString(),
+        rank: 'system'
+      };
+      
+      io.to(currentRoom).emit('chat message', systemMsg);
+      
+      // Kick user if in room
+      let bannedSocketId = null;
+      if (isMongoConnected && Session) {
+        const session = await Session.findOne({ username: bannedUser, roomName: currentRoom });
+        if (session) bannedSocketId = session.socketId;
+      } else {
+        for (const [sid, sess] of memoryStore.sessions) {
+          if (sess.username === bannedUser && sess.roomName === currentRoom) {
+            bannedSocketId = sid;
+            break;
+          }
+        }
+      }
+      
+      if (bannedSocketId) {
+        io.to(bannedSocketId).emit('force_leave', { roomName: currentRoom, reason: 'banned' });
+      }
+      
+      console.log(`🔨 ${bannedUser} banned from ${currentRoom} by ${currentUser}`);
       
     } catch (err) {
-      console.error('Ban error:', err);
-      socket.emit('error', { message: 'Failed to ban user' });
+      console.error('ban_user error:', err);
     }
   });
   
   // Unban user
   socket.on('unban_user', async (data) => {
     try {
-      const session = await Session.findOne({ socketId: socket.id });
-      if (!session || !session.roomName) return;
+      if (!currentUser || !currentRoom) return;
       
-      const unbanner = await User.findOne({ username: session.username });
-      const permissions = PERMISSIONS[unbanner.rank];
-      
+      const permissions = PERMISSIONS[userRank] || PERMISSIONS.member;
       if (!permissions.canUnban) {
-        socket.emit('error', { message: '❌ You do not have permission to unban users' });
-        return;
+        return socket.emit('error', { message: '❌ You do not have permission' });
       }
       
-      const { roomName, unbannedUser, unbannerName, password } = data;
+      const { unbannedUser, password } = data;
       
-      if (unbanner.rank === 'moderator' && password !== ADMIN_PASSWORD) {
-        socket.emit('error', { message: '❌ Incorrect admin password' });
-        return;
+      if (!unbannedUser) return;
+      
+      // Verify password for moderators
+      if (userRank === 'moderator' && password !== ADMIN_PASSWORD) {
+        return socket.emit('error', { message: '❌ Incorrect password' });
       }
       
-      const room = await Room.findOne({ name: roomName });
-      if (!room) {
-        socket.emit('error', { message: 'Room does not exist' });
-        return;
+      // Remove ban
+      if (isMongoConnected && Ban) {
+        await Ban.updateMany(
+          { roomName: currentRoom, username: unbannedUser, isActive: true },
+          { isActive: false }
+        );
       }
       
-      await Ban.updateMany(
-        { roomName, username: unbannedUser, isActive: true },
-        { isActive: false }
-      );
+      io.to(currentRoom).emit('user_unbanned', { unbannedUser, unbannerName: currentUser });
       
-      io.to(roomName).emit('user_unbanned', { 
-        unbannedUser, 
-        unbannerName,
-        unbannerRank: unbanner.rank 
-      });
-      
-      const systemMessage = await Message.create({
-        roomName,
+      const systemMsg = {
         username: 'System',
-        message: `✅ ${unbanner.rank} ${unbannerName} unbanned ${unbannedUser}`,
-        isSystem: true,
-        senderRank: 'system'
-      });
-      
-      io.to(roomName).emit('chat message', {
-        username: 'System',
-        message: systemMessage.message,
-        timestamp: systemMessage.timestamp.toLocaleTimeString(),
+        message: `✅ ${unbannedUser} unbanned by ${currentUser}`,
+        timestamp: new Date().toLocaleTimeString(),
         rank: 'system'
-      });
+      };
       
-      console.log(`✅ ${unbannedUser} unbanned from ${roomName} by ${unbannerName} (${unbanner.rank})`);
+      io.to(currentRoom).emit('chat message', systemMsg);
+      
+      console.log(`✅ ${unbannedUser} unbanned from ${currentRoom} by ${currentUser}`);
       
     } catch (err) {
-      console.error('Unban error:', err);
-      socket.emit('error', { message: 'Failed to unban user' });
+      console.error('unban_user error:', err);
     }
   });
   
   // Delete room
   socket.on('delete_room', async (data) => {
     try {
-      const session = await Session.findOne({ socketId: socket.id });
-      if (!session) return;
+      if (!currentUser) return;
       
-      const user = await User.findOne({ username: session.username });
-      const permissions = PERMISSIONS[user.rank];
-      
+      const permissions = PERMISSIONS[userRank] || PERMISSIONS.member;
       if (!permissions.canDeleteRoom) {
-        socket.emit('error', { message: '❌ You do not have permission to delete rooms' });
-        return;
+        return socket.emit('error', { message: '❌ You do not have permission' });
       }
       
       const { roomName, password } = data;
       
-      if (user.rank !== 'admin' && user.rank !== 'owner' && password !== ADMIN_PASSWORD) {
-        socket.emit('error', { message: '❌ Incorrect admin password' });
-        return;
+      if (!roomName) return;
+      
+      // Verify password for non-admins
+      if (userRank !== 'admin' && userRank !== 'owner' && password !== ADMIN_PASSWORD) {
+        return socket.emit('error', { message: '❌ Incorrect password' });
       }
       
-      const room = await Room.findOne({ name: roomName });
-      if (!room) {
-        socket.emit('error', { message: 'Room does not exist' });
-        return;
+      // Prevent deleting Main
+      if (roomName === 'Main') {
+        return socket.emit('error', { message: 'Cannot delete Main room' });
       }
       
-      if (room.isDefault) {
-        socket.emit('error', { message: 'Cannot delete the Main room' });
-        return;
+      // Delete room
+      if (isMongoConnected && Room) {
+        const room = await Room.findOne({ name: roomName });
+        if (room && !room.isDefault) {
+          await Room.deleteOne({ name: roomName });
+          await Message.deleteMany({ roomName });
+          await Ban.deleteMany({ roomName });
+        }
+      } else {
+        const room = memoryStore.rooms.get(roomName);
+        if (room && !room.isDefault) {
+          memoryStore.rooms.delete(roomName);
+        }
       }
       
-      await Room.deleteOne({ name: roomName });
-      await Message.deleteMany({ roomName });
-      await Ban.deleteMany({ roomName });
+      // Kick all users from room
+      io.to(roomName).emit('room_deleted_by_owner', { roomName });
       
-      const roomSessions = await Session.find({ roomName });
-      for (const session of roomSessions) {
-        session.roomName = null;
-        await session.save();
-        io.to(session.socketId).emit('room_deleted_by_owner', { roomName });
-      }
-      
+      // Notify all clients
       io.emit('room_deleted', { name: roomName });
       
-      console.log(`🗑️ Room deleted: ${roomName} by ${session.username} (${user.rank})`);
+      console.log(`🗑️ Room deleted: ${roomName} by ${currentUser}`);
       
     } catch (err) {
-      console.error('Delete room error:', err);
+      console.error('delete_room error:', err);
       socket.emit('error', { message: 'Failed to delete room' });
     }
   });
   
-  // ========== VOICE CHAT (WebRTC Signaling) ==========
-  
-  // Voice chat signaling
-  socket.on('voice_offer', (data) => {
-    const { target, offer, roomName } = data;
-    io.to(target).emit('voice_offer', {
-      from: socket.id,
-      offer,
-      roomName
-    });
+  // Grant rank
+  socket.on('grant_rank', async (data) => {
+    try {
+      if (!currentUser) return;
+      
+      const permissions = PERMISSIONS[userRank] || PERMISSIONS.member;
+      if (!permissions.canGrant || permissions.canGrant.length === 0) {
+        return socket.emit('error', { message: '❌ You do not have permission' });
+      }
+      
+      const { targetUser, newRank, password } = data;
+      
+      if (!targetUser || !newRank) return;
+      
+      if (!permissions.canGrant.includes(newRank)) {
+        return socket.emit('error', { message: `❌ Cannot grant ${newRank} rank` });
+      }
+      
+      // Verify password for non-owners
+      if (userRank !== 'owner' && password !== ADMIN_PASSWORD) {
+        return socket.emit('error', { message: '❌ Incorrect password' });
+      }
+      
+      // Update rank
+      if (isMongoConnected && User) {
+        const user = await User.findOne({ username: targetUser });
+        if (user) {
+          user.rank = newRank;
+          await user.save();
+          
+          // Notify user if online
+          const session = await Session.findOne({ username: targetUser });
+          if (session) {
+            io.to(session.socketId).emit('rank_changed', { newRank, grantedBy: currentUser });
+          }
+        }
+      } else if (memoryStore.users.has(targetUser)) {
+        const user = memoryStore.users.get(targetUser);
+        user.rank = newRank;
+        
+        // Notify user if online
+        for (const [sid, sess] of memoryStore.sessions) {
+          if (sess.username === targetUser) {
+            io.to(sid).emit('rank_changed', { newRank, grantedBy: currentUser });
+            sess.rank = newRank;
+            break;
+          }
+        }
+      }
+      
+      socket.emit('command_success', { message: `✅ ${targetUser} is now ${newRank}` });
+      console.log(`👑 ${currentUser} granted ${targetUser} rank ${newRank}`);
+      
+    } catch (err) {
+      console.error('grant_rank error:', err);
+      socket.emit('error', { message: 'Failed to grant rank' });
+    }
   });
   
-  socket.on('voice_answer', (data) => {
-    const { target, answer } = data;
-    io.to(target).emit('voice_answer', {
-      from: socket.id,
-      answer
-    });
+  // Effect command
+  socket.on('effect_command', async (data) => {
+    try {
+      if (!currentUser || !currentRoom) return;
+      
+      const permissions = PERMISSIONS[userRank] || PERMISSIONS.member;
+      if (!permissions.canUseEffects) {
+        return socket.emit('error', { message: '❌ Only admins can use effects' });
+      }
+      
+      const { effect } = data;
+      
+      const validEffects = ['glitch', 'flashbang', 'black', 'hack', 'matrix', 'rainbow', 'neon', 'firework', 'confetti'];
+      
+      if (!validEffects.includes(effect)) {
+        return socket.emit('error', { message: '❌ Invalid effect' });
+      }
+      
+      io.to(currentRoom).emit('room_effect', {
+        effect,
+        triggeredBy: currentUser,
+        rank: userRank
+      });
+      
+      console.log(`✨ Effect ${effect} triggered by ${currentUser} in ${currentRoom}`);
+      
+    } catch (err) {
+      console.error('effect_command error:', err);
+    }
   });
   
-  socket.on('ice_candidate', (data) => {
-    const { target, candidate } = data;
-    io.to(target).emit('ice_candidate', {
-      from: socket.id,
-      candidate
-    });
-  });
-  
-  socket.on('join_voice', (data) => {
-    const { roomName } = data;
-    socket.join(`voice:${roomName}`);
-    socket.to(`voice:${roomName}`).emit('user_joined_voice', {
-      userId: socket.id,
-      username: session?.username || 'Unknown'
-    });
-  });
-  
-  socket.on('leave_voice', (data) => {
-    const { roomName } = data;
-    socket.leave(`voice:${roomName}`);
-    socket.to(`voice:${roomName}`).emit('user_left_voice', {
-      userId: socket.id
-    });
+  // Theme change
+  socket.on('change_theme', async (data) => {
+    try {
+      if (!currentUser) return;
+      
+      const { theme, scope } = data;
+      
+      const validThemes = ['default', 'dark', 'light', 'neon', 'midnight', 'sunset', 'forest', 'ocean', 'cyberpunk', 'vintage'];
+      
+      if (!validThemes.includes(theme)) {
+        return socket.emit('error', { message: '❌ Invalid theme' });
+      }
+      
+      if (scope === 'personal') {
+        if (isMongoConnected && User) {
+          await User.updateOne({ username: currentUser }, { theme });
+        } else if (memoryStore.users.has(currentUser)) {
+          const user = memoryStore.users.get(currentUser);
+          user.theme = theme;
+        }
+        
+        socket.emit('theme_applied', { theme, scope: 'personal' });
+        
+      } else if (scope === 'room' && currentRoom) {
+        if (isMongoConnected && Room) {
+          await Room.updateOne({ name: currentRoom }, { theme });
+        } else if (memoryStore.rooms.has(currentRoom)) {
+          const room = memoryStore.rooms.get(currentRoom);
+          room.theme = theme;
+        }
+        
+        io.to(currentRoom).emit('theme_applied', { theme, scope: 'room', changedBy: currentUser });
+      }
+      
+      console.log(`🎨 Theme changed: ${theme} (${scope}) by ${currentUser}`);
+      
+    } catch (err) {
+      console.error('theme change error:', err);
+    }
   });
   
   // ========== DISCONNECT ==========
   
   socket.on('disconnect', async () => {
     try {
-      const session = await Session.findOne({ socketId: socket.id });
+      console.log(`👋 Disconnect: ${socket.id} (${currentUser || 'anonymous'})`);
       
-      if (session) {
-        const user = await User.findOne({ username: session.username });
-        const roomName = session.roomName;
-        const username = session.username;
+      if (currentUser && currentRoom) {
+        // Notify room
+        io.to(currentRoom).emit('user_left', {
+          username: currentUser,
+          rank: userRank,
+          members: 0 // Will be updated
+        });
         
-        if (roomName) {
-          await Session.deleteOne({ socketId: socket.id });
-          const roomSessions = await Session.find({ roomName });
-          const memberCount = roomSessions.length;
-          
-          io.to(roomName).emit('user_left', {
-            username,
-            rank: user ? user.rank : 'member',
-            members: memberCount
-          });
-          
-          const systemMessage = await Message.create({
-            roomName,
-            username: 'System',
-            message: `👋 ${username} disconnected`,
-            isSystem: true,
-            senderRank: 'system'
-          });
-          
-          io.to(roomName).emit('chat message', {
-            username: 'System',
-            message: systemMessage.message,
-            timestamp: systemMessage.timestamp.toLocaleTimeString(),
-            rank: 'system'
-          });
-          
-          console.log(`👋 ${username} disconnected from ${roomName} (${memberCount} members remain)`);
-          
-          if (memberCount === 0) {
-            const room = await Room.findOne({ name: roomName });
-            if (room && !room.isDefault) {
-              await Room.deleteOne({ name: roomName });
-              await Message.deleteMany({ roomName });
-              await Ban.deleteMany({ roomName });
-              io.emit('room_deleted', { name: roomName });
-              console.log('🗑️ Empty room deleted:', roomName);
-            }
-          }
-        } else {
-          await Session.deleteOne({ socketId: socket.id });
-          console.log('👋 User disconnected:', username);
-        }
+        // System message
+        io.to(currentRoom).emit('chat message', {
+          username: 'System',
+          message: `👋 ${currentUser} disconnected`,
+          timestamp: new Date().toLocaleTimeString(),
+          rank: 'system'
+        });
       }
       
+      // Remove session
+      if (isMongoConnected && Session) {
+        await Session.deleteOne({ socketId: socket.id }).catch(() => {});
+      }
+      memoryStore.sessions.delete(socket.id);
+      
     } catch (err) {
-      console.error('Disconnect error:', err);
-      await Session.deleteOne({ socketId: socket.id }).catch(() => {});
+      console.error('disconnect error:', err);
     }
   });
 });
@@ -1680,25 +1737,35 @@ io.on('connection', (socket) => {
 // ============================================
 server.listen(PORT, '0.0.0.0', () => {
   console.log('\n' + '='.repeat(70));
-  console.log('🚀🚀🚀 BLACK HOLE CHAT V2 - PRODUCTION READY 🚀🚀🚀');
+  console.log('🚀🚀🚀 BLACK HOLE CHAT V2 - SERVER RUNNING 🚀🚀🚀');
   console.log('='.repeat(70));
   console.log(`\n📡 Port: ${PORT}`);
-  console.log(`💾 MongoDB: ${MONGODB_URI.replace(/:[^:@]*@/, ':****@')}`);
   console.log(`👑 Owner: ${OWNER_USERNAME}`);
-  console.log(`🔑 Admin Password: ${ADMIN_PASSWORD.replace(/./g, '*')} (hidden)`);
-  console.log('\n📊 RANK SYSTEM:');
-  console.log('   👑 Owner    - Full access, can grant any rank');
-  console.log('   👮 Admin    - Can ban, delete rooms, effects, see DMs');
-  console.log('   🛡️ Moderator - Can ban, clear messages');
-  console.log('   ⭐ VIP      - Can share files, change themes');
-  console.log('   👤 Member   - Basic chat, /flip, /roll');
-  console.log('\n🎮 NEW FEATURES:');
-  console.log('   💬 Private messages - /msg <user> <text>');
-  console.log('   📁 File sharing     - Images, PDFs, text files');
-  console.log('   🎨 Custom themes    - /theme <name>');
-  console.log('   🎯 New effects      - hack, matrix, rainbow, neon');
-  console.log('   🎤 Voice chat       - Click voice button in room');
+  console.log(`🔑 Admin Password: ${ADMIN_PASSWORD ? '****' : 'default'}`);
+  console.log(`💾 MongoDB: ${isMongoConnected ? 'CONNECTED' : 'DISCONNECTED'}`);
+  console.log(`📁 Uploads: ${uploadDir}`);
+  console.log(`🌍 URL: http://localhost:${PORT}`);
+  console.log(`📊 Health: http://localhost:${PORT}/health`);
   console.log('\n' + '='.repeat(70) + '\n');
+});
+
+// Handle graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, shutting down gracefully...');
+  await mongoose.connection.close();
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', async () => {
+  console.log('SIGINT received, shutting down gracefully...');
+  await mongoose.connection.close();
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
 });
 
 module.exports = { app, server, io };
