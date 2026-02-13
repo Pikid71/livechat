@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: black-hole-chat
+    name: black-hole-chat-v2
     runtime: node
     plan: free
     buildCommand: npm install
@@ -9,6 +9,6 @@ services:
       - key: NODE_ENV
         value: production
       - key: MONGODB_URI
-        sync: false
+        value: mongodb+srv://livechatdb:A%40sh1shmongodb@cluster0.j2qik61.mongodb.net/blackholechat?retryWrites=true&w=majority
       - key: ADMIN_PASSWORD
-        sync: false
+        value: A@sh1shlivechat

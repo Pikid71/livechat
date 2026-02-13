@@ -2,13 +2,7 @@ node_modules/
 .env
 .DS_Store
 *.log
-chat_data.json
-indexv1.html
-serverv1.js
-packagev1.json
-package-lockv1.json
-node_modules/
-.env
-.DS_Store
-*.log
 uploads/
+dist/
+build/
+*.pid
