@@ -1,14 +1,76 @@
+# Black Hole Chat V2 - Render Deployment Configuration
+# This file automatically configures your service on Render
+
 services:
+  # Main Web Service
   - type: web
     name: black-hole-chat-v2
     runtime: node
+    repo: https://github.com/Pikid71/livechat
+    branch: main
     plan: free
+    
+    # Build and start commands
     buildCommand: npm install
     startCommand: node server.js
+    
+    # Health check path
+    healthCheckPath: /health
+    
+    # Environment variables
     envVars:
+      # Node environment
       - key: NODE_ENV
         value: production
+      
+      # MongoDB Connection String (YOUR EXACT STRING)
       - key: MONGODB_URI
         value: mongodb+srv://livechatdb:A%40sh1shmongodb@cluster0.j2qik61.mongodb.net/blackholechat?retryWrites=true&w=majority
+        sync: false
+      
+      # Admin Password (used for owner account)
       - key: ADMIN_PASSWORD
         value: A@sh1shlivechat
+        sync: false
+      
+      # Server Port (Render will override this automatically)
+      - key: PORT
+        value: 10000
+      
+      # Enable WebRTC for voice chat
+      - key: ENABLE_WEBRTC
+        value: true
+      
+      # Maximum file upload size (50MB)
+      - key: MAX_FILE_SIZE
+        value: 52428800
+    
+    # Disk storage for uploaded files
+    disk:
+      name: uploads
+      mountPath: /opt/render/project/src/uploads
+      sizeGB: 1
+    
+    # Auto-deploy on git push
+    autoDeploy: true
+    
+    # Custom domains (optional - uncomment and add your domain)
+    # domains:
+    #   - chat.yourdomain.com
+    
+    # Environment-specific settings
+    envSpecific:
+      production:
+        - key: NODE_OPTIONS
+          value: "--max-old-space-size=512"
+    
+    # Logging configuration
+    logging:
+      format: json
+      level: info
+
+# Optional: MongoDB instance (if you want Render to host MongoDB)
+# databases:
+#   - name: blackhole-chat-db
+#     plan: free
+#     type: mongodb

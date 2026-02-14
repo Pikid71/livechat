@@ -435,11 +435,19 @@
             display: flex;
             align-items: center;
             gap: 12px;
+            padding: 8px;
+            border-radius: 12px;
+            transition: all 0.2s;
+        }
+
+        .file-info:hover {
+            background: rgba(0, 255, 255, 0.1);
         }
 
         .file-name {
             font-weight: bold;
             color: #00ffff;
+            word-break: break-all;
         }
 
         .file-size {
@@ -460,10 +468,12 @@
             display: flex;
             gap: 12px;
             margin-bottom: 12px;
+            flex-wrap: wrap;
         }
 
         #messageInput { 
             flex: 1;
+            min-width: 200px;
             background: rgba(51, 51, 51, 0.8); 
             border: 2px solid #444;
             padding: 14px 18px; 
@@ -493,6 +503,7 @@
             align-items: center;
             gap: 8px;
             font-size: 14px;
+            white-space: nowrap;
         }
 
         .action-btn:hover {
@@ -522,6 +533,7 @@
         .action-btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
+            pointer-events: none;
         }
 
         /* ========== EMOJI PANEL ========== */
@@ -681,6 +693,8 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: 12px;
+            flex-wrap: wrap;
+            gap: 10px;
         }
 
         .room-name {
@@ -702,6 +716,7 @@
         .room-actions {
             display: flex;
             gap: 10px;
+            flex-wrap: wrap;
         }
 
         /* ========== VOICE CHAT ========== */
@@ -765,6 +780,8 @@
             .user-info { padding: 6px 12px; }
             .action-btn span:not(.emoji) { display: none; }
             .action-btn { padding: 12px; }
+            .input-row { gap: 6px; }
+            #messageInput { font-size: 14px; }
         }
 
         /* ========== ANIMATIONS ========== */
@@ -866,7 +883,7 @@
         <div id="room-screen" style="display: none; flex-direction: column; height: 100%;">
             <div class="header" style="justify-content: space-between;">
                 <h1>🕳️ BLACK HOLE <span id="rank-indicator-header" style="display: none;"></span></h1>
-                <div style="display: flex; align-items: center; gap: 15px;">
+                <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
                     <div class="user-info">
                         <span class="status-dot"></span>
                         <span id="loggedInUsername">User</span>
@@ -940,14 +957,14 @@
             
             <div id="input-area">
                 <!-- Voice Chat Controls -->
-                <div style="display: flex; gap: 10px; margin-bottom: 12px;" id="voice-controls">
-                    <button onclick="toggleVoiceChat()" id="voiceBtn" class="action-btn" style="flex: 1;">
+                <div style="display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;" id="voice-controls">
+                    <button onclick="toggleVoiceChat()" id="voiceBtn" class="action-btn" style="flex: 1; min-width: 120px;">
                         <span>🎤</span> <span id="voiceBtnText">JOIN VOICE</span>
                     </button>
-                    <button onclick="showUserList()" id="userListBtn" class="action-btn" style="flex: 1;">
+                    <button onclick="showUserList()" id="userListBtn" class="action-btn" style="flex: 1; min-width: 100px;">
                         <span>👥</span> USERS
                     </button>
-                    <button onclick="showFileUpload()" id="fileUploadBtn" class="action-btn" style="flex: 1; display: none;">
+                    <button onclick="showFileUpload()" id="fileUploadBtn" class="action-btn" style="flex: 1; min-width: 100px; display: none;">
                         <span>📁</span> SHARE
                     </button>
                 </div>
@@ -967,10 +984,10 @@
                 <!-- Room Actions -->
                 <div class="input-row" style="margin-top: 12px;">
                     <button onclick="leaveRoom()" class="action-btn danger" style="flex: 1;">
-                        <span>🚪</span> LEAVE ROOM
+                        <span>🚪</span> LEAVE
                     </button>
                     <button onclick="showPrivateMessages()" id="pmBtn" class="action-btn" style="flex: 1;">
-                        <span>💌</span> PRIVATE
+                        <span>💌</span> PM
                     </button>
                     <button onclick="showThemeSelector()" id="themeBtn" class="action-btn" style="flex: 1;">
                         <span>🎨</span> THEME
@@ -1028,7 +1045,7 @@
                 <div style="border: 2px dashed #667eea; border-radius: 16px; padding: 30px; text-align: center; margin-bottom: 20px; cursor: pointer;" onclick="document.getElementById('fileInput').click()">
                     <div style="font-size: 48px; margin-bottom: 10px;">📎</div>
                     <div style="color: #ccc;">Click to upload or drag and drop</div>
-                    <div style="font-size: 12px; color: #888; margin-top: 10px;">Max size: 10MB (Images, PDF, TXT, Audio, Video)</div>
+                    <div style="font-size: 12px; color: #888; margin-top: 10px;">Max size: 50MB (Images, PDF, Audio, Video, Text)</div>
                 </div>
                 <input type="file" id="fileInput" style="display: none;" onchange="handleFileSelect(this.files[0])">
                 <div id="filePreview" style="display: none; background: rgba(102,126,234,0.1); padding: 15px; border-radius: 12px; margin-bottom: 20px;">
@@ -1170,16 +1187,25 @@
         const emojis = ['😀', '😂', '😍', '🥰', '😎', '🤔', '😢', '🎉', '👍', '❤️', '🔥', '✨', '🌟', '💯', '😱', '🤯', '🎊', '🎈', '🚀', '💪', '😘', '🙏', '👏', '🎵', '🍕', '🍔', '🍉', '🎮', '👾', '🤖', '👽', '💀', '👑', '⚡', '🌊', '🌈', '☄️', '🕳️', '🌀', '🎭', '🎪', '🎨', '🎤', '📁', '💌', '🔒', '🔓', '⏰', '⌛', '💾', '📀', '💿', '☠️'];
         
         // Load emojis
-        emojis.forEach(emoji => {
-            const emojiItem = document.createElement('div');
-            emojiItem.className = 'emoji-item';
-            emojiItem.textContent = emoji;
-            emojiItem.onclick = () => {
-                input.value += emoji;
-                input.focus();
-            };
-            emojiPanel.appendChild(emojiItem);
-        });
+        function loadEmojis() {
+            emojis.forEach(emoji => {
+                const emojiItem = document.createElement('div');
+                emojiItem.className = 'emoji-item';
+                emojiItem.textContent = emoji;
+                emojiItem.onclick = () => {
+                    input.value += emoji;
+                    input.focus();
+                    emojiPanel.classList.remove('show');
+                };
+                emojiPanel.appendChild(emojiItem);
+            });
+        }
+        loadEmojis();
+        
+        function toggleEmojiPanel() {
+            emojiPanel.classList.toggle('show');
+            input.focus();
+        }
         
         // ========== UTILITY FUNCTIONS ==========
         
@@ -1272,7 +1298,17 @@
                         { urls: 'stun:stun1.l.google.com:19302' },
                         { urls: 'stun:stun2.l.google.com:19302' },
                         { urls: 'stun:stun3.l.google.com:19302' },
-                        { urls: 'stun:stun4.l.google.com:19302' }
+                        { urls: 'stun:stun4.l.google.com:19302' },
+                        {
+                            urls: 'turn:openrelay.metered.ca:80',
+                            username: 'openrelayproject',
+                            credential: 'openrelayproject'
+                        },
+                        {
+                            urls: 'turn:openrelay.metered.ca:443',
+                            username: 'openrelayproject',
+                            credential: 'openrelayproject'
+                        }
                     ]
                 };
             }
@@ -1373,7 +1409,6 @@
                         audio.controls = false;
                         document.body.appendChild(audio);
                         
-                        // Remove after stream ends
                         event.streams[0].oninactive = () => {
                             audio.remove();
                         };
@@ -1422,7 +1457,8 @@
                         audio.autoplay = true;
                         audio.controls = false;
                         document.body.appendChild(audio);
-                                                event.streams[0].oninactive = () => {
+                        
+                        event.streams[0].oninactive = () => {
                             audio.remove();
                         };
                     };
@@ -1498,21 +1534,9 @@
         function handleFileSelect(file) {
             if (!file) return;
             
-            // Check file size (10MB limit)
-            if (file.size > 10 * 1024 * 1024) {
-                showToast('❌ File too large! Max 10MB');
-                return;
-            }
-            
-            // Check file type
-            const allowedTypes = [
-                'image/jpeg', 'image/png', 'image/gif', 'image/webp', 
-                'application/pdf', 'text/plain', 'audio/mpeg', 'audio/wav',
-                'video/mp4', 'application/json', 'text/markdown'
-            ];
-            
-            if (!allowedTypes.includes(file.type) && !file.type.startsWith('image/')) {
-                showToast('❌ File type not allowed');
+            // Check file size (50MB limit)
+            if (file.size > 50 * 1024 * 1024) {
+                showToast('❌ File too large! Max 50MB');
                 return;
             }
             
@@ -1563,12 +1587,13 @@
                     socket.emit('share_file', {
                         fileUrl: result.fileUrl,
                         fileName: result.fileName,
-                        fileType: result.fileType
+                        fileType: result.fileType,
+                        fileSize: result.fileSize
                     });
                     closeModal('fileUploadModal');
                     showToast(`✅ File shared: ${result.fileName}`);
                 } else {
-                    showToast('❌ Upload failed: ' + result.error);
+                    showToast('❌ Upload failed: ' + (result.error || 'Unknown error'));
                 }
                 
             } catch (err) {
@@ -1668,7 +1693,6 @@
             chatScreen.style.display = 'none';
             switchToLogin();
             
-            // Remove admin buttons
             const grantBtn = document.getElementById('grantRankBtn');
             if (grantBtn) grantBtn.remove();
             
@@ -1753,7 +1777,7 @@
                         </div>
                     </div>
                     <div class="room-actions">
-                        <button onclick="joinRoom('${room.name}', '')" class="action-btn success" style="flex: 1;">
+                        <button onclick="joinRoom('${room.name}')" class="action-btn success" style="flex: 1;">
                             <span>🚪</span> JOIN
                         </button>
                         ${!room.isDefault && (isAdmin || isOwner) ? `
@@ -1789,22 +1813,8 @@
             document.getElementById('newRoomPassword').value = '';
         }
         
-        function joinRoom(roomName, password) {
-            if (roomName === 'Main') {
-                socket.emit('join_room', { roomName, password: '' });
-            } else {
-                // Check if password is needed
-                socket.emit('check_room_password', { roomName }, (response) => {
-                    if (response.hasPassword) {
-                        const pwd = prompt(`Enter password for "${roomName}":`);
-                        if (pwd !== null) {
-                            socket.emit('join_room', { roomName, password: pwd });
-                        }
-                    } else {
-                        socket.emit('join_room', { roomName, password: '' });
-                    }
-                });
-            }
+        function joinRoom(roomName) {
+            socket.emit('join_room', { roomName, password: '' });
         }
         
         function deleteRoom(roomName) {
@@ -1845,7 +1855,6 @@
             chatScreen.style.display = 'flex';
             input.focus();
             
-            // Apply room theme if VIP+
             if (isVip && data.theme) {
                 changeTheme(data.theme, 'personal');
             }
@@ -1861,14 +1870,13 @@
                     if (msg.isPrivate) {
                         addPrivateMessage(msg.username, msg.message, msg.recipient);
                     } else if (msg.fileUrl) {
-                        addFileMessage(msg.username, msg.fileUrl, msg.fileName, msg.fileType);
+                        addFileMessage(msg.username, msg.fileUrl, msg.fileName, msg.fileType, msg.fileSize);
                     } else {
                         addMessage(msg.username, msg.message, msg.rank);
                     }
                 });
             }
             
-            // Scroll to bottom
             setTimeout(() => {
                 msgContainer.scrollTop = msgContainer.scrollHeight;
             }, 100);
@@ -1889,7 +1897,11 @@
         // ========== MESSAGES ==========
         
         socket.on('chat message', (data) => {
-            addMessage(data.username, data.message, data.rank);
+            if (data.fileUrl) {
+                addFileMessage(data.username, data.fileUrl, data.fileName, data.fileType, data.fileSize);
+            } else {
+                addMessage(data.username, data.message, data.rank);
+            }
         });
         
         function addMessage(username, message, rank = 'member') {
@@ -1959,7 +1971,7 @@
             msgContainer.scrollTop = msgContainer.scrollHeight;
         }
         
-        function addFileMessage(username, fileUrl, fileName, fileType) {
+        function addFileMessage(username, fileUrl, fileName, fileType, fileSize) {
             const wrapper = document.createElement('div');
             wrapper.className = 'msg-wrapper';
             if (username === currentUsername) wrapper.classList.add('mine');
@@ -1974,18 +1986,28 @@
             
             const item = document.createElement('div');
             item.className = 'msg file-share';
-            item.onclick = () => window.open(fileUrl, '_blank');
             
             let icon = '📄';
-            if (fileType.startsWith('image/')) icon = '🖼️';
+            if (fileType?.startsWith('image/')) icon = '🖼️';
             else if (fileType === 'application/pdf') icon = '📕';
-            else if (fileType.startsWith('audio/')) icon = '🎵';
-            else if (fileType.startsWith('video/')) icon = '🎬';
+            else if (fileType?.startsWith('audio/')) icon = '🎵';
+            else if (fileType?.startsWith('video/')) icon = '🎬';
+            
+            let sizeText = '';
+            if (fileSize) {
+                if (fileSize < 1024) sizeText = `${fileSize} B`;
+                else if (fileSize < 1024 * 1024) sizeText = `${(fileSize / 1024).toFixed(1)} KB`;
+                else sizeText = `${(fileSize / (1024 * 1024)).toFixed(1)} MB`;
+            }
             
             item.innerHTML = `
-                <div class="file-info">
+                <div class="file-info" onclick="window.open('${fileUrl}', '_blank')">
                     <span class="file-icon">${icon}</span>
-                    <span class="file-name">${fileName}</span>
+                    <div style="flex: 1;">
+                        <div class="file-name">${fileName}</div>
+                        ${sizeText ? `<div style="font-size: 10px; color: #888;">${sizeText}</div>` : ''}
+                    </div>
+                    <span style="font-size: 20px;">📥</span>
                 </div>
             `;
             wrapper.appendChild(item);
@@ -2040,7 +2062,6 @@
             document.getElementById('pmMessage').value = '';
             addPrivateMessage(currentUsername, message, recipient);
             
-            // Add to history
             const pmList = document.getElementById('privateMessagesList');
             const msgDiv = document.createElement('div');
             msgDiv.style.padding = '10px';
@@ -2063,7 +2084,6 @@
         socket.on('private_message', (data) => {
             addPrivateMessage(data.from, data.message, currentUsername);
             
-            // Update private messages list
             const pmList = document.getElementById('privateMessagesList');
             if (pmList) {
                 const msgDiv = document.createElement('div');
@@ -2104,6 +2124,9 @@
                 case '/help':
                     showHelp();
                     break;
+                case '/users':
+                    handleUsersCommand();
+                    break;
                 case '/msg':
                     handleMsgCommand(args);
                     break;
@@ -2137,9 +2160,6 @@
                 case '/rank':
                     handleRankCommand(args);
                     break;
-                case '/users':
-                    handleUsersCommand();
-                    break;
                 case '/ping':
                     handlePingCommand();
                     break;
@@ -2152,10 +2172,10 @@
             let helpText = `🔹 **BLACK HOLE CHAT V2 COMMANDS** 🔹\n\n`;
             helpText += `💬 **Everyone:**\n`;
             helpText += `  /help - Show this help\n`;
+            helpText += `  /users - List users in room\n`;
             helpText += `  /msg <user> <text> - Send private message\n`;
             helpText += `  /flip - Flip a coin\n`;
             helpText += `  /roll <min> <max> - Roll random number\n`;
-            helpText += `  /users - List users in room\n`;
             helpText += `  /ping - Check connection\n\n`;
             
             if (isVip) {
@@ -2195,6 +2215,14 @@
             }
             
             addSystemMessage(helpText);
+        }
+        
+        function handleUsersCommand() {
+            if (!currentRoom) {
+                addSystemMessage('❌ Not in a room');
+                return;
+            }
+            showUserList();
         }
         
         function handleMsgCommand(args) {
@@ -2428,14 +2456,6 @@
             addSystemMessage(`Your rank: ${currentRank.toUpperCase()}`);
         }
         
-        function handleUsersCommand() {
-            if (!currentRoom) {
-                addSystemMessage('❌ Not in a room');
-                return;
-            }
-            showUserList();
-        }
-        
         function handlePingCommand() {
             const start = Date.now();
             socket.emit('ping', () => {
@@ -2449,7 +2469,6 @@
         socket.on('room_effect', (data) => {
             addSystemMessage(`✨ ${data.triggeredBy} triggered: ${data.effect}`);
             
-            // Remove existing effect classes
             document.body.classList.remove('glitch', 'flashbang', 'black', 'hack', 'matrix', 
                 'rainbow', 'neon', 'firework', 'gameroom');
             
@@ -2541,8 +2560,6 @@
         function showUserList() {
             showModal('userListModal');
             document.getElementById('userListContent').innerHTML = '<div style="text-align: center; color: #888; padding: 20px;">Loading users...</div>';
-            
-            // Request user list from server
             socket.emit('get_room_users', { roomName: currentRoom });
         }
         
@@ -2606,7 +2623,6 @@
             document.getElementById(modalId).classList.remove('show');
         }
         
-        // Close modal when clicking outside
         window.onclick = function(event) {
             if (event.target.classList.contains('modal')) {
                 event.target.classList.remove('show');
@@ -2704,7 +2720,6 @@
             }
         });
         
-        // Auth form keyboard events
         document.getElementById('loginUsername').addEventListener('keypress', (e) => { 
             if (e.key === 'Enter') handleLogin(); 
         });
@@ -2764,16 +2779,40 @@
                 socket.emit('join_room', { roomName: currentRoom, password: '' });
             }
         });
+    </script>
+    <!-- Include Voice Handler -->
+    <script src="voice-handler.js"></script>
+
+    <script>
+        // Initialize voice chat
+        let voiceChat = null;
         
-        // ========== CHECK ROOM PASSWORD ==========
+        async function toggleVoiceChat() {
+            if (!currentRoom) {
+                showToast('❌ Join a room first');
+                return;
+            }
+            
+            if (!voiceChat || !voiceChat.isActive) {
+                voiceChat = new VoiceChatHandler(socket, currentRoom, currentUsername);
+                const success = await voiceChat.start();
+                if (success) {
+                    console.log('Voice chat started');
+                }
+            } else {
+                voiceChat.stop();
+                voiceChat = null;
+            }
+        }
         
-        socket.on('check_room_password_response', (response) => {
-            // Handled in joinRoom function
+        // Listen for voice notifications
+        window.addEventListener('voiceNotification', (event) => {
+            showToast(event.detail.message);
         });
         
-        // Add this to socket events
-        socket.on('check_room_password', (data, callback) => {
-            callback({ hasPassword: data.hasPassword });
+        // Listen for voice status changes
+        window.addEventListener('voiceStatusChange', (event) => {
+            console.log('Voice status:', event.detail);
         });
     </script>
 </body>
