@@ -37,7 +37,7 @@ console.log(`🔑 Admin Password: ${ADMIN_PASSWORD ? '****' : 'default'}`);
 console.log('='.repeat(70) + '\n');
 
 // ============================================
-// 📁 FILE UPLOAD CONFIGURATION - FIXED
+// 📁 FILE UPLOAD CONFIGURATION
 // ============================================
 const uploadDir = path.join(__dirname, 'uploads');
 console.log(`📁 Upload directory: ${uploadDir}`);
@@ -96,7 +96,6 @@ app.use('/uploads', express.static(uploadDir, {
 // ============================================
 let isMongoConnected = false;
 
-// MongoDB connection options
 const mongooseOptions = {
   useNewUrlParser: true,
   useUnifiedTopology: true,
@@ -140,7 +139,11 @@ function initializeModels() {
     const UserSchema = new mongoose.Schema({
       username: { type: String, required: true, unique: true },
       password: { type: String, required: true },
-      rank: { type: String, enum: ['owner', 'admin', 'moderator', 'vip', 'member'], default: 'member' },
+      rank: { 
+        type: String, 
+        enum: ['owner', 'admin', 'moderator', 'vip', 'member'],
+        default: 'member'
+      },
       createdAt: { type: Date, default: Date.now },
       lastLogin: { type: Date },
       isBanned: { type: Boolean, default: false },
@@ -193,11 +196,13 @@ function initializeModels() {
 
     const PrivateMessageSchema = new mongoose.Schema({
       from: { type: String, required: true },
+      fromRank: { type: String, default: 'member' },
       to: { type: String, required: true },
+      toRank: { type: String, default: 'member' },
       message: { type: String, required: true },
       timestamp: { type: Date, default: Date.now },
       read: { type: Boolean, default: false },
-      fromRank: { type: String, default: 'member' }
+      visibleTo: [{ type: String }] // Array of usernames who can see this message
     });
 
     const FileModelSchema = new mongoose.Schema({
@@ -280,7 +285,7 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // ============================================
-// 📁 FILE UPLOAD ENDPOINT - FIXED
+// 📁 FILE UPLOAD ENDPOINT
 // ============================================
 app.post('/upload', upload.single('file'), async (req, res) => {
   try {
@@ -290,7 +295,6 @@ app.post('/upload', upload.single('file'), async (req, res) => {
 
     console.log(`📤 File upload: ${req.file.originalname} (${req.file.size} bytes)`);
 
-    // Process image optimization
     let finalPath = req.file.path;
     let fileSize = req.file.size;
     let fileType = req.file.mimetype;
@@ -314,10 +318,8 @@ app.post('/upload', upload.single('file'), async (req, res) => {
       }
     }
 
-    // Generate file URL
     const fileUrl = `/uploads/${path.basename(finalPath)}`;
     
-    // Save to database if connected
     if (isMongoConnected && FileModel) {
       try {
         await FileModel.create({
@@ -334,7 +336,6 @@ app.post('/upload', upload.single('file'), async (req, res) => {
       }
     }
     
-    // Return file data with actual file URL
     res.json({
       success: true,
       fileUrl: fileUrl,
@@ -350,7 +351,6 @@ app.post('/upload', upload.single('file'), async (req, res) => {
   }
 });
 
-// File download endpoint
 app.get('/download/:filename', async (req, res) => {
   try {
     const filename = req.params.filename;
@@ -425,20 +425,104 @@ const memoryStore = {
     theme: 'default'
   }]]),
   sessions: new Map(),
-  bans: new Map()
+  bans: new Map(),
+  privateMessages: [] // Store private messages for history
 };
 
 // ============================================
-// 🔌 SOCKET.IO HANDLERS - FIXED
+// 🔐 RANK LEVELS AND PERMISSIONS
 // ============================================
+
+const RANK_LEVELS = {
+  'owner': 1,
+  'admin': 2,
+  'moderator': 3,
+  'vip': 4,
+  'member': 5
+};
+
+function getRankLevel(rank) {
+  return RANK_LEVELS[rank] || 5;
+}
+
+function canUserSeePrivateMessage(userRank, senderRank) {
+  const userLevel = getRankLevel(userRank);
+  const senderLevel = getRankLevel(senderRank);
+  // Higher ranks (lower numbers) can see messages from lower ranks
+  return userLevel <= senderLevel;
+}
 
 const PERMISSIONS = {
-  owner: { level: 100, canBan: true, canUnban: true, canDeleteRoom: true, canClear: true, canGrant: ['admin', 'moderator', 'vip', 'member'], canUseEffects: true, canUpload: true, canVoice: true, canSeePrivate: true },
-  admin: { level: 80, canBan: true, canUnban: true, canDeleteRoom: true, canClear: true, canGrant: ['moderator', 'vip', 'member'], canUseEffects: true, canUpload: true, canVoice: true, canSeePrivate: true },
-  moderator: { level: 60, canBan: true, canUnban: false, canDeleteRoom: false, canClear: true, canGrant: [], canUseEffects: false, canUpload: true, canVoice: true, canSeePrivate: false },
-  vip: { level: 40, canBan: false, canUnban: false, canDeleteRoom: false, canClear: false, canGrant: [], canUseEffects: false, canUpload: true, canVoice: true, canSeePrivate: false },
-  member: { level: 20, canBan: false, canUnban: false, canDeleteRoom: false, canClear: false, canGrant: [], canUseEffects: false, canUpload: false, canVoice: true, canSeePrivate: false }
+  owner: { 
+    level: 1, 
+    canBan: true, 
+    canUnban: true, 
+    canDeleteRoom: true, 
+    canClear: true, 
+    canGrant: ['admin', 'moderator', 'vip', 'member'], 
+    canUseEffects: true, 
+    canUpload: true, 
+    canVoice: true, 
+    canSeePrivate: true,
+    canSeeAllPrivate: true // Owner sees ALL private messages
+  },
+  admin: { 
+    level: 2, 
+    canBan: true, 
+    canUnban: true, 
+    canDeleteRoom: true, 
+    canClear: true, 
+    canGrant: ['moderator', 'vip', 'member'], 
+    canUseEffects: true, 
+    canUpload: true, 
+    canVoice: true, 
+    canSeePrivate: true,
+    canSeeAllPrivate: false // Admin sees messages from rank 2-5
+  },
+  moderator: { 
+    level: 3, 
+    canBan: true, 
+    canUnban: false, 
+    canDeleteRoom: false, 
+    canClear: true, 
+    canGrant: [], 
+    canUseEffects: false, 
+    canUpload: true, 
+    canVoice: true, 
+    canSeePrivate: true,
+    canSeeAllPrivate: false // Moderator sees messages from rank 3-5
+  },
+  vip: { 
+    level: 4, 
+    canBan: false, 
+    canUnban: false, 
+    canDeleteRoom: false, 
+    canClear: false, 
+    canGrant: [], 
+    canUseEffects: false, 
+    canUpload: true, 
+    canVoice: true, 
+    canSeePrivate: false,
+    canSeeAllPrivate: false // VIP sees only their own messages
+  },
+  member: { 
+    level: 5, 
+    canBan: false, 
+    canUnban: false, 
+    canDeleteRoom: false, 
+    canClear: false, 
+    canGrant: [], 
+    canUseEffects: false, 
+    canUpload: false, 
+    canVoice: true, 
+    canSeePrivate: false,
+    canSeeAllPrivate: false // Member sees only their own messages
+  }
 };
+
+// ============================================
+// 🔌 SOCKET.IO HANDLERS
+// ============================================
 
 io.on('connection', (socket) => {
   console.log(`👤 New connection: ${socket.id} (Total: ${io.engine.clientsCount})`);
@@ -510,6 +594,50 @@ io.on('connection', (socket) => {
     }
   });
   
+  socket.on('register', async (data) => {
+    try {
+      const { username, password } = data;
+      
+      if (!username || !password) {
+        return socket.emit('auth_error', { message: 'Username and password required' });
+      }
+      
+      if (username.length < 3) {
+        return socket.emit('auth_error', { message: 'Username must be at least 3 characters' });
+      }
+      
+      if (password.length < 4) {
+        return socket.emit('auth_error', { message: 'Password must be at least 4 characters' });
+      }
+      
+      if (username === OWNER_USERNAME || username === 'admin') {
+        return socket.emit('auth_error', { message: 'Username reserved' });
+      }
+      
+      if (memoryStore.users.has(username)) {
+        return socket.emit('auth_error', { message: 'Username already exists' });
+      }
+      
+      memoryStore.users.set(username, { username, password, rank: 'member', theme: 'default' });
+      memoryStore.sessions.set(socket.id, { username, rank: 'member' });
+      
+      currentUser = username;
+      userRank = 'member';
+      
+      socket.emit('auth_success', { 
+        username, 
+        rank: 'member',
+        message: 'Registration successful!'
+      });
+      
+      console.log(`✅ User registered: ${username}`);
+      
+    } catch (err) {
+      console.error('Registration error:', err);
+      socket.emit('auth_error', { message: 'Server error' });
+    }
+  });
+  
   socket.on('logout', () => {
     if (currentUser) {
       console.log(`👋 Logout: ${currentUser}`);
@@ -521,6 +649,19 @@ io.on('connection', (socket) => {
     socket.emit('logged_out');
     currentUser = null;
     currentRoom = null;
+  });
+  
+  socket.on('check_auth', () => {
+    const session = memoryStore.sessions.get(socket.id);
+    if (session) {
+      socket.emit('auth_status', { 
+        authenticated: true, 
+        username: session.username,
+        rank: session.rank
+      });
+    } else {
+      socket.emit('auth_status', { authenticated: false });
+    }
   });
   
   // ========== ROOMS ==========
@@ -593,7 +734,6 @@ io.on('connection', (socket) => {
         messages: []
       });
       
-      // Join room
       if (currentRoom) {
         socket.leave(currentRoom);
       }
@@ -605,7 +745,6 @@ io.on('connection', (socket) => {
       
       socket.emit('joined_room', { roomName, username: currentUser, rank: userRank, theme });
       
-      // Notify room
       io.to(roomName).emit('user_joined', {
         username: currentUser,
         rank: userRank,
@@ -638,7 +777,6 @@ io.on('connection', (socket) => {
         return socket.emit('error', { message: 'Incorrect password' });
       }
       
-      // Leave old room
       if (currentRoom) {
         socket.leave(currentRoom);
         const oldSession = memoryStore.sessions.get(socket.id);
@@ -653,12 +791,10 @@ io.on('connection', (socket) => {
       
       socket.emit('joined_room', { roomName, username: currentUser, rank: userRank, theme: room.theme || 'default' });
       
-      // Send message history
       socket.emit('room_history', {
         messages: room.messages || []
       });
       
-      // Notify room
       const members = Array.from(memoryStore.sessions.values())
         .filter(s => s.roomName === roomName).length;
       
@@ -687,7 +823,6 @@ io.on('connection', (socket) => {
       
       socket.leave(roomName);
       
-      // Get member count
       const members = Array.from(memoryStore.sessions.values())
         .filter(s => s.roomName === roomName).length;
       
@@ -697,7 +832,6 @@ io.on('connection', (socket) => {
         members
       });
       
-      // System message
       const systemMsg = {
         username: 'System',
         message: `👋 ${currentUser} left the room`,
@@ -707,7 +841,6 @@ io.on('connection', (socket) => {
       
       io.to(roomName).emit('chat message', systemMsg);
       
-      // Save to room history
       const room = memoryStore.rooms.get(roomName);
       if (room) {
         if (!room.messages) room.messages = [];
@@ -715,7 +848,6 @@ io.on('connection', (socket) => {
         if (room.messages.length > 100) room.messages.shift();
       }
       
-      // Delete empty non-default rooms
       if (members === 0 && roomName !== 'Main') {
         memoryStore.rooms.delete(roomName);
         io.emit('room_deleted', { name: roomName });
@@ -743,7 +875,6 @@ io.on('connection', (socket) => {
         rank: userRank
       };
       
-      // Save to room history
       const room = memoryStore.rooms.get(currentRoom);
       if (room) {
         if (!room.messages) room.messages = [];
@@ -751,7 +882,6 @@ io.on('connection', (socket) => {
         if (room.messages.length > 100) room.messages.shift();
       }
       
-      // Broadcast to others
       socket.broadcast.to(currentRoom).emit('chat message', messageData);
       
     } catch (err) {
@@ -759,7 +889,123 @@ io.on('connection', (socket) => {
     }
   });
   
-  // ========== FILE SHARING - FIXED ==========
+  // ========== PRIVATE MESSAGES WITH RANK-BASED VISIBILITY ==========
+  
+  socket.on('private_message', (data) => {
+    try {
+      if (!currentUser) return;
+      
+      const { recipient, message, senderRank, senderRankLevel } = data;
+      
+      if (!recipient || !message) return;
+      
+      // Get recipient's rank
+      let recipientRank = 'member';
+      const recipientUser = memoryStore.users.get(recipient);
+      if (recipientUser) {
+        recipientRank = recipientUser.rank;
+      }
+      
+      const messageData = {
+        from: currentUser,
+        fromRank: userRank,
+        to: recipient,
+        toRank: recipientRank,
+        message,
+        timestamp: new Date().toLocaleTimeString(),
+        id: Date.now() + '-' + Math.random().toString(36).substr(2, 9)
+      };
+      
+      // Save to private messages history
+      memoryStore.privateMessages.push(messageData);
+      if (memoryStore.privateMessages.length > 100) {
+        memoryStore.privateMessages.shift();
+      }
+      
+      // Find recipient socket
+      let recipientSocketId = null;
+      for (const [sid, session] of memoryStore.sessions) {
+        if (session.username === recipient) {
+          recipientSocketId = sid;
+          break;
+        }
+      }
+      
+      // Send to recipient
+      if (recipientSocketId) {
+        io.to(recipientSocketId).emit('private_message', messageData);
+        console.log(`💌 PM sent to recipient: ${recipient}`);
+      }
+      
+      // Send to all users with higher rank than sender
+      const senderLevel = getRankLevel(userRank);
+      for (const [sid, session] of memoryStore.sessions) {
+        if (session.username !== currentUser && session.username !== recipient) {
+          const viewerLevel = getRankLevel(session.rank);
+          // Higher ranks (lower number) can see messages from lower ranks
+          if (viewerLevel < senderLevel) {
+            io.to(sid).emit('private_message', {
+              ...messageData,
+              adminView: true,
+              viewedBy: session.username
+            });
+            console.log(`🔍 Admin view: ${session.username} (${session.rank}) can see message from ${currentUser} to ${recipient}`);
+          }
+        }
+      }
+      
+      // Owner always sees all private messages (level 1 is highest)
+      if (userRank !== 'owner') {
+        for (const [sid, session] of memoryStore.sessions) {
+          if (session.rank === 'owner' && session.username !== currentUser && session.username !== recipient) {
+            io.to(sid).emit('private_message', {
+              ...messageData,
+              adminView: true,
+              viewedBy: session.username
+            });
+            console.log(`👑 Owner view: Owner can see message from ${currentUser} to ${recipient}`);
+          }
+        }
+      }
+      
+      // Send confirmation to sender
+      socket.emit('private_message_sent', {
+        to: recipient,
+        message,
+        timestamp: messageData.timestamp
+      });
+      
+      console.log(`💌 PM: ${currentUser} (${userRank}) -> ${recipient} (${recipientRank})`);
+      
+    } catch (err) {
+      console.error('private message error:', err);
+    }
+  });
+  
+  // Get private message history (with rank filtering)
+  socket.on('get_private_history', () => {
+    try {
+      if (!currentUser) return;
+      
+      const userLevel = getRankLevel(userRank);
+      const history = memoryStore.privateMessages.filter(msg => {
+        // User can see messages they sent or received
+        if (msg.from === currentUser || msg.to === currentUser) {
+          return true;
+        }
+        // Higher ranks can see messages from lower ranks
+        const senderLevel = getRankLevel(msg.fromRank);
+        return userLevel < senderLevel;
+      });
+      
+      socket.emit('private_history', { messages: history });
+      
+    } catch (err) {
+      console.error('get_private_history error:', err);
+    }
+  });
+  
+  // ========== FILE SHARING ==========
   
   socket.on('share_file', (data) => {
     try {
@@ -778,7 +1024,6 @@ io.on('connection', (socket) => {
         rank: userRank
       };
       
-      // Save to room history
       const room = memoryStore.rooms.get(currentRoom);
       if (room) {
         if (!room.messages) room.messages = [];
@@ -786,7 +1031,6 @@ io.on('connection', (socket) => {
         if (room.messages.length > 100) room.messages.shift();
       }
       
-      // Broadcast to all in room (including sender)
       io.to(currentRoom).emit('chat message', messageData);
       console.log(`📁 File shared by ${currentUser}: ${fileName}`);
       
@@ -795,64 +1039,7 @@ io.on('connection', (socket) => {
     }
   });
   
-  // ========== PRIVATE MESSAGES ==========
-  
-  socket.on('private_message', (data) => {
-    try {
-      if (!currentUser) return;
-      
-      const { recipient, message } = data;
-      
-      if (!recipient || !message) return;
-      
-      const messageData = {
-        from: currentUser,
-        fromRank: userRank,
-        message,
-        timestamp: new Date().toLocaleTimeString()
-      };
-      
-      // Find recipient socket
-      let recipientSocketId = null;
-      for (const [sid, session] of memoryStore.sessions) {
-        if (session.username === recipient) {
-          recipientSocketId = sid;
-          break;
-        }
-      }
-      
-      if (recipientSocketId) {
-        io.to(recipientSocketId).emit('private_message', messageData);
-      }
-      
-      socket.emit('private_message_sent', {
-        to: recipient,
-        message,
-        timestamp: messageData.timestamp
-      });
-      
-      // Log for admins
-      if (userRank === 'admin' || userRank === 'owner') {
-        const adminLog = {
-          username: 'System',
-          message: `👮 ADMIN LOG: ${currentUser} → ${recipient}: ${message}`,
-          timestamp: new Date().toLocaleTimeString(),
-          rank: 'system'
-        };
-        
-        if (currentRoom) {
-          io.to(currentRoom).emit('chat message', adminLog);
-        }
-      }
-      
-      console.log(`💌 PM: ${currentUser} -> ${recipient}`);
-      
-    } catch (err) {
-      console.error('private message error:', err);
-    }
-  });
-  
-  // ========== VOICE CHAT SIGNALING - FIXED ==========
+  // ========== VOICE CHAT SIGNALING ==========
   
   socket.on('join_voice', (data) => {
     try {
@@ -935,7 +1122,6 @@ io.on('connection', (socket) => {
         return socket.emit('error', { message: '❌ Incorrect password' });
       }
       
-      // Clear messages
       const room = memoryStore.rooms.get(currentRoom);
       if (room) {
         room.messages = [];
@@ -976,11 +1162,19 @@ io.on('connection', (socket) => {
       
       if (!bannedUser) return;
       
+      // Check if trying to ban higher rank
+      const bannedUserRank = memoryStore.users.get(bannedUser)?.rank || 'member';
+      const bannedLevel = getRankLevel(bannedUserRank);
+      const bannerLevel = getRankLevel(userRank);
+      
+      if (bannerLevel >= bannedLevel && userRank !== 'owner') {
+        return socket.emit('error', { message: '❌ Cannot ban users of equal or higher rank' });
+      }
+      
       if (userRank === 'moderator' && password !== ADMIN_PASSWORD) {
         return socket.emit('error', { message: '❌ Incorrect password' });
       }
       
-      // Parse duration
       let durationMs = 10 * 60 * 1000;
       const match = duration.match(/^(\d+)([hmd])$/);
       if (match) {
@@ -992,7 +1186,6 @@ io.on('connection', (socket) => {
       
       const expiresAt = Date.now() + durationMs;
       
-      // Store ban in memory
       if (!memoryStore.bans.has(currentRoom)) {
         memoryStore.bans.set(currentRoom, new Map());
       }
@@ -1010,7 +1203,6 @@ io.on('connection', (socket) => {
       
       io.to(currentRoom).emit('chat message', systemMsg);
       
-      // Kick user if in room
       let bannedSocketId = null;
       for (const [sid, session] of memoryStore.sessions) {
         if (session.username === bannedUser && session.roomName === currentRoom) {
@@ -1047,7 +1239,6 @@ io.on('connection', (socket) => {
         return socket.emit('error', { message: '❌ Incorrect password' });
       }
       
-      // Remove ban
       const roomBans = memoryStore.bans.get(currentRoom);
       if (roomBans) {
         roomBans.delete(unbannedUser);
@@ -1097,10 +1288,8 @@ io.on('connection', (socket) => {
         memoryStore.rooms.delete(roomName);
       }
       
-      // Kick all users from room
       io.to(roomName).emit('room_deleted_by_owner', { roomName });
       
-      // Notify all clients
       io.emit('room_deleted', { name: roomName });
       
       console.log(`🗑️ Room deleted: ${roomName} by ${currentUser}`);
@@ -1162,12 +1351,10 @@ io.on('connection', (socket) => {
         return socket.emit('error', { message: '❌ Incorrect password' });
       }
       
-      // Update rank in memory
       if (memoryStore.users.has(targetUser)) {
         const user = memoryStore.users.get(targetUser);
         user.rank = newRank;
         
-        // Update session if online
         for (const [sid, session] of memoryStore.sessions) {
           if (session.username === targetUser) {
             session.rank = newRank;
@@ -1185,6 +1372,37 @@ io.on('connection', (socket) => {
     }
   });
   
+  socket.on('change_theme', (data) => {
+    try {
+      if (!currentUser) return;
+      
+      const { theme, scope } = data;
+      
+      const validThemes = ['default', 'dark', 'light', 'neon', 'midnight', 'sunset', 'forest', 'ocean', 'cyberpunk', 'vintage'];
+      
+      if (!validThemes.includes(theme)) {
+        return socket.emit('error', { message: '❌ Invalid theme' });
+      }
+      
+      if (scope === 'personal') {
+        if (memoryStore.users.has(currentUser)) {
+          const user = memoryStore.users.get(currentUser);
+          user.theme = theme;
+        }
+        socket.emit('theme_applied', { theme, scope: 'personal' });
+      } else if (scope === 'room' && currentRoom) {
+        const room = memoryStore.rooms.get(currentRoom);
+        if (room && (isVip || isAdmin || isOwner)) {
+          room.theme = theme;
+          io.to(currentRoom).emit('theme_applied', { theme, scope: 'room', changedBy: currentUser });
+        }
+      }
+      
+    } catch (err) {
+      console.error('theme change error:', err);
+    }
+  });
+  
   // ========== DISCONNECT ==========
   
   socket.on('disconnect', () => {
@@ -1192,14 +1410,12 @@ io.on('connection', (socket) => {
       if (currentUser && currentRoom) {
         const roomName = currentRoom;
         
-        // Notify room
         io.to(roomName).emit('user_left', {
           username: currentUser,
           rank: userRank,
           members: 0
         });
         
-        // System message
         io.to(roomName).emit('chat message', {
           username: 'System',
           message: `👋 ${currentUser} disconnected`,
@@ -1226,6 +1442,12 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('='.repeat(70));
   console.log(`\n📡 Port: ${PORT}`);
   console.log(`👑 Owner: ${OWNER_USERNAME}`);
+  console.log(`📊 Rank System:`);
+  console.log(`   1. 👑 Owner - Can see ALL private messages`);
+  console.log(`   2. 👮 Admin - Can see messages from rank 2-5`);
+  console.log(`   3. 🛡️ Moderator - Can see messages from rank 3-5`);
+  console.log(`   4. ⭐ VIP - Can see only their own messages`);
+  console.log(`   5. 👤 Member - Can see only their own messages`);
   console.log(`💾 MongoDB: ${isMongoConnected ? 'CONNECTED' : 'DISCONNECTED'}`);
   console.log(`📁 Uploads: ${uploadDir}`);
   console.log(`🌍 URL: http://localhost:${PORT}`);
