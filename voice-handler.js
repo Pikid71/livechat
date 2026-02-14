@@ -1,6 +1,7 @@
 /**
  * Voice Handler for Black Hole Chat V2
  * WebRTC Voice Chat with TURN/STUN servers for reliable connectivity
+ * Includes system messages for join/leave events
  */
 
 class VoiceChatHandler {
@@ -88,6 +89,14 @@ class VoiceChatHandler {
             rtcpMuxPolicy: 'require',
             bundlePolicy: 'max-bundle'
         };
+        
+        // Bind methods to maintain 'this' context
+        this.handleUserJoined = this.handleUserJoined.bind(this);
+        this.handleUserLeft = this.handleUserLeft.bind(this);
+        this.handleVoiceOffer = this.handleVoiceOffer.bind(this);
+        this.handleVoiceAnswer = this.handleVoiceAnswer.bind(this);
+        this.handleIceCandidate = this.handleIceCandidate.bind(this);
+        this.handleVoiceError = this.handleVoiceError.bind(this);
     }
     
     /**
@@ -114,7 +123,7 @@ class VoiceChatHandler {
             console.log('✅ Microphone access granted');
             this.isActive = true;
             
-            // Join voice room
+            // Join voice room - this will trigger system message from server
             this.socket.emit('join_voice', { 
                 roomName: this.roomName,
                 username: this.username 
@@ -128,6 +137,9 @@ class VoiceChatHandler {
             
             // Start monitoring connection quality
             this.startConnectionMonitoring();
+            
+            // Show local notification
+            this.showNotification('🎤 Joined voice chat', 'success');
             
             return true;
             
@@ -167,10 +179,10 @@ class VoiceChatHandler {
         });
         this.audioElements.clear();
         
-        // Leave voice room
+        // Leave voice room - this will trigger system message from server
         this.socket.emit('leave_voice', { 
             roomName: this.roomName,
-            username: this.username
+            username: this.username 
         });
         
         // Remove socket listeners
@@ -181,6 +193,9 @@ class VoiceChatHandler {
         // Update UI
         this.updateUIVoiceStatus(false);
         
+        // Show local notification
+        this.showNotification('🎤 Left voice chat', 'info');
+        
         console.log('✅ Voice chat stopped');
     }
     
@@ -188,24 +203,24 @@ class VoiceChatHandler {
      * Set up socket event listeners for voice signaling
      */
     setupSocketListeners() {
-        this.socket.on('user_joined_voice', this.handleUserJoined.bind(this));
-        this.socket.on('user_left_voice', this.handleUserLeft.bind(this));
-        this.socket.on('voice_offer', this.handleVoiceOffer.bind(this));
-        this.socket.on('voice_answer', this.handleVoiceAnswer.bind(this));
-        this.socket.on('ice_candidate', this.handleIceCandidate.bind(this));
-        this.socket.on('voice_error', this.handleVoiceError.bind(this));
+        this.socket.on('user_joined_voice', this.handleUserJoined);
+        this.socket.on('user_left_voice', this.handleUserLeft);
+        this.socket.on('voice_offer', this.handleVoiceOffer);
+        this.socket.on('voice_answer', this.handleVoiceAnswer);
+        this.socket.on('ice_candidate', this.handleIceCandidate);
+        this.socket.on('voice_error', this.handleVoiceError);
     }
     
     /**
      * Remove socket listeners
      */
     removeSocketListeners() {
-        this.socket.off('user_joined_voice');
-        this.socket.off('user_left_voice');
-        this.socket.off('voice_offer');
-        this.socket.off('voice_answer');
-        this.socket.off('ice_candidate');
-        this.socket.off('voice_error');
+        this.socket.off('user_joined_voice', this.handleUserJoined);
+        this.socket.off('user_left_voice', this.handleUserLeft);
+        this.socket.off('voice_offer', this.handleVoiceOffer);
+        this.socket.off('voice_answer', this.handleVoiceAnswer);
+        this.socket.off('ice_candidate', this.handleIceCandidate);
+        this.socket.off('voice_error', this.handleVoiceError);
     }
     
     /**
@@ -228,6 +243,8 @@ class VoiceChatHandler {
         
         try {
             await this.createPeerConnection(data.userId, true);
+            // Show notification for new user (system message is handled by server)
+            this.showNotification(`🎤 ${data.username} joined voice`, 'info');
         } catch (err) {
             console.error(`Failed to create connection to ${data.userId}:`, err);
         }
@@ -239,7 +256,14 @@ class VoiceChatHandler {
      */
     handleUserLeft(data) {
         console.log(`👋 User left voice: ${data.userId}`);
+        
+        // Get username before closing connection
+        const username = data.username || 'A user';
+        
         this.closePeerConnection(data.userId);
+        
+        // Show notification for user leaving (system message is handled by server)
+        this.showNotification(`🎤 ${username} left voice`, 'info');
     }
     
     /**
@@ -352,7 +376,7 @@ class VoiceChatHandler {
             switch(pc.connectionState) {
                 case 'connected':
                 case 'completed':
-                    this.showNotification(`✅ Voice connected`, 'success');
+                    this.showNotification(`✅ Voice connected to peer`, 'success');
                     break;
                 case 'disconnected':
                 case 'failed':
@@ -581,7 +605,7 @@ class VoiceChatHandler {
     /**
      * Show notification
      * @param {string} message - Message to show
-     * @param {string} type - Notification type
+     * @param {string} type - Notification type (info, success, warning, error)
      */
     showNotification(message, type = 'info') {
         // Dispatch custom event for UI
@@ -668,6 +692,22 @@ class VoiceChatHandler {
             return Math.min(100, Math.round(average));
         } catch (err) {
             return 0;
+        }
+    }
+    
+    /**
+     * Get connection quality rating
+     * @returns {string} Quality rating (excellent, good, fair, poor)
+     */
+    getConnectionQuality() {
+        if (this.stats.packetsLost > 200 || this.stats.jitter > 0.2) {
+            return 'poor';
+        } else if (this.stats.packetsLost > 100 || this.stats.jitter > 0.1) {
+            return 'fair';
+        } else if (this.stats.packetsLost > 50 || this.stats.jitter > 0.05) {
+            return 'good';
+        } else {
+            return 'excellent';
         }
     }
     

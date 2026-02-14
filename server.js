@@ -24,7 +24,7 @@ const io = new Server(server, {
 // 🔐 ENVIRONMENT VARIABLES
 // ============================================
 let MONGODB_URI = process.env.MONGODB_URI;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'A@sh1shlivechat';
 const PORT = process.env.PORT || 3000;
 const OWNER_USERNAME = 'Pi_Kid71';
 const NODE_ENV = process.env.NODE_ENV || 'development';
@@ -1489,7 +1489,7 @@ io.on('connection', (socket) => {
       
       const { effect } = data;
       
-      const validEffects = ['glitch', 'flashbang', 'black', 'hack', 'matrix', 'rainbow', 'neon', 'firework', 'confetti'];
+      const validEffects = ['glitch', 'flashbang', 'black', 'hack', 'matrix', 'rainbow', 'neon', 'firework', 'confetti', 'gameroom'];
       
       if (!validEffects.includes(effect)) {
         return socket.emit('error', { message: '❌ Invalid effect' });
@@ -1560,7 +1560,6 @@ io.on('connection', (socket) => {
       
       const permissions = PERMISSIONS[userRank] || PERMISSIONS.member;
       const isVip = permissions.canUpload;
-      const isAdmin = userRank === 'admin' || userRank === 'owner';
       
       const { theme, scope } = data;
       
@@ -1627,7 +1626,7 @@ io.on('connection', (socket) => {
 // 💾 MESSAGE BACKUP TO MONGODB (EVERY 10 SECONDS)
 // ============================================
 setInterval(async () => {
-  if (!isMongoConnected || !Message || memoryStore.privateMessages.length === 0) {
+  if (!isMongoConnected || !PrivateMessage) {
     return;
   }
   
@@ -1637,41 +1636,27 @@ setInterval(async () => {
       
       for (const msg of messagesToBackup) {
         try {
-          await PrivateMessage.findByIdAndUpdate(
-            msg._id,
-            msg,
-            { upsert: true, new: true }
-          );
+          const pm = new PrivateMessage({
+            from: msg.from,
+            fromRank: msg.fromRank,
+            to: msg.to,
+            toRank: msg.toRank,
+            message: msg.message,
+            timestamp: new Date(),
+            visibleTo: [msg.from, msg.to]
+          });
+          await pm.save();
         } catch (err) {
           // Ignore individual message backup errors
         }
       }
     }
     
-    for (const [roomName, room] of memoryStore.rooms) {
-      if (room.messages && room.messages.length > 0) {
-        for (const msg of room.messages) {
-          try {
-            await Message.create({
-              roomName,
-              username: msg.username,
-              message: msg.message,
-              timestamp: new Date(),
-              isSystem: msg.rank === 'system',
-              senderRank: msg.rank,
-              fileUrl: msg.fileUrl,
-              fileName: msg.fileName,
-              fileType: msg.fileType,
-              fileSize: msg.fileSize
-            });
-          } catch (err) {
-            // Ignore individual message backup errors
-          }
-        }
-      }
+    // Clear backed up messages to avoid duplicates
+    if (memoryStore.privateMessages.length > 100) {
+      memoryStore.privateMessages = memoryStore.privateMessages.slice(-100);
     }
     
-    console.log('💾 Messages backed up to MongoDB');
   } catch (err) {
     console.error('❌ Message backup error:', err.message);
   }
