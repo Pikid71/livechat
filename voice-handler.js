@@ -169,7 +169,8 @@ class VoiceChatHandler {
         
         // Leave voice room
         this.socket.emit('leave_voice', { 
-            roomName: this.roomName 
+            roomName: this.roomName,
+            username: this.username
         });
         
         // Remove socket listeners
@@ -648,22 +649,26 @@ class VoiceChatHandler {
     getAudioLevel() {
         if (!this.localStream) return 0;
         
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const source = audioContext.createMediaStreamSource(this.localStream);
-        const analyser = audioContext.createAnalyser();
-        analyser.fftSize = 256;
-        source.connect(analyser);
-        
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-        analyser.getByteFrequencyData(dataArray);
-        
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-            sum += dataArray[i];
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const source = audioContext.createMediaStreamSource(this.localStream);
+            const analyser = audioContext.createAnalyser();
+            analyser.fftSize = 256;
+            source.connect(analyser);
+            
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+            analyser.getByteFrequencyData(dataArray);
+            
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+                sum += dataArray[i];
+            }
+            const average = sum / dataArray.length;
+            
+            return Math.min(100, Math.round(average));
+        } catch (err) {
+            return 0;
         }
-        const average = sum / dataArray.length;
-        
-        return Math.min(100, Math.round(average));
     }
     
     /**
