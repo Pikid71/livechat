@@ -204,6 +204,36 @@
             100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
         }
 
+        /* ========== NOTIFICATION BUTTON ========== */
+        .notification-btn {
+            background: rgba(255, 215, 0, 0.2);
+            border: 2px solid gold;
+            padding: 8px 16px;
+            border-radius: 30px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        
+        .notification-btn:hover {
+            background: gold;
+            color: black;
+            transform: translateY(-2px);
+        }
+        
+        .notification-btn.enabled {
+            background: rgba(46, 204, 113, 0.2);
+            border-color: #2ecc71;
+        }
+        
+        .notification-btn.enabled:hover {
+            background: #2ecc71;
+            color: white;
+        }
+
         /* ========== RANK BADGES ========== */
         .rank-owner {
             background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
@@ -292,6 +322,60 @@
             font-size: 9px;
             margin-left: 5px;
         }
+
+        /* ========== HELP MENU STYLES - FIXED ========== */
+        .help-menu {
+            background: rgba(20, 20, 40, 0.95);
+            border: 2px solid #667eea;
+            border-radius: 16px;
+            padding: 20px;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+            line-height: 1.8;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        
+        .help-section {
+            margin: 15px 0;
+            padding: 10px;
+            border-left: 3px solid #667eea;
+            background: rgba(102, 126, 234, 0.1);
+        }
+        
+        .help-title {
+            color: #ffd700;
+            font-weight: bold;
+            font-size: 16px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .help-command {
+            color: #4ade80;
+            font-weight: bold;
+        }
+        
+        .help-desc {
+            color: #ccc;
+            margin-left: 20px;
+            font-size: 13px;
+        }
+        
+        .help-rank {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            margin-right: 5px;
+        }
+        
+        .help-rank.owner { background: gold; color: black; }
+        .help-rank.admin { background: #ff4444; color: white; }
+        .help-rank.mod { background: #ff9933; color: white; }
+        .help-rank.vip { background: #9933ff; color: white; }
+        .help-rank.member { background: #667eea; color: white; }
 
         /* ========== CHAT CONTAINER ========== */
         #chat-container { 
@@ -812,6 +896,7 @@
             .action-btn { padding: 12px; }
             .input-row { gap: 6px; }
             #messageInput { font-size: 14px; }
+            .help-section { padding: 5px; }
         }
 
         /* ========== ANIMATIONS ========== */
@@ -876,7 +961,11 @@
         <div id="auth-screen" style="display: flex; flex-direction: column; height: 100%;">
             <div class="header">
                 <h1>🕳️ BLACK HOLE V2</h1>
-                <div style="font-size: 14px; opacity: 0.9;">⚡ ENTER THE VOID</div>
+                <div style="display: flex; gap: 10px;">
+                    <button id="notificationPermissionBtn" onclick="requestNotificationPermission()" class="notification-btn">
+                        <span>🔔</span> <span>Enable Notifications</span>
+                    </button>
+                </div>
             </div>
             
             <div style="flex: 1; display: flex; justify-content: center; align-items: center; padding: 20px; background: rgba(15,15,15,0.95);">
@@ -1216,6 +1305,10 @@
         let privateMessages = [];
         let onlineUsers = [];
         
+        // Browser notifications
+        let notificationsEnabled = false;
+        let notificationPermission = false;
+        
         // UI Elements
         const msgContainer = document.getElementById('messages');
         const input = document.getElementById('messageInput');
@@ -1247,6 +1340,74 @@
             const viewerLevel = getRankLevel(viewerRank);
             // Higher ranks (lower numbers) can see messages from lower ranks
             return viewerLevel <= senderLevel;
+        }
+        
+        // ========== BROWSER NOTIFICATIONS ==========
+        
+        // Check if browser supports notifications
+        function checkNotificationSupport() {
+            if (!("Notification" in window)) {
+                console.log("This browser does not support desktop notification");
+                return false;
+            }
+            return true;
+        }
+        
+        // Request notification permission
+        function requestNotificationPermission() {
+            if (!checkNotificationSupport()) {
+                showToast("❌ Your browser doesn't support notifications");
+                return;
+            }
+            
+            Notification.requestPermission().then(permission => {
+                notificationPermission = permission === 'granted';
+                const btn = document.getElementById('notificationPermissionBtn');
+                
+                if (notificationPermission) {
+                    notificationsEnabled = true;
+                    btn.classList.add('enabled');
+                    btn.innerHTML = '<span>🔔</span> <span>Notifications Enabled</span>';
+                    showToast("✅ Notifications enabled!");
+                    
+                    // Send a test notification
+                    sendNotification('✅ Notifications Enabled', 'You will now receive notifications for new messages');
+                } else {
+                    notificationsEnabled = false;
+                    btn.classList.remove('enabled');
+                    btn.innerHTML = '<span>🔕</span> <span>Enable Notifications</span>';
+                    showToast("❌ Notifications blocked");
+                }
+            });
+        }
+        
+        // Send browser notification
+        function sendNotification(title, body, icon = '🕳️') {
+            if (!notificationPermission || document.hidden === false) {
+                // Don't send notification if tab is active
+                return;
+            }
+            
+            try {
+                const notification = new Notification(title, {
+                    body: body,
+                    icon: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="#667eea" opacity="0.3"/><text x="50" y="70" font-size="50" text-anchor="middle" fill="white">🕳️</text></svg>'),
+                    badge: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="#667eea" opacity="0.3"/><text x="50" y="70" font-size="50" text-anchor="middle" fill="white">💬</text></svg>'),
+                    tag: 'chat-message',
+                    renotify: true,
+                    silent: false
+                });
+                
+                notification.onclick = function() {
+                    window.focus();
+                    this.close();
+                };
+                
+                setTimeout(() => notification.close(), 5000);
+                
+            } catch (err) {
+                console.error('Notification error:', err);
+            }
         }
         
         // ========== EMOJIS ==========
@@ -1391,13 +1552,16 @@
                     });
                     this.isActive = true;
                     
-                    this.socket.emit('join_voice', { roomName: this.roomName });
+                    this.socket.emit('join_voice', { 
+                        roomName: this.roomName,
+                        username: this.username 
+                    });
                     
                     this.socket.on('user_joined_voice', (data) => this.handleUserJoined(data));
+                    this.socket.on('user_left_voice', (data) => this.handleUserLeft(data));
                     this.socket.on('voice_offer', (data) => this.handleVoiceOffer(data));
                     this.socket.on('voice_answer', (data) => this.handleVoiceAnswer(data));
                     this.socket.on('ice_candidate', (data) => this.handleIceCandidate(data));
-                    this.socket.on('user_left_voice', (data) => this.handleUserLeft(data));
                     
                     document.getElementById('voice-indicator').style.display = 'flex';
                     document.getElementById('voiceBtnText').textContent = 'LEAVE VOICE';
@@ -1427,10 +1591,10 @@
                 
                 this.socket.emit('leave_voice', { roomName: this.roomName });
                 this.socket.off('user_joined_voice');
+                this.socket.off('user_left_voice');
                 this.socket.off('voice_offer');
                 this.socket.off('voice_answer');
                 this.socket.off('ice_candidate');
-                this.socket.off('user_left_voice');
                 
                 document.getElementById('voice-indicator').style.display = 'none';
                 document.getElementById('voiceBtnText').textContent = 'JOIN VOICE';
@@ -1440,10 +1604,12 @@
             }
             
             handleUserJoined(data) {
+                addSystemMessage(`🎤 ${data.username} joined voice chat`);
                 this.createPeerConnection(data.userId);
             }
             
             handleUserLeft(data) {
+                addSystemMessage(`🎤 ${data.username || 'A user'} left voice chat`);
                 if (this.peerConnections[data.userId]) {
                     this.peerConnections[data.userId].close();
                     delete this.peerConnections[data.userId];
@@ -1934,7 +2100,6 @@
             if (data.messages && data.messages.length > 0) {
                 data.messages.forEach(msg => {
                     if (msg.isPrivate) {
-                        // Check if current user should see this private message
                         const shouldShow = canSeePrivateMessage(msg.senderRank || 'member', currentRank);
                         if (shouldShow || msg.username === currentUsername || msg.recipient === currentUsername) {
                             addPrivateMessage(msg.username, msg.message, msg.recipient, msg.username === currentUsername);
@@ -1956,7 +2121,9 @@
             document.getElementById('members-count').textContent = data.members;
             addSystemMessage(`👋 ${data.username} (${data.rank || 'member'}) joined`);
             
-            // Update online users list
+            // Send notification
+            sendNotification('👋 User Joined', `${data.username} joined the room`);
+            
             updateOnlineUsers();
         });
         
@@ -1966,7 +2133,6 @@
                 addSystemMessage(`👋 ${data.username} left`);
             }
             
-            // Update online users list
             updateOnlineUsers();
         });
         
@@ -1977,6 +2143,11 @@
                 addFileMessage(data.username, data.fileUrl, data.fileName, data.fileType, data.fileSize);
             } else {
                 addMessage(data.username, data.message, data.rank);
+            }
+            
+            // Send notification for new messages (if not from self)
+            if (data.username !== currentUsername && currentRoom) {
+                sendNotification(`💬 New message in ${currentRoom}`, `${data.username}: ${data.message.substring(0, 50)}${data.message.length > 50 ? '...' : ''}`);
             }
         });
         
@@ -2122,6 +2293,108 @@
             }
         }
         
+        // ========== FIXED HELP COMMAND ==========
+        
+        function showHelp() {
+            const helpDiv = document.createElement('div');
+            helpDiv.className = 'msg system help-menu';
+            
+            const rankLevel = getRankLevel(currentRank);
+            
+            helpDiv.innerHTML = `
+                <div style="text-align: center; margin-bottom: 15px;">
+                    <span style="font-size: 20px;">🕳️</span>
+                    <span style="font-weight: bold; font-size: 18px; color: gold;"> BLACK HOLE CHAT V2</span>
+                    <span style="font-size: 20px;">🕳️</span>
+                </div>
+                
+                <div class="help-section">
+                    <div class="help-title">📋 YOUR RANK</div>
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
+                        ${getRankBadge(currentRank)}
+                        <span style="color: #4ade80;">Level ${rankLevel}/5</span>
+                    </div>
+                </div>
+                
+                <div class="help-section">
+                    <div class="help-title">💬 EVERYONE</div>
+                    <div><span class="help-command">/help</span> <span class="help-desc">- Show this help menu</span></div>
+                    <div><span class="help-command">/users</span> <span class="help-desc">- List users in current room</span></div>
+                    <div><span class="help-command">/msg &lt;user&gt; &lt;text&gt;</span> <span class="help-desc">- Send private message</span></div>
+                    <div><span class="help-command">/flip</span> <span class="help-desc">- Flip a coin (heads/tails)</span></div>
+                    <div><span class="help-command">/roll &lt;min&gt; &lt;max&gt;</span> <span class="help-desc">- Roll a random number</span></div>
+                    <div><span class="help-command">/ping</span> <span class="help-desc">- Check connection latency</span></div>
+                </div>
+                
+                <div class="help-section">
+                    <div class="help-title">📊 RANK SYSTEM</div>
+                    <div><span class="help-rank owner">OWNER</span> <span class="help-desc">- Can see ALL private messages</span></div>
+                    <div><span class="help-rank admin">ADMIN</span> <span class="help-desc">- Can see messages from rank 2-5</span></div>
+                    <div><span class="help-rank mod">MOD</span> <span class="help-desc">- Can see messages from rank 3-5</span></div>
+                    <div><span class="help-rank vip">VIP</span> <span class="help-desc">- Can see only their own messages</span></div>
+                    <div><span class="help-rank member">MEMBER</span> <span class="help-desc">- Can see only their own messages</span></div>
+                </div>
+                
+                ${isVip ? `
+                <div class="help-section">
+                    <div class="help-title">⭐ VIP+ COMMANDS</div>
+                    <div><span class="help-command">/theme &lt;name&gt;</span> <span class="help-desc">- Change theme (dark, neon, ocean, etc)</span></div>
+                </div>
+                ` : ''}
+                
+                ${isModerator ? `
+                <div class="help-section">
+                    <div class="help-title">🛡️ MODERATOR+ COMMANDS</div>
+                    <div><span class="help-command">/clear</span> <span class="help-desc">- Clear all messages in room</span></div>
+                    <div><span class="help-command">/ban &lt;user&gt; [duration]</span> <span class="help-desc">- Ban user (10m, 1h, 1d)</span></div>
+                </div>
+                ` : ''}
+                
+                ${isAdmin ? `
+                <div class="help-section">
+                    <div class="help-title">👮 ADMIN+ COMMANDS</div>
+                    <div><span class="help-command">/unban &lt;user&gt;</span> <span class="help-desc">- Unban user</span></div>
+                    <div><span class="help-command">/delete &lt;room&gt;</span> <span class="help-desc">- Delete any room</span></div>
+                    <div><span class="help-command">/grant &lt;user&gt; &lt;rank&gt;</span> <span class="help-desc">- Grant mod/vip/member</span></div>
+                </div>
+                ` : ''}
+                
+                ${isOwner ? `
+                <div class="help-section">
+                    <div class="help-title">👑 OWNER COMMANDS</div>
+                    <div><span class="help-command">/grant &lt;user&gt; admin</span> <span class="help-desc">- Grant admin rank</span></div>
+                </div>
+                ` : ''}
+                
+                ${isAdmin || isOwner ? `
+                <div class="help-section">
+                    <div class="help-title">🎮 EFFECT COMMANDS (ADMIN+)</div>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px;">
+                        <div><span class="help-command">/effect glitch</span> <span class="help-desc">- Glitch</span></div>
+                        <div><span class="help-command">/effect flashbang</span> <span class="help-desc">- Flash</span></div>
+                        <div><span class="help-command">/effect black</span> <span class="help-desc">- Blackout</span></div>
+                        <div><span class="help-command">/effect hack</span> <span class="help-desc">- Hacker</span></div>
+                        <div><span class="help-command">/effect matrix</span> <span class="help-desc">- Matrix</span></div>
+                        <div><span class="help-command">/effect rainbow</span> <span class="help-desc">- Rainbow</span></div>
+                        <div><span class="help-command">/effect neon</span> <span class="help-desc">- Neon</span></div>
+                        <div><span class="help-command">/effect firework</span> <span class="help-desc">- Fireworks</span></div>
+                        <div><span class="help-command">/effect confetti</span> <span class="help-desc">- Confetti</span></div>
+                    </div>
+                </div>
+                ` : ''}
+                
+                <div style="text-align: center; margin-top: 15px; color: #888; font-size: 11px;">
+                    🔔 Click the notification button to enable browser notifications
+                </div>
+            `;
+            
+            const wrapper = document.createElement('div');
+            wrapper.className = 'msg-wrapper';
+            wrapper.appendChild(helpDiv);
+            msgContainer.appendChild(wrapper);
+            msgContainer.scrollTop = msgContainer.scrollHeight;
+        }
+        
         // ========== PRIVATE MESSAGES ==========
         
         function showPrivateMessages() {
@@ -2136,7 +2409,6 @@
             
             select.innerHTML = '<option value="">Select user...</option>';
             
-            // Get users in current room
             socket.emit('get_room_users', { roomName: currentRoom });
         }
         
@@ -2152,7 +2424,39 @@
                     select.appendChild(option);
                 });
             }
+            
+            // Update user list modal if open
+            updateUserListModal(data.users);
         });
+        
+        function updateUserListModal(users) {
+            const content = document.getElementById('userListContent');
+            if (!content) return;
+            
+            let html = '';
+            users.forEach(user => {
+                const userLevel = getRankLevel(user.rank);
+                const currentUserLevel = getRankLevel(currentRank);
+                
+                html += `
+                    <div class="user-list-item">
+                        <div class="user-info-modal">
+                            <span>${user.username}</span>
+                            ${getRankBadge(user.rank)}
+                            <span style="font-size: 10px; color: #888;">Lv${userLevel}</span>
+                        </div>
+                        <div class="user-actions">
+                            ${(isModerator && userLevel > currentUserLevel) ? `
+                                <button class="action-btn danger" style="padding: 4px 8px; font-size: 12px;" onclick="quickBan('${user.username}')">⛔</button>
+                            ` : ''}
+                            <button class="action-btn" style="padding: 4px 8px; font-size: 12px;" onclick="quickMsg('${user.username}')">💌</button>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            content.innerHTML = html || '<div style="text-align: center; color: #888; padding: 20px;">No users in room</div>';
+        }
         
         function sendPrivateMessage() {
             const recipient = document.getElementById('pmRecipient').value.trim() || 
@@ -2178,10 +2482,8 @@
             
             document.getElementById('pmMessage').value = '';
             
-            // Show on sender's screen immediately
             addPrivateMessage(currentUsername, message, recipient, true);
             
-            // Add to private messages list
             addToPrivateMessagesList(currentUsername, message, recipient, true);
         }
         
@@ -2228,16 +2530,14 @@
         socket.on('private_message', (data) => {
             const { from, fromRank, message, to, adminView } = data;
             
-            // Check if current user should see this message
             let shouldShow = false;
             let isAdminView = false;
             
             if (from === currentUsername) {
-                shouldShow = true; // Sender sees own messages
+                shouldShow = true;
             } else if (to === currentUsername) {
-                shouldShow = true; // Recipient sees messages to them
+                shouldShow = true;
             } else {
-                // Check rank-based visibility
                 const viewerLevel = getRankLevel(currentRank);
                 const senderLevel = getRankLevel(fromRank);
                 
@@ -2249,17 +2549,16 @@
             
             if (!shouldShow) return;
             
-            // Add to chat
             addPrivateMessage(from, message, to, from === currentUsername, isAdminView);
             
-            // Add to private messages list
             addToPrivateMessagesList(from, message, to, from === currentUsername, isAdminView);
             
-            // Show notification
+            // Send notification for private messages
             if (to === currentUsername) {
-                showToast(`💌 New private message from ${from}`);
+                sendNotification('💌 Private Message', `${from}: ${message.substring(0, 50)}${message.length > 50 ? '...' : ''}`);
+                showToast(`💌 New message from ${from}`);
             } else if (isAdminView) {
-                showToast(`🔍 ${from} → ${to}`);
+                sendNotification('👀 Admin View', `${from} → ${to}: ${message.substring(0, 50)}${message.length > 50 ? '...' : ''}`);
             }
         });
         
@@ -2268,13 +2567,11 @@
         });
         
         function loadPrivateMessageHistory() {
-            // Clear and show loading
             const pmList = document.getElementById('privateMessagesList');
             if (pmList) {
                 pmList.innerHTML = '<div style="text-align: center; color: #888; padding: 20px;">Loading messages...</div>';
             }
             
-            // Request history from server
             socket.emit('get_private_history');
         }
         
@@ -2356,62 +2653,6 @@
             }
         }
         
-        function showHelp() {
-            let helpText = `🔹 **BLACK HOLE CHAT V2 COMMANDS** 🔹\n\n`;
-            helpText += `💬 **Everyone:**\n`;
-            helpText += `  /help - Show this help\n`;
-            helpText += `  /users - List users in room\n`;
-            helpText += `  /msg <user> <text> - Send private message\n`;
-            helpText += `  /flip - Flip a coin\n`;
-            helpText += `  /roll <min> <max> - Roll random number\n`;
-            helpText += `  /ping - Check connection\n\n`;
-            
-            helpText += `📊 **Rank System:**\n`;
-            helpText += `  1. 👑 Owner - Can see ALL private messages\n`;
-            helpText += `  2. 👮 Admin - Can see messages from rank 2-5\n`;
-            helpText += `  3. 🛡️ Moderator - Can see messages from rank 3-5\n`;
-            helpText += `  4. ⭐ VIP - Can see only their own messages\n`;
-            helpText += `  5. 👤 Member - Can see only their own messages\n\n`;
-            
-            if (isVip) {
-                helpText += `⭐ **VIP+ Commands:**\n`;
-                helpText += `  /theme <name> - Change theme (dark, neon, ocean, etc)\n\n`;
-            }
-            
-            if (isModerator) {
-                helpText += `🛡️ **Moderator+ Commands:**\n`;
-                helpText += `  /clear - Clear all messages\n`;
-                helpText += `  /ban <user> [duration] - Ban user (10m, 1h, 1d)\n\n`;
-            }
-            
-            if (isAdmin) {
-                helpText += `👮 **Admin+ Commands:**\n`;
-                helpText += `  /unban <user> - Unban user\n`;
-                helpText += `  /delete <room> - Delete any room\n`;
-                helpText += `  /grant <user> <rank> - Grant mod/vip/member\n\n`;
-            }
-            
-            if (isOwner) {
-                helpText += `👑 **Owner Commands:**\n`;
-                helpText += `  /grant <user> admin - Grant admin rank\n\n`;
-            }
-            
-            if (isAdmin || isOwner) {
-                helpText += `🎮 **Effect Commands (Admin+):**\n`;
-                helpText += `  /effect glitch - Glitch effect\n`;
-                helpText += `  /effect flashbang - Flash effect\n`;
-                helpText += `  /effect black - Black screen\n`;
-                helpText += `  /effect hack - Hacker mode\n`;
-                helpText += `  /effect matrix - Matrix code rain\n`;
-                helpText += `  /effect rainbow - Rainbow mode\n`;
-                helpText += `  /effect neon - Neon pulse\n`;
-                helpText += `  /effect firework - Fireworks\n`;
-                helpText += `  /effect confetti - Confetti\n`;
-            }
-            
-            addSystemMessage(helpText);
-        }
-        
         function handleUsersCommand() {
             if (!currentRoom) {
                 addSystemMessage('❌ Not in a room');
@@ -2429,7 +2670,6 @@
             const recipient = args[0];
             const message = args.slice(1).join(' ');
             
-            // Check if recipient exists in room
             const recipientExists = onlineUsers.some(u => u.username === recipient);
             if (!recipientExists) {
                 addSystemMessage(`❌ User '${recipient}' not found in room`);
@@ -2520,7 +2760,6 @@
             
             const targetUser = args[0];
             
-            // Check if trying to ban higher rank
             const targetRank = onlineUsers.find(u => u.username === targetUser)?.rank || 'member';
             const targetLevel = getRankLevel(targetRank);
             const userLevel = getRankLevel(currentRank);
@@ -2670,8 +2909,7 @@
         }
         
         function handleRankCommand() {
-            addSystemMessage(`Your rank: ${currentRank.toUpperCase()}`);
-            addSystemMessage(`Your level: ${getRankLevel(currentRank)} (1=Owner, 5=Member)`);
+            addSystemMessage(`Your rank: ${currentRank.toUpperCase()} (Level ${getRankLevel(currentRank)}/5)`);
         }
         
         function handlePingCommand() {
@@ -2728,6 +2966,10 @@
                         setTimeout(() => createConfetti(), i * 10);
                     }
                     break;
+                case 'gameroom':
+                    document.body.classList.add('gameroom');
+                    setTimeout(() => document.body.classList.remove('gameroom'), 10000);
+                    break;
             }
         });
         
@@ -2777,40 +3019,8 @@
         
         function showUserList() {
             showModal('userListModal');
-            document.getElementById('userListContent').innerHTML = '<div style="text-align: center; color: #888; padding: 20px;">Loading users...</div>';
             socket.emit('get_room_users', { roomName: currentRoom });
         }
-        
-        socket.on('room_users', (data) => {
-            const content = document.getElementById('userListContent');
-            if (!content) return;
-            
-            onlineUsers = data.users.filter(u => u.username !== currentUsername);
-            
-            let html = '';
-            data.users.forEach(user => {
-                const userLevel = getRankLevel(user.rank);
-                const currentUserLevel = getRankLevel(currentRank);
-                
-                html += `
-                    <div class="user-list-item">
-                        <div class="user-info-modal">
-                            <span>${user.username}</span>
-                            ${getRankBadge(user.rank)}
-                            <span style="font-size: 10px; color: #888;">Lv${userLevel}</span>
-                        </div>
-                        <div class="user-actions">
-                            ${(isModerator && userLevel > currentUserLevel) ? `
-                                <button class="action-btn danger" style="padding: 4px 8px; font-size: 12px;" onclick="quickBan('${user.username}')">⛔</button>
-                            ` : ''}
-                            <button class="action-btn" style="padding: 4px 8px; font-size: 12px;" onclick="quickMsg('${user.username}')">💌</button>
-                        </div>
-                    </div>
-                `;
-            });
-            
-            content.innerHTML = html || '<div style="text-align: center; color: #888; padding: 20px;">No users in room</div>';
-        });
         
         function quickBan(username) {
             if (username === currentUsername) {
@@ -2940,6 +3150,7 @@
         socket.on('system_notification', (data) => {
             addSystemMessage(data.message);
             showToast(data.message);
+            sendNotification('System', data.message);
         });
         
         socket.on('ping', (cb) => {
@@ -2977,7 +3188,6 @@
             if (e.key === 'Enter') handleRegister(); 
         });
         
-        // PM recipient select change
         document.getElementById('pmRecipientSelect')?.addEventListener('change', (e) => {
             document.getElementById('pmRecipient').value = e.target.value;
         });
@@ -3025,6 +3235,17 @@
                 socket.emit('join_room', { roomName: currentRoom, password: '' });
             }
         });
+        
+        // Check notification support on load
+        if (checkNotificationSupport() && Notification.permission === 'granted') {
+            notificationPermission = true;
+            notificationsEnabled = true;
+            const btn = document.getElementById('notificationPermissionBtn');
+            if (btn) {
+                btn.classList.add('enabled');
+                btn.innerHTML = '<span>🔔</span> <span>Notifications Enabled</span>';
+            }
+        }
     </script>
 </body>
 </html>
