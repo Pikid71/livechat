@@ -68,9 +68,3 @@ services:
     logging:
       format: json
       level: info
-
-# Optional: MongoDB instance (if you want Render to host MongoDB)
-# databases:
-#   - name: blackhole-chat-db
-#     plan: free
-#     type: mongodb

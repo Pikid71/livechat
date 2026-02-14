@@ -23,10 +23,22 @@ const io = new Server(server, {
 // ============================================
 // 🔐 ENVIRONMENT VARIABLES
 // ============================================
-const MONGODB_URI = process.env.MONGODB_URI;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'A@sh1shlivechat';
+let MONGODB_URI = process.env.MONGODB_URI;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const PORT = process.env.PORT || 3000;
 const OWNER_USERNAME = 'Pi_Kid71';
+const NODE_ENV = process.env.NODE_ENV || 'development';
+
+// Fix MongoDB URI with special characters
+if (MONGODB_URI) {
+  try {
+    // Decode the URI properly - %40 should become @
+    MONGODB_URI = decodeURIComponent(MONGODB_URI);
+    console.log(`📡 MongoDB URI: ${MONGODB_URI.replace(/\/\/[^:]+:[^@]+@/, '//***:***@')}`);
+  } catch (e) {
+    console.error('Error decoding MongoDB URI:', e.message);
+  }
+}
 
 console.log('\n' + '='.repeat(70));
 console.log('🚀 BLACK HOLE CHAT V2 - SERVER STARTING');
@@ -34,6 +46,7 @@ console.log('='.repeat(70));
 console.log(`📡 Port: ${PORT}`);
 console.log(`👑 Owner: ${OWNER_USERNAME}`);
 console.log(`🔑 Admin Password: ${ADMIN_PASSWORD ? '****' : 'default'}`);
+console.log(`🌍 Environment: ${NODE_ENV}`);
 console.log('='.repeat(70) + '\n');
 
 // ============================================
@@ -116,6 +129,7 @@ async function connectToMongoDB() {
 
   try {
     console.log('🔌 Attempting to connect to MongoDB...');
+    
     await mongoose.connect(MONGODB_URI, mongooseOptions);
     
     isMongoConnected = true;
@@ -127,6 +141,8 @@ async function connectToMongoDB() {
     return true;
   } catch (err) {
     console.error('❌❌❌ MONGODB CONNECTION FAILED:', err.message);
+    console.error('   Make sure your IP is whitelisted in MongoDB Atlas');
+    console.error('   Network Access → Add IP Address → Add Current IP');
     console.log('⚠️ Server will run in MEMORY-ONLY mode');
     return false;
   }
@@ -202,7 +218,7 @@ function initializeModels() {
       message: { type: String, required: true },
       timestamp: { type: Date, default: Date.now },
       read: { type: Boolean, default: false },
-      visibleTo: [{ type: String }] // Array of usernames who can see this message
+      visibleTo: [{ type: String }]
     });
 
     const FileModelSchema = new mongoose.Schema({
@@ -293,18 +309,24 @@ app.post('/upload', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    console.log(`📤 File upload: ${req.file.originalname} (${req.file.size} bytes)`);
+    const uploadedBy = req.body.username || 'anonymous';
+    const isOwner = uploadedBy === OWNER_USERNAME;
+    
+    console.log(`📤 File upload: ${req.file.originalname} (${req.file.size} bytes) by ${uploadedBy}${isOwner ? ' 👑' : ''}`);
 
     let finalPath = req.file.path;
     let fileSize = req.file.size;
     let fileType = req.file.mimetype;
 
-    if (req.file.mimetype.startsWith('image/')) {
+    // Only optimize images for non-owner users
+    if (req.file.mimetype.startsWith('image/') && !isOwner) {
       try {
         const optimizedPath = path.join(uploadDir, 'opt-' + req.file.filename);
+        
+        // Moderate compression for regular users
         await sharp(req.file.path)
           .resize(1920, 1080, { fit: 'inside', withoutEnlargement: true })
-          .jpeg({ quality: 85, progressive: true })
+          .jpeg({ quality: 75, progressive: true })
           .toFile(optimizedPath);
         
         await fs.unlink(req.file.path).catch(() => {});
@@ -312,10 +334,12 @@ app.post('/upload', upload.single('file'), async (req, res) => {
         const stats = await fs.stat(optimizedPath);
         fileSize = stats.size;
         fileType = 'image/jpeg';
-        console.log(`🖼️ Image optimized: ${fileSize} bytes`);
+        console.log(`🖼️ Image optimized for regular user: ${fileSize} bytes (${Math.round((1 - fileSize/req.file.size)*100)}% smaller)`);
       } catch (imgErr) {
         console.error('Image optimization error:', imgErr.message);
       }
+    } else if (req.file.mimetype.startsWith('image/') && isOwner) {
+      console.log(`👑 Owner uploaded image - keeping original quality`);
     }
 
     const fileUrl = `/uploads/${path.basename(finalPath)}`;
@@ -325,7 +349,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
         await FileModel.create({
           filename: path.basename(finalPath),
           originalName: req.file.originalname,
-          uploadedBy: req.body.username || 'anonymous',
+          uploadedBy: uploadedBy,
           fileSize: fileSize,
           fileType: fileType,
           roomName: req.body.roomName || null,
@@ -426,8 +450,8 @@ const memoryStore = {
   }]]),
   sessions: new Map(),
   bans: new Map(),
-  mutes: new Map(), // Map of { username: { roomName, expiresAt } }
-  privateMessages: [] // Store private messages for history
+  mutes: new Map(),
+  privateMessages: []
 };
 
 // ============================================
@@ -449,7 +473,6 @@ function getRankLevel(rank) {
 function canUserSeePrivateMessage(userRank, senderRank) {
   const userLevel = getRankLevel(userRank);
   const senderLevel = getRankLevel(senderRank);
-  // Higher ranks (lower numbers) can see messages from lower ranks
   return userLevel <= senderLevel;
 }
 
@@ -460,7 +483,6 @@ function isUserMuted(username, roomName) {
     if (Date.now() < mute.expiresAt) {
       return true;
     } else {
-      // Mute expired, remove it
       memoryStore.mutes.delete(muteKey);
       return false;
     }
@@ -470,7 +492,7 @@ function isUserMuted(username, roomName) {
 
 function parseDuration(durationStr) {
   const match = durationStr.match(/^(\d+)([mhd])$/);
-  if (!match) return 10 * 60 * 1000; // Default 10 minutes
+  if (!match) return 10 * 60 * 1000;
   
   const amount = parseInt(match[1]);
   const unit = match[2];
@@ -496,7 +518,7 @@ const PERMISSIONS = {
     canUpload: true, 
     canVoice: true, 
     canSeePrivate: true,
-    canSeeAllPrivate: true // Owner sees ALL private messages
+    canSeeAllPrivate: true
   },
   admin: { 
     level: 2, 
@@ -510,7 +532,7 @@ const PERMISSIONS = {
     canUpload: true, 
     canVoice: true, 
     canSeePrivate: true,
-    canSeeAllPrivate: false // Admin sees messages from rank 2-5
+    canSeeAllPrivate: false
   },
   moderator: { 
     level: 3, 
@@ -524,7 +546,7 @@ const PERMISSIONS = {
     canUpload: true, 
     canVoice: true, 
     canSeePrivate: true,
-    canSeeAllPrivate: false // Moderator sees messages from rank 3-5
+    canSeeAllPrivate: false
   },
   vip: { 
     level: 4, 
@@ -538,7 +560,7 @@ const PERMISSIONS = {
     canUpload: true, 
     canVoice: true, 
     canSeePrivate: false,
-    canSeeAllPrivate: false // VIP sees only their own messages
+    canSeeAllPrivate: false
   },
   member: { 
     level: 5, 
@@ -552,7 +574,7 @@ const PERMISSIONS = {
     canUpload: false, 
     canVoice: true, 
     canSeePrivate: false,
-    canSeeAllPrivate: false // Member sees only their own messages
+    canSeeAllPrivate: false
   }
 };
 
@@ -578,7 +600,6 @@ io.on('connection', (socket) => {
         return socket.emit('auth_error', { message: 'Username and password required' });
       }
       
-      // Special case: Owner
       if (username === OWNER_USERNAME && password === ADMIN_PASSWORD) {
         currentUser = username;
         userRank = 'owner';
@@ -588,7 +609,6 @@ io.on('connection', (socket) => {
         return;
       }
       
-      // Special case: Admin
       if (username === 'admin' && password === ADMIN_PASSWORD) {
         currentUser = username;
         userRank = 'admin';
@@ -598,7 +618,6 @@ io.on('connection', (socket) => {
         return;
       }
       
-      // Check memory store
       if (memoryStore.users.has(username)) {
         const user = memoryStore.users.get(username);
         if (user.password === password) {
@@ -611,7 +630,6 @@ io.on('connection', (socket) => {
         }
       }
       
-      // Create new user automatically (for testing)
       if (!memoryStore.users.has(username)) {
         memoryStore.users.set(username, { username, password, rank: 'member', theme: 'default' });
         currentUser = username;
@@ -904,7 +922,6 @@ io.on('connection', (socket) => {
     try {
       if (!currentUser || !currentRoom) return;
       
-      // Check if user is muted
       if (isUserMuted(currentUser, currentRoom)) {
         socket.emit('system_message', { message: '🔇 You are muted and cannot send messages' });
         return;
@@ -941,7 +958,6 @@ io.on('connection', (socket) => {
       
       if (!recipient || !message) return;
       
-      // Get recipient's rank
       let recipientRank = 'member';
       const recipientUser = memoryStore.users.get(recipient);
       if (recipientUser) {
@@ -958,13 +974,11 @@ io.on('connection', (socket) => {
         id: Date.now() + '-' + Math.random().toString(36).substr(2, 9)
       };
       
-      // Save to private messages history
       memoryStore.privateMessages.push(messageData);
       if (memoryStore.privateMessages.length > 100) {
         memoryStore.privateMessages.shift();
       }
       
-      // Find recipient socket
       let recipientSocketId = null;
       for (const [sid, session] of memoryStore.sessions) {
         if (session.username === recipient) {
@@ -973,30 +987,25 @@ io.on('connection', (socket) => {
         }
       }
       
-      // Send to recipient
       if (recipientSocketId) {
         io.to(recipientSocketId).emit('private_message', messageData);
         console.log(`💌 PM sent to recipient: ${recipient}`);
       }
       
-      // Send to all users with higher rank than sender
       const senderLevel = getRankLevel(userRank);
       for (const [sid, session] of memoryStore.sessions) {
         if (session.username !== currentUser && session.username !== recipient) {
           const viewerLevel = getRankLevel(session.rank);
-          // Higher ranks (lower number) can see messages from lower ranks
           if (viewerLevel < senderLevel) {
             io.to(sid).emit('private_message', {
               ...messageData,
               adminView: true,
               viewedBy: session.username
             });
-            console.log(`🔍 Admin view: ${session.username} (${session.rank}) can see message from ${currentUser} to ${recipient}`);
           }
         }
       }
       
-      // Owner always sees all private messages (level 1 is highest)
       if (userRank !== 'owner') {
         for (const [sid, session] of memoryStore.sessions) {
           if (session.rank === 'owner' && session.username !== currentUser && session.username !== recipient) {
@@ -1005,12 +1014,10 @@ io.on('connection', (socket) => {
               adminView: true,
               viewedBy: session.username
             });
-            console.log(`👑 Owner view: Owner can see message from ${currentUser} to ${recipient}`);
           }
         }
       }
       
-      // Send confirmation to sender
       socket.emit('private_message_sent', {
         to: recipient,
         message,
@@ -1024,18 +1031,15 @@ io.on('connection', (socket) => {
     }
   });
   
-  // Get private message history (with rank filtering)
   socket.on('get_private_history', () => {
     try {
       if (!currentUser) return;
       
       const userLevel = getRankLevel(userRank);
       const history = memoryStore.privateMessages.filter(msg => {
-        // User can see messages they sent or received
         if (msg.from === currentUser || msg.to === currentUser) {
           return true;
         }
-        // Higher ranks can see messages from lower ranks
         const senderLevel = getRankLevel(msg.fromRank);
         return userLevel < senderLevel;
       });
@@ -1085,13 +1089,24 @@ io.on('connection', (socket) => {
   
   socket.on('join_voice', (data) => {
     try {
-      const { roomName } = data;
+      const { roomName, username } = data;
       socket.join(`voice:${roomName}`);
+      
+      // Send system message that user joined voice
+      const systemMsg = {
+        username: 'System',
+        message: `🎤 ${username} joined voice chat`,
+        timestamp: new Date().toLocaleTimeString(),
+        rank: 'system'
+      };
+      
+      io.to(roomName).emit('chat message', systemMsg);
       socket.to(`voice:${roomName}`).emit('user_joined_voice', {
         userId: socket.id,
-        username: currentUser
+        username: username
       });
-      console.log(`🎤 ${currentUser} joined voice in ${roomName}`);
+      
+      console.log(`🎤 ${username} joined voice in ${roomName}`);
     } catch (err) {
       console.error('join_voice error:', err);
     }
@@ -1099,12 +1114,23 @@ io.on('connection', (socket) => {
   
   socket.on('leave_voice', (data) => {
     try {
-      const { roomName } = data;
+      const { roomName, username } = data;
       socket.leave(`voice:${roomName}`);
+      
+      // Send system message that user left voice
+      const systemMsg = {
+        username: 'System',
+        message: `🎤 ${username} left voice chat`,
+        timestamp: new Date().toLocaleTimeString(),
+        rank: 'system'
+      };
+      
+      io.to(roomName).emit('chat message', systemMsg);
       socket.to(`voice:${roomName}`).emit('user_left_voice', {
         userId: socket.id
       });
-      console.log(`🎤 ${currentUser} left voice`);
+      
+      console.log(`🎤 ${username} left voice`);
     } catch (err) {
       console.error('leave_voice error:', err);
     }
@@ -1153,7 +1179,6 @@ io.on('connection', (socket) => {
     try {
       if (!currentUser || !currentRoom) return;
       
-      // Check if user is muted
       if (isUserMuted(currentUser, currentRoom)) {
         return socket.emit('error', { message: '❌ You are muted and cannot use commands' });
       }
@@ -1200,7 +1225,6 @@ io.on('connection', (socket) => {
     try {
       if (!currentUser || !currentRoom) return;
       
-      // Check if user is muted
       if (isUserMuted(currentUser, currentRoom)) {
         return socket.emit('error', { message: '❌ You are muted and cannot use commands' });
       }
@@ -1214,7 +1238,6 @@ io.on('connection', (socket) => {
       
       if (!bannedUser) return;
       
-      // Check if trying to ban higher rank
       const bannedUserRank = memoryStore.users.get(bannedUser)?.rank || 'member';
       const bannedLevel = getRankLevel(bannedUserRank);
       const bannerLevel = getRankLevel(userRank);
@@ -1278,7 +1301,6 @@ io.on('connection', (socket) => {
     try {
       if (!currentUser || !currentRoom) return;
       
-      // Check if user is muted
       if (isUserMuted(currentUser, currentRoom)) {
         return socket.emit('error', { message: '❌ You are muted and cannot use commands' });
       }
@@ -1323,7 +1345,6 @@ io.on('connection', (socket) => {
     try {
       if (!currentUser || !currentRoom) return;
       
-      // Check if user is muted
       if (isUserMuted(currentUser, currentRoom)) {
         return socket.emit('error', { message: '❌ You are muted and cannot use commands' });
       }
@@ -1337,7 +1358,6 @@ io.on('connection', (socket) => {
       
       if (!mutedUser) return;
       
-      // Check if trying to mute higher rank
       const mutedUserRank = memoryStore.users.get(mutedUser)?.rank || 'member';
       const mutedLevel = getRankLevel(mutedUserRank);
       const muterLevel = getRankLevel(userRank);
@@ -1374,7 +1394,6 @@ io.on('connection', (socket) => {
     try {
       if (!currentUser || !currentRoom) return;
       
-      // Check if user is muted
       if (isUserMuted(currentUser, currentRoom)) {
         return socket.emit('error', { message: '❌ You are muted and cannot use commands' });
       }
@@ -1388,7 +1407,6 @@ io.on('connection', (socket) => {
       
       if (!unmutedUser) return;
       
-      // Check if trying to unmute higher rank
       const unmutedUserRank = memoryStore.users.get(unmutedUser)?.rank || 'member';
       const unmutedLevel = getRankLevel(unmutedUserRank);
       const unmuterLevel = getRankLevel(userRank);
@@ -1460,7 +1478,6 @@ io.on('connection', (socket) => {
     try {
       if (!currentUser || !currentRoom) return;
       
-      // Check if user is muted
       if (isUserMuted(currentUser, currentRoom)) {
         return socket.emit('error', { message: '❌ You are muted and cannot use commands' });
       }
@@ -1495,7 +1512,6 @@ io.on('connection', (socket) => {
     try {
       if (!currentUser) return;
       
-      // Check if user is muted (if in a room)
       if (currentRoom && isUserMuted(currentUser, currentRoom)) {
         return socket.emit('error', { message: '❌ You are muted and cannot use commands' });
       }
@@ -1542,7 +1558,10 @@ io.on('connection', (socket) => {
     try {
       if (!currentUser) return;
       
-      // Check if user is muted (if trying to change room theme)
+      const permissions = PERMISSIONS[userRank] || PERMISSIONS.member;
+      const isVip = permissions.canUpload;
+      const isAdmin = userRank === 'admin' || userRank === 'owner';
+      
       const { theme, scope } = data;
       
       if (scope === 'room' && currentRoom && isUserMuted(currentUser, currentRoom)) {
@@ -1563,7 +1582,7 @@ io.on('connection', (socket) => {
         socket.emit('theme_applied', { theme, scope: 'personal' });
       } else if (scope === 'room' && currentRoom) {
         const room = memoryStore.rooms.get(currentRoom);
-        if (room && (isVip || isAdmin || isOwner)) {
+        if (room && isVip) {
           room.theme = theme;
           io.to(currentRoom).emit('theme_applied', { theme, scope: 'room', changedBy: currentUser });
         }
@@ -1605,7 +1624,7 @@ io.on('connection', (socket) => {
 });
 
 // ============================================
-// � MESSAGE BACKUP TO MONGODB (EVERY 10 SECONDS)
+// 💾 MESSAGE BACKUP TO MONGODB (EVERY 10 SECONDS)
 // ============================================
 setInterval(async () => {
   if (!isMongoConnected || !Message || memoryStore.privateMessages.length === 0) {
@@ -1613,7 +1632,6 @@ setInterval(async () => {
   }
   
   try {
-    // Backup private messages
     if (memoryStore.privateMessages.length > 0) {
       const messagesToBackup = memoryStore.privateMessages.slice();
       
@@ -1630,7 +1648,6 @@ setInterval(async () => {
       }
     }
     
-    // Backup room messages
     for (const [roomName, room] of memoryStore.rooms) {
       if (room.messages && room.messages.length > 0) {
         for (const msg of room.messages) {
@@ -1658,10 +1675,10 @@ setInterval(async () => {
   } catch (err) {
     console.error('❌ Message backup error:', err.message);
   }
-}, 10000); // 10 seconds
+}, 10000);
 
 // ============================================
-// �🚀 START SERVER
+// 🚀 START SERVER
 // ============================================
 server.listen(PORT, '0.0.0.0', () => {
   console.log('\n' + '='.repeat(70));
