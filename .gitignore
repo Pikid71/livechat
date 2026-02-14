@@ -1,8 +1,54 @@
+# Node
 node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment
 .env
-.DS_Store
-*.log
+.env.*
+!.env.example
+
+# Uploads
 uploads/
+uploads/*
+!uploads/.gitkeep
+
+# Database
+*.db
+*.sqlite
+chat_data.json
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.sock
+*.pid
+*.pid.lock
+
+# IDE
+.vscode/
+.idea/
+*.sublime-*
+
+# Build
 dist/
 build/
-*.pid
+out/
+coverage/
+
+# Temp
+tmp/
+temp/
+*.tmp
+*.temp
+*.log
+
+# Secrets
+*.pem
+*.key
+*.crt
+secrets/
+private/
