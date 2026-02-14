@@ -426,6 +426,7 @@ const memoryStore = {
   }]]),
   sessions: new Map(),
   bans: new Map(),
+  mutes: new Map(), // Map of { username: { roomName, expiresAt } }
   privateMessages: [] // Store private messages for history
 };
 
@@ -452,11 +453,42 @@ function canUserSeePrivateMessage(userRank, senderRank) {
   return userLevel <= senderLevel;
 }
 
+function isUserMuted(username, roomName) {
+  const muteKey = `${username}-${roomName}`;
+  if (memoryStore.mutes.has(muteKey)) {
+    const mute = memoryStore.mutes.get(muteKey);
+    if (Date.now() < mute.expiresAt) {
+      return true;
+    } else {
+      // Mute expired, remove it
+      memoryStore.mutes.delete(muteKey);
+      return false;
+    }
+  }
+  return false;
+}
+
+function parseDuration(durationStr) {
+  const match = durationStr.match(/^(\d+)([mhd])$/);
+  if (!match) return 10 * 60 * 1000; // Default 10 minutes
+  
+  const amount = parseInt(match[1]);
+  const unit = match[2];
+  
+  switch(unit) {
+    case 'm': return amount * 60 * 1000;
+    case 'h': return amount * 60 * 60 * 1000;
+    case 'd': return amount * 24 * 60 * 60 * 1000;
+    default: return 10 * 60 * 1000;
+  }
+}
+
 const PERMISSIONS = {
   owner: { 
     level: 1, 
     canBan: true, 
     canUnban: true, 
+    canMute: true,
     canDeleteRoom: true, 
     canClear: true, 
     canGrant: ['admin', 'moderator', 'vip', 'member'], 
@@ -470,6 +502,7 @@ const PERMISSIONS = {
     level: 2, 
     canBan: true, 
     canUnban: true, 
+    canMute: true,
     canDeleteRoom: true, 
     canClear: true, 
     canGrant: ['moderator', 'vip', 'member'], 
@@ -483,6 +516,7 @@ const PERMISSIONS = {
     level: 3, 
     canBan: true, 
     canUnban: false, 
+    canMute: true,
     canDeleteRoom: false, 
     canClear: true, 
     canGrant: [], 
@@ -496,6 +530,7 @@ const PERMISSIONS = {
     level: 4, 
     canBan: false, 
     canUnban: false, 
+    canMute: false,
     canDeleteRoom: false, 
     canClear: false, 
     canGrant: [], 
@@ -509,6 +544,7 @@ const PERMISSIONS = {
     level: 5, 
     canBan: false, 
     canUnban: false, 
+    canMute: false,
     canDeleteRoom: false, 
     canClear: false, 
     canGrant: [], 
@@ -868,6 +904,12 @@ io.on('connection', (socket) => {
     try {
       if (!currentUser || !currentRoom) return;
       
+      // Check if user is muted
+      if (isUserMuted(currentUser, currentRoom)) {
+        socket.emit('system_message', { message: '🔇 You are muted and cannot send messages' });
+        return;
+      }
+      
       const messageData = {
         username: currentUser,
         message: msg.message,
@@ -1111,6 +1153,11 @@ io.on('connection', (socket) => {
     try {
       if (!currentUser || !currentRoom) return;
       
+      // Check if user is muted
+      if (isUserMuted(currentUser, currentRoom)) {
+        return socket.emit('error', { message: '❌ You are muted and cannot use commands' });
+      }
+      
       const permissions = PERMISSIONS[userRank] || PERMISSIONS.member;
       if (!permissions.canClear) {
         return socket.emit('error', { message: '❌ You do not have permission' });
@@ -1152,6 +1199,11 @@ io.on('connection', (socket) => {
   socket.on('ban_user', (data) => {
     try {
       if (!currentUser || !currentRoom) return;
+      
+      // Check if user is muted
+      if (isUserMuted(currentUser, currentRoom)) {
+        return socket.emit('error', { message: '❌ You are muted and cannot use commands' });
+      }
       
       const permissions = PERMISSIONS[userRank] || PERMISSIONS.member;
       if (!permissions.canBan) {
@@ -1226,6 +1278,11 @@ io.on('connection', (socket) => {
     try {
       if (!currentUser || !currentRoom) return;
       
+      // Check if user is muted
+      if (isUserMuted(currentUser, currentRoom)) {
+        return socket.emit('error', { message: '❌ You are muted and cannot use commands' });
+      }
+      
       const permissions = PERMISSIONS[userRank] || PERMISSIONS.member;
       if (!permissions.canUnban) {
         return socket.emit('error', { message: '❌ You do not have permission' });
@@ -1259,6 +1316,105 @@ io.on('connection', (socket) => {
       
     } catch (err) {
       console.error('unban_user error:', err);
+    }
+  });
+  
+  socket.on('mute_user', (data) => {
+    try {
+      if (!currentUser || !currentRoom) return;
+      
+      // Check if user is muted
+      if (isUserMuted(currentUser, currentRoom)) {
+        return socket.emit('error', { message: '❌ You are muted and cannot use commands' });
+      }
+      
+      const permissions = PERMISSIONS[userRank] || PERMISSIONS.member;
+      if (!permissions.canMute) {
+        return socket.emit('error', { message: '❌ You do not have permission' });
+      }
+      
+      const { mutedUser, duration = '10m' } = data;
+      
+      if (!mutedUser) return;
+      
+      // Check if trying to mute higher rank
+      const mutedUserRank = memoryStore.users.get(mutedUser)?.rank || 'member';
+      const mutedLevel = getRankLevel(mutedUserRank);
+      const muterLevel = getRankLevel(userRank);
+      
+      if (muterLevel >= mutedLevel && userRank !== 'owner') {
+        return socket.emit('error', { message: '❌ Cannot mute users of equal or higher rank' });
+      }
+      
+      const durationMs = parseDuration(duration);
+      const expiresAt = Date.now() + durationMs;
+      const muteKey = `${mutedUser}-${currentRoom}`;
+      
+      memoryStore.mutes.set(muteKey, { roomName: currentRoom, expiresAt, mutedBy: currentUser });
+      
+      io.to(currentRoom).emit('user_muted', { mutedUser, duration, muterName: currentUser });
+      
+      const systemMsg = {
+        username: 'System',
+        message: `🔇 ${mutedUser} muted by ${currentUser} for ${duration}`,
+        timestamp: new Date().toLocaleTimeString(),
+        rank: 'system'
+      };
+      
+      io.to(currentRoom).emit('chat message', systemMsg);
+      
+      console.log(`🔇 ${mutedUser} muted in ${currentRoom} by ${currentUser} for ${duration}`);
+      
+    } catch (err) {
+      console.error('mute_user error:', err);
+    }
+  });
+  
+  socket.on('unmute_user', (data) => {
+    try {
+      if (!currentUser || !currentRoom) return;
+      
+      // Check if user is muted
+      if (isUserMuted(currentUser, currentRoom)) {
+        return socket.emit('error', { message: '❌ You are muted and cannot use commands' });
+      }
+      
+      const permissions = PERMISSIONS[userRank] || PERMISSIONS.member;
+      if (!permissions.canMute) {
+        return socket.emit('error', { message: '❌ You do not have permission' });
+      }
+      
+      const { unmutedUser } = data;
+      
+      if (!unmutedUser) return;
+      
+      // Check if trying to unmute higher rank
+      const unmutedUserRank = memoryStore.users.get(unmutedUser)?.rank || 'member';
+      const unmutedLevel = getRankLevel(unmutedUserRank);
+      const unmuterLevel = getRankLevel(userRank);
+      
+      if (unmuterLevel >= unmutedLevel && userRank !== 'owner') {
+        return socket.emit('error', { message: '❌ Cannot unmute users of equal or higher rank' });
+      }
+      
+      const muteKey = `${unmutedUser}-${currentRoom}`;
+      memoryStore.mutes.delete(muteKey);
+      
+      io.to(currentRoom).emit('user_unmuted', { unmutedUser, unmuterName: currentUser });
+      
+      const systemMsg = {
+        username: 'System',
+        message: `🔓 ${unmutedUser} unmuted by ${currentUser}`,
+        timestamp: new Date().toLocaleTimeString(),
+        rank: 'system'
+      };
+      
+      io.to(currentRoom).emit('chat message', systemMsg);
+      
+      console.log(`🔓 ${unmutedUser} unmuted in ${currentRoom} by ${currentUser}`);
+      
+    } catch (err) {
+      console.error('unmute_user error:', err);
     }
   });
   
@@ -1304,6 +1460,11 @@ io.on('connection', (socket) => {
     try {
       if (!currentUser || !currentRoom) return;
       
+      // Check if user is muted
+      if (isUserMuted(currentUser, currentRoom)) {
+        return socket.emit('error', { message: '❌ You are muted and cannot use commands' });
+      }
+      
       const permissions = PERMISSIONS[userRank] || PERMISSIONS.member;
       if (!permissions.canUseEffects) {
         return socket.emit('error', { message: '❌ Only admins can use effects' });
@@ -1333,6 +1494,11 @@ io.on('connection', (socket) => {
   socket.on('grant_rank', (data) => {
     try {
       if (!currentUser) return;
+      
+      // Check if user is muted (if in a room)
+      if (currentRoom && isUserMuted(currentUser, currentRoom)) {
+        return socket.emit('error', { message: '❌ You are muted and cannot use commands' });
+      }
       
       const permissions = PERMISSIONS[userRank] || PERMISSIONS.member;
       if (!permissions.canGrant || permissions.canGrant.length === 0) {
@@ -1376,7 +1542,12 @@ io.on('connection', (socket) => {
     try {
       if (!currentUser) return;
       
+      // Check if user is muted (if trying to change room theme)
       const { theme, scope } = data;
+      
+      if (scope === 'room' && currentRoom && isUserMuted(currentUser, currentRoom)) {
+        return socket.emit('error', { message: '❌ You are muted and cannot use commands' });
+      }
       
       const validThemes = ['default', 'dark', 'light', 'neon', 'midnight', 'sunset', 'forest', 'ocean', 'cyberpunk', 'vintage'];
       
@@ -1434,7 +1605,63 @@ io.on('connection', (socket) => {
 });
 
 // ============================================
-// 🚀 START SERVER
+// � MESSAGE BACKUP TO MONGODB (EVERY 10 SECONDS)
+// ============================================
+setInterval(async () => {
+  if (!isMongoConnected || !Message || memoryStore.privateMessages.length === 0) {
+    return;
+  }
+  
+  try {
+    // Backup private messages
+    if (memoryStore.privateMessages.length > 0) {
+      const messagesToBackup = memoryStore.privateMessages.slice();
+      
+      for (const msg of messagesToBackup) {
+        try {
+          await PrivateMessage.findByIdAndUpdate(
+            msg._id,
+            msg,
+            { upsert: true, new: true }
+          );
+        } catch (err) {
+          // Ignore individual message backup errors
+        }
+      }
+    }
+    
+    // Backup room messages
+    for (const [roomName, room] of memoryStore.rooms) {
+      if (room.messages && room.messages.length > 0) {
+        for (const msg of room.messages) {
+          try {
+            await Message.create({
+              roomName,
+              username: msg.username,
+              message: msg.message,
+              timestamp: new Date(),
+              isSystem: msg.rank === 'system',
+              senderRank: msg.rank,
+              fileUrl: msg.fileUrl,
+              fileName: msg.fileName,
+              fileType: msg.fileType,
+              fileSize: msg.fileSize
+            });
+          } catch (err) {
+            // Ignore individual message backup errors
+          }
+        }
+      }
+    }
+    
+    console.log('💾 Messages backed up to MongoDB');
+  } catch (err) {
+    console.error('❌ Message backup error:', err.message);
+  }
+}, 10000); // 10 seconds
+
+// ============================================
+// �🚀 START SERVER
 // ============================================
 server.listen(PORT, '0.0.0.0', () => {
   console.log('\n' + '='.repeat(70));

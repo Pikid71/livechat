@@ -233,6 +233,43 @@
             background: #2ecc71;
             color: white;
         }
+        
+        /* ========== NOTIFICATION SWITCH ========== */
+        .notification-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 28px;
+            background: rgba(100, 100, 120, 0.6);
+            border: 2px solid rgba(102, 126, 234, 0.5);
+            border-radius: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            vertical-align: middle;
+        }
+        
+        .notification-switch::after {
+            content: '';
+            position: absolute;
+            width: 22px;
+            height: 22px;
+            background: white;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        .notification-switch.enabled {
+            background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+            border-color: #2ecc71;
+        }
+        
+        .notification-switch.enabled::after {
+            left: 26px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+        }
 
         /* ========== RANK BADGES ========== */
         .rank-owner {
@@ -325,57 +362,87 @@
 
         /* ========== HELP MENU STYLES - FIXED ========== */
         .help-menu {
-            background: rgba(20, 20, 40, 0.95);
+            background: linear-gradient(135deg, rgba(20, 20, 40, 0.98) 0%, rgba(30, 20, 50, 0.98) 100%);
             border: 2px solid #667eea;
             border-radius: 16px;
-            padding: 20px;
+            padding: 25px;
             margin: 10px 0;
             font-family: 'Courier New', monospace;
             line-height: 1.8;
-            white-space: pre-wrap;
-            word-wrap: break-word;
+            box-shadow: 0 8px 32px rgba(102, 126, 234, 0.2);
+        }
+        
+        .help-menu > div:first-child {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid rgba(102, 126, 234, 0.3);
         }
         
         .help-section {
-            margin: 15px 0;
-            padding: 10px;
-            border-left: 3px solid #667eea;
-            background: rgba(102, 126, 234, 0.1);
+            margin: 18px 0;
+            padding: 14px;
+            border-left: 4px solid #667eea;
+            background: rgba(102, 126, 234, 0.12);
+            border-radius: 8px;
+        }
+        
+        .help-section > div:first-child {
+            margin-bottom: 8px;
         }
         
         .help-title {
             color: #ffd700;
             font-weight: bold;
-            font-size: 16px;
+            font-size: 14px;
             margin-bottom: 10px;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 1.2px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
         
         .help-command {
             color: #4ade80;
             font-weight: bold;
+            display: inline-block;
+            padding: 2px 6px;
+            background: rgba(74, 222, 128, 0.1);
+            border-radius: 4px;
+            margin-right: 10px;
+            min-width: 140px;
         }
         
         .help-desc {
-            color: #ccc;
-            margin-left: 20px;
-            font-size: 13px;
+            color: #b0b0d0;
+            font-size: 12px;
+            display: inline-block;
+        }
+        
+        .help-section > div {
+            display: flex;
+            align-items: center;
+            margin: 6px 0;
+            gap: 5px;
         }
         
         .help-rank {
             display: inline-block;
-            padding: 2px 8px;
+            padding: 3px 10px;
             border-radius: 12px;
-            font-size: 10px;
-            margin-right: 5px;
+            font-size: 11px;
+            font-weight: bold;
+            margin-right: 8px;
         }
         
-        .help-rank.owner { background: gold; color: black; }
-        .help-rank.admin { background: #ff4444; color: white; }
-        .help-rank.mod { background: #ff9933; color: white; }
-        .help-rank.vip { background: #9933ff; color: white; }
-        .help-rank.member { background: #667eea; color: white; }
+        .help-rank.owner { background: linear-gradient(135deg, gold, #ffed4e); color: #1a1a1a; }
+        .help-rank.admin { background: linear-gradient(135deg, #ff4444, #ff7777); color: white; }
+        .help-rank.mod { background: linear-gradient(135deg, #ff9933, #ffbb44); color: white; }
+        .help-rank.vip { background: linear-gradient(135deg, #9933ff, #bb77ff); color: white; }
+        .help-rank.member { background: linear-gradient(135deg, #667eea, #8899ff); color: white; }
 
         /* ========== CHAT CONTAINER ========== */
         #chat-container { 
@@ -1105,6 +1172,9 @@
                     <button onclick="leaveRoom()" class="action-btn danger" style="flex: 1;">
                         <span>🚪</span> LEAVE
                     </button>
+                    <button onclick="toggleNotifications()" id="notifSwitchBtn" class="action-btn" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                        <span>🔔</span> <span class="notification-switch enabled" id="notifSwitch" style="margin: 0;"></span>
+                    </button>
                     <button onclick="showPrivateMessages()" id="pmBtn" class="action-btn" style="flex: 1;">
                         <span>💌</span> PM
                     </button>
@@ -1291,6 +1361,8 @@
         let isModerator = false;
         let isVip = false;
         let isOwner = false;
+        let isUserMuted = false;
+        let muteExpiresAt = 0;
         
         // Voice chat
         let voiceChat = null;
@@ -1305,8 +1377,8 @@
         let privateMessages = [];
         let onlineUsers = [];
         
-        // Browser notifications
-        let notificationsEnabled = false;
+        // Browser notifications - ENABLED BY DEFAULT
+        let notificationsEnabled = true;
         let notificationPermission = false;
         
         // UI Elements
@@ -1340,6 +1412,31 @@
             const viewerLevel = getRankLevel(viewerRank);
             // Higher ranks (lower numbers) can see messages from lower ranks
             return viewerLevel <= senderLevel;
+        }
+        
+        function parseDurationClient(duration) {
+            // Parse duration strings like "10m", "1h", "1d" into milliseconds
+            const match = duration.match(/^(\d+)([hmd])$/);
+            if (!match) return 10 * 60 * 1000; // default 10 minutes
+            
+            const amount = parseInt(match[1]);
+            const unit = match[2];
+            
+            switch(unit) {
+                case 'm': return amount * 60 * 1000;
+                case 'h': return amount * 60 * 60 * 1000;
+                case 'd': return amount * 24 * 60 * 60 * 1000;
+                default: return 10 * 60 * 1000;
+            }
+        }
+        
+        function checkIfUserMuted() {
+            // Check if mute has expired
+            if (isUserMuted && muteExpiresAt && Date.now() >= muteExpiresAt) {
+                isUserMuted = false;
+                muteExpiresAt = 0;
+            }
+            return isUserMuted;
         }
         
         // ========== BROWSER NOTIFICATIONS ==========
@@ -1379,6 +1476,46 @@
                     showToast("❌ Notifications blocked");
                 }
             });
+        }
+        
+        // Toggle notifications (for chat screen)
+        function toggleNotifications() {
+            if (!checkNotificationSupport()) {
+                showToast("❌ Your browser doesn't support notifications");
+                return;
+            }
+            
+            if (!notificationPermission) {
+                // Need to request permission first
+                Notification.requestPermission().then(permission => {
+                    notificationPermission = permission === 'granted';
+                    if (notificationPermission) {
+                        notificationsEnabled = true;
+                        updateNotificationSwitch();
+                        showToast("✅ Notifications enabled!");
+                        sendNotification('✅ Notifications Enabled', 'You will now receive notifications for new messages');
+                    } else {
+                        showToast("❌ Please allow notifications in your browser");
+                    }
+                });
+            } else {
+                // Toggle on/off
+                notificationsEnabled = !notificationsEnabled;
+                updateNotificationSwitch();
+                showToast(notificationsEnabled ? '🔔 Notifications enabled' : '🔕 Notifications disabled');
+            }
+        }
+        
+        // Update notification switch UI
+        function updateNotificationSwitch() {
+            const switchEl = document.getElementById('notifSwitch');
+            if (switchEl) {
+                if (notificationsEnabled) {
+                    switchEl.classList.add('enabled');
+                } else {
+                    switchEl.classList.remove('enabled');
+                }
+            }
         }
         
         // Send browser notification
@@ -2271,23 +2408,54 @@
             msgContainer.scrollTop = msgContainer.scrollHeight;
         }
         
+        function processMentions(text) {
+            // Find all @username mentions and replace with rank + username
+            let processedText = text;
+            const mentionRegex = /@(\w+)/g;
+            let match;
+            
+            while ((match = mentionRegex.exec(text)) !== null) {
+                const mentionedUsername = match[1];
+                const mentionedUser = onlineUsers.find(u => u.username === mentionedUsername);
+                
+                if (mentionedUser) {
+                    // Get the rank badge info
+                    const rankBadgeStr = getRankBadge(mentionedUser.rank);
+                    const rankMatch = rankBadgeStr.match(/>([A-Z]+)</);
+                    const rankText = rankMatch ? rankMatch[1] : mentionedUser.rank.toUpperCase();
+                    
+                    // Replace @username with {Rank} username
+                    processedText = processedText.replace(`@${mentionedUsername}`, `{${rankText}} ${mentionedUsername}`);
+                } else {
+                    // User not found, replace @username with just username
+                    processedText = processedText.replace(`@${mentionedUsername}`, mentionedUsername);
+                }
+            }
+            return processedText;
+        }
+        
         function sendMessage() {
             if (input.value.trim()) {
                 const messageText = input.value;
                 
                 if (messageText.startsWith('/')) {
+                    // Check if user is muted before allowing commands
+                    // The server will check this too, but we can warn the user here
                     handleCommand(messageText);
                     input.value = '';
                     emojiPanel.classList.remove('show');
                     return;
                 }
                 
+                // Process @mentions before sending
+                const processedMessage = processMentions(messageText);
+                
                 socket.emit('chat message', { 
                     username: currentUsername, 
-                    message: messageText 
+                    message: processedMessage 
                 });
                 
-                addMessage(currentUsername, messageText, currentRank);
+                addMessage(currentUsername, processedMessage, currentRank);
                 input.value = '';
                 emojiPanel.classList.remove('show');
             }
@@ -2312,7 +2480,7 @@
                     <div class="help-title">📋 YOUR RANK</div>
                     <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
                         ${getRankBadge(currentRank)}
-                        <span style="color: #4ade80;">Level ${rankLevel}/5</span>
+                        <span style="color: #4ade80;">Rank ${rankLevel}/5</span>
                     </div>
                 </div>
                 
@@ -2345,8 +2513,10 @@
                 ${isModerator ? `
                 <div class="help-section">
                     <div class="help-title">🛡️ MODERATOR+ COMMANDS</div>
-                    <div><span class="help-command">/clear</span> <span class="help-desc">- Clear all messages in room</span></div>
                     <div><span class="help-command">/ban &lt;user&gt; [duration]</span> <span class="help-desc">- Ban user (10m, 1h, 1d)</span></div>
+                    <div><span class="help-command">/mute &lt;user&gt; [duration]</span> <span class="help-desc">- Mute user (default 10m)</span></div>
+                    <div><span class="help-command">/unmute &lt;user&gt;</span> <span class="help-desc">- Unmute user</span></div>
+                    <div><span class="help-command">/clear</span> <span class="help-desc">- Clear all messages in room</span></div>
                 </div>
                 ` : ''}
                 
@@ -2443,7 +2613,7 @@
                         <div class="user-info-modal">
                             <span>${user.username}</span>
                             ${getRankBadge(user.rank)}
-                            <span style="font-size: 10px; color: #888;">Lv${userLevel}</span>
+                            <span style="font-size: 10px; color: #888;">Rank ${userLevel}</span>
                         </div>
                         <div class="user-actions">
                             ${(isModerator && userLevel > currentUserLevel) ? `
@@ -2601,6 +2771,13 @@
         // ========== COMMANDS ==========
         
         function handleCommand(commandText) {
+            // Check if user is muted - muted users cannot execute any commands
+            if (checkIfUserMuted()) {
+                addSystemMessage('❌ You are muted and cannot use commands');
+                return;
+            }
+            
+            // Note: Server will validate mute status for actual command execution
             const parts = commandText.split(' ');
             const command = parts[0].toLowerCase();
             const args = parts.slice(1);
@@ -2626,6 +2803,12 @@
                     break;
                 case '/ban':
                     handleBanCommand(args);
+                    break;
+                case '/mute':
+                    handleMuteCommand(args);
+                    break;
+                case '/unmute':
+                    handleUnmuteCommand(args);
                     break;
                 case '/unban':
                     handleUnbanCommand(args);
@@ -2783,6 +2966,73 @@
             });
         }
         
+        function handleMuteCommand(args) {
+            if (!currentRoom) {
+                addSystemMessage('❌ Not in a room');
+                return;
+            }
+            
+            if (!isModerator && !isAdmin && !isOwner) {
+                addSystemMessage('❌ You do not have permission');
+                return;
+            }
+            
+            if (args.length < 1) {
+                addSystemMessage('Usage: /mute <username> [duration]');
+                return;
+            }
+            
+            const targetUser = args[0];
+            
+            const targetRank = onlineUsers.find(u => u.username === targetUser)?.rank || 'member';
+            const targetLevel = getRankLevel(targetRank);
+            const userLevel = getRankLevel(currentRank);
+            
+            if (targetLevel <= userLevel && currentRank !== 'owner') {
+                addSystemMessage('❌ Cannot mute users of equal or higher rank');
+                return;
+            }
+            
+            let duration = '10m';
+            if (args.length >= 2 && /^\d+[hmd]?$/.test(args[1])) {
+                duration = args[1];
+            }
+            
+            socket.emit('mute_user', {
+                roomName: currentRoom,
+                mutedUser: targetUser,
+                duration,
+                muterName: currentUsername
+            });
+            
+            addSystemMessage(`🔇 Muted ${targetUser} for ${duration}`);
+        }
+        
+        function handleUnmuteCommand(args) {
+            if (!currentRoom) {
+                addSystemMessage('❌ Not in a room');
+                return;
+            }
+            
+            if (!isModerator && !isAdmin && !isOwner) {
+                addSystemMessage('❌ You do not have permission');
+                return;
+            }
+            
+            if (args.length < 1) {
+                addSystemMessage('Usage: /unmute <username>');
+                return;
+            }
+            
+            socket.emit('unmute_user', {
+                roomName: currentRoom,
+                unmutedUser: args[0],
+                unmuterName: currentUsername
+            });
+            
+            addSystemMessage(`🔓 Unmuted ${args[0]}`);
+        }
+        
         function handleUnbanCommand(args) {
             if (!currentRoom) {
                 addSystemMessage('❌ Not in a room');
@@ -2909,7 +3159,7 @@
         }
         
         function handleRankCommand() {
-            addSystemMessage(`Your rank: ${currentRank.toUpperCase()} (Level ${getRankLevel(currentRank)}/5)`);
+            addSystemMessage(`Your rank: ${currentRank.toUpperCase()} (Rank ${getRankLevel(currentRank)}/5)`);
         }
         
         function handlePingCommand() {
@@ -3123,6 +3373,30 @@
         
         socket.on('user_unbanned', (data) => {
             addSystemMessage(`✅ ${data.unbannedUser} unbanned by ${data.unbannerName}`);
+        });
+        
+        socket.on('user_muted', (data) => {
+            if (data.mutedUser === currentUsername) {
+                isUserMuted = true;
+                // Parse duration and set expiration time
+                if (data.duration) {
+                    const durationMs = parseDurationClient(data.duration);
+                    muteExpiresAt = Date.now() + durationMs;
+                } else {
+                    muteExpiresAt = Date.now() + (10 * 60 * 1000); // default 10m
+                }
+                showToast(`🔇 You have been muted for ${data.duration || '10m'}`);
+            }
+            addSystemMessage(`🔇 ${data.mutedUser} has been muted for ${data.duration || '10m'}`);
+        });
+        
+        socket.on('user_unmuted', (data) => {
+            if (data.unmutedUser === currentUsername) {
+                isUserMuted = false;
+                muteExpiresAt = 0;
+                showToast(`🔓 You have been unmuted`);
+            }
+            addSystemMessage(`🔓 ${data.unmutedUser} has been unmuted by ${data.unmuterName}`);
         });
         
         socket.on('force_leave', (data) => {
