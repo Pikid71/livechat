@@ -517,6 +517,7 @@ const PERMISSIONS = {
     canUseEffects: true, 
     canUpload: true, 
     canVoice: true, 
+    canVideo: true, // Owner can use video
     canSeePrivate: true,
     canSeeAllPrivate: true
   },
@@ -531,6 +532,7 @@ const PERMISSIONS = {
     canUseEffects: true, 
     canUpload: true, 
     canVoice: true, 
+    canVideo: true, // Admin can use video
     canSeePrivate: true,
     canSeeAllPrivate: false
   },
@@ -545,6 +547,7 @@ const PERMISSIONS = {
     canUseEffects: false, 
     canUpload: true, 
     canVoice: true, 
+    canVideo: true, // Moderator can use video
     canSeePrivate: true,
     canSeeAllPrivate: false
   },
@@ -559,6 +562,7 @@ const PERMISSIONS = {
     canUseEffects: false, 
     canUpload: true, 
     canVoice: true, 
+    canVideo: true, // VIP can use video
     canSeePrivate: false,
     canSeeAllPrivate: false
   },
@@ -573,6 +577,7 @@ const PERMISSIONS = {
     canUseEffects: false, 
     canUpload: false, 
     canVoice: true, 
+    canVideo: false, // Members cannot use video
     canSeePrivate: false,
     canSeeAllPrivate: false
   }
@@ -1090,6 +1095,13 @@ io.on('connection', (socket) => {
   socket.on('join_voice', (data) => {
     try {
       const { roomName, username } = data;
+      
+      // Check if user is muted
+      if (isUserMuted(username, roomName)) {
+        socket.emit('voice_error', { message: 'You are muted and cannot join voice chat' });
+        return;
+      }
+      
       socket.join(`voice:${roomName}`);
       
       // Send system message that user joined voice
@@ -1170,6 +1182,119 @@ io.on('connection', (socket) => {
       });
     } catch (err) {
       console.error('ice_candidate error:', err);
+    }
+  });
+  
+  // ========== VIDEO CHAT SIGNALING ==========
+  
+  socket.on('join_video', (data) => {
+    try {
+      const { roomName, username, rank } = data;
+      
+      // Check if user has permission (VIP+)
+      const permissions = PERMISSIONS[rank] || PERMISSIONS.member;
+      if (!permissions.canVideo) {
+        socket.emit('video_error', { message: 'Video chat requires VIP+ rank' });
+        return;
+      }
+      
+      // Check if user is muted
+      if (isUserMuted(username, roomName)) {
+        socket.emit('video_error', { message: 'You are muted and cannot join video chat' });
+        return;
+      }
+      
+      socket.join(`video:${roomName}`);
+      
+      // Send system message that user joined video
+      const systemMsg = {
+        username: 'System',
+        message: `🎥 ${username} joined video chat`,
+        timestamp: new Date().toLocaleTimeString(),
+        rank: 'system'
+      };
+      
+      io.to(roomName).emit('chat message', systemMsg);
+      socket.to(`video:${roomName}`).emit('user_joined_video', {
+        userId: socket.id,
+        username: username,
+        rank: rank
+      });
+      
+      console.log(`🎥 ${username} joined video in ${roomName}`);
+    } catch (err) {
+      console.error('join_video error:', err);
+    }
+  });
+  
+  socket.on('leave_video', (data) => {
+    try {
+      const { roomName, username } = data;
+      socket.leave(`video:${roomName}`);
+      
+      // Send system message that user left video
+      const systemMsg = {
+        username: 'System',
+        message: `🎥 ${username} left video chat`,
+        timestamp: new Date().toLocaleTimeString(),
+        rank: 'system'
+      };
+      
+      io.to(roomName).emit('chat message', systemMsg);
+      socket.to(`video:${roomName}`).emit('user_left_video', {
+        userId: socket.id,
+        username: username
+      });
+      
+      console.log(`🎥 ${username} left video`);
+    } catch (err) {
+      console.error('leave_video error:', err);
+    }
+  });
+  
+  socket.on('video_offer', (data) => {
+    try {
+      const { target, offer, roomName, username, rank } = data;
+      io.to(target).emit('video_offer', {
+        from: socket.id,
+        offer: offer,
+        roomName: roomName,
+        username: username,
+        rank: rank
+      });
+    } catch (err) {
+      console.error('video_offer error:', err);
+    }
+  });
+  
+  socket.on('video_answer', (data) => {
+    try {
+      const { target, answer } = data;
+      io.to(target).emit('video_answer', {
+        from: socket.id,
+        answer: answer
+      });
+    } catch (err) {
+      console.error('video_answer error:', err);
+    }
+  });
+  
+  socket.on('video_ice_candidate', (data) => {
+    try {
+      const { target, candidate } = data;
+      io.to(target).emit('video_ice_candidate', {
+        from: socket.id,
+        candidate
+      });
+    } catch (err) {
+      console.error('video_ice_candidate error:', err);
+    }
+  });
+  
+  socket.on('video_stats', (data) => {
+    // Just for debugging, can be ignored or logged
+    if (NODE_ENV === 'development') {
+      console.log('📊 Video stats:', data);
     }
   });
   
@@ -1672,11 +1797,12 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n📡 Port: ${PORT}`);
   console.log(`👑 Owner: ${OWNER_USERNAME}`);
   console.log(`📊 Rank System:`);
-  console.log(`   1. 👑 Owner - Can see ALL private messages`);
-  console.log(`   2. 👮 Admin - Can see messages from rank 2-5`);
-  console.log(`   3. 🛡️ Moderator - Can see messages from rank 3-5`);
-  console.log(`   4. ⭐ VIP - Can see only their own messages`);
-  console.log(`   5. 👤 Member - Can see only their own messages`);
+  console.log(`   1. 👑 Owner - Can see ALL private messages, Video enabled`);
+  console.log(`   2. 👮 Admin - Can see messages from rank 2-5, Video enabled`);
+  console.log(`   3. 🛡️ Moderator - Can see messages from rank 3-5, Video enabled`);
+  console.log(`   4. ⭐ VIP - Can see only their own messages, Video enabled`);
+  console.log(`   5. 👤 Member - Can see only their own messages, Video disabled`);
+  console.log(`🎥 Video Chat: VIP+ only (Owner, Admin, Moderator, VIP)`);
   console.log(`💾 MongoDB: ${isMongoConnected ? 'CONNECTED' : 'DISCONNECTED'}`);
   console.log(`📁 Uploads: ${uploadDir}`);
   console.log(`🌍 URL: http://localhost:${PORT}`);
