@@ -85,7 +85,7 @@ class VoiceChatHandler {
             iceCandidatePoolSize: 10,
             
             // Additional WebRTC options
-            iceTransportPolicy: 'all', // 'relay' for TURN only, 'all' for everything
+            iceTransportPolicy: 'all',
             rtcpMuxPolicy: 'require',
             bundlePolicy: 'max-bundle'
         };
