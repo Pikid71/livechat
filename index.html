@@ -751,6 +751,93 @@
             transform: scale(1.3) rotate(10deg);
         }
 
+        /* ========== VIDEO GRID STYLES ========== */
+        #video-grid {
+            display: none;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 10px;
+            padding: 10px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            margin-bottom: 10px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            height: auto;
+            background: #1a1a2e;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 2px solid #667eea;
+            aspect-ratio: 16/9;
+        }
+
+        .video-container video {
+            width: 100%;
+            height: 100%;
+            display: block;
+            object-fit: cover;
+        }
+
+        .video-label {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            z-index: 10;
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .video-stats {
+            display: flex;
+            gap: 8px;
+            font-size: 10px;
+            color: #aaa;
+        }
+
+        .video-controls-overlay {
+            position: absolute;
+            bottom: 8px;
+            right: 8px;
+            display: flex;
+            gap: 4px;
+            z-index: 10;
+        }
+
+        .video-control-btn {
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .video-control-btn:hover {
+            background: #667eea;
+            transform: scale(1.1);
+        }
+
         /* ========== MODALS ========== */
         .modal {
             display: none;
@@ -936,18 +1023,21 @@
         /* ========== SCROLLBARS ========== */
         #messages::-webkit-scrollbar,
         #room-content::-webkit-scrollbar,
-        .modal-content::-webkit-scrollbar {
+        .modal-content::-webkit-scrollbar,
+        #video-grid::-webkit-scrollbar {
             width: 8px;
         }
         #messages::-webkit-scrollbar-track,
         #room-content::-webkit-scrollbar-track,
-        .modal-content::-webkit-scrollbar-track {
+        .modal-content::-webkit-scrollbar-track,
+        #video-grid::-webkit-scrollbar-track {
             background: rgba(0,0,0,0.3);
             border-radius: 4px;
         }
         #messages::-webkit-scrollbar-thumb,
         #room-content::-webkit-scrollbar-thumb,
-        .modal-content::-webkit-scrollbar-thumb {
+        .modal-content::-webkit-scrollbar-thumb,
+        #video-grid::-webkit-scrollbar-thumb {
             background: linear-gradient(to bottom, #667eea, #764ba2);
             border-radius: 4px;
         }
@@ -964,6 +1054,9 @@
             .input-row { gap: 6px; }
             #messageInput { font-size: 14px; }
             .help-section { padding: 5px; }
+            #video-grid {
+                grid-template-columns: 1fr;
+            }
         }
 
         /* ========== ANIMATIONS ========== */
@@ -1126,6 +1219,12 @@
                                 <span></span><span></span><span></span>
                             </div>
                         </span>
+                        <span id="video-indicator" class="voice-indicator" style="display: none;">
+                            <span>🎥</span>
+                            <div class="voice-wave">
+                                <span></span><span></span><span></span>
+                            </div>
+                        </span>
                     </h1>
                     <div style="font-size: 13px; opacity: 0.8; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                         <span><span id="members-count">0</span> members</span>
@@ -1141,6 +1240,9 @@
             
             <div id="messages"></div>
             
+            <!-- Video Grid Container -->
+            <div id="video-grid"></div>
+            
             <div id="input-area">
                 <!-- Voice Chat Controls -->
                 <div style="display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;" id="voice-controls">
@@ -1152,6 +1254,25 @@
                     </button>
                     <button onclick="showFileUpload()" id="fileUploadBtn" class="action-btn" style="flex: 1; min-width: 100px; display: none;">
                         <span>📁</span> SHARE
+                    </button>
+                </div>
+
+                <!-- Video Chat Controls -->
+                <div style="display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;" id="video-controls" style="display: none;">
+                    <button onclick="toggleVideoChat()" id="videoBtn" class="action-btn" style="flex: 1; min-width: 120px;">
+                        <span>🎥</span> <span id="videoBtnText">JOIN VIDEO</span>
+                    </button>
+                    <button onclick="toggleVideoMute()" id="videoMuteBtn" class="action-btn" style="flex: 1; min-width: 100px; display: none;">
+                        <span>🎥</span> <span>MUTE VIDEO</span>
+                    </button>
+                    <button onclick="toggleAudioMute()" id="audioMuteBtn" class="action-btn" style="flex: 1; min-width: 100px; display: none;">
+                        <span>🎤</span> <span>MUTE AUDIO</span>
+                    </button>
+                    <button onclick="toggleScreenShare()" id="screenShareBtn" class="action-btn" style="flex: 1; min-width: 100px; display: none;">
+                        <span>🖥️</span> <span>SHARE SCREEN</span>
+                    </button>
+                    <button onclick="showVideoQualityMenu()" id="qualityBtn" class="action-btn" style="flex: 1; min-width: 100px; display: none;">
+                        <span>📊</span> <span>QUALITY</span>
                     </button>
                 </div>
 
@@ -1342,10 +1463,29 @@
         </div>
     </div>
 
+    <!-- Video Quality Modal -->
+    <div id="videoQualityModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">📊 Video Quality</div>
+                <button class="modal-close" onclick="closeModal('videoQualityModal')">×</button>
+            </div>
+            <div class="modal-body">
+                <div style="display: grid; grid-template-columns: 1fr; gap: 12px;">
+                    <button onclick="setVideoQuality('hd')" class="action-btn success">HD (720p)</button>
+                    <button onclick="setVideoQuality('sd')" class="action-btn">SD (480p)</button>
+                    <button onclick="setVideoQuality('low')" class="action-btn">Low (240p)</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Notification -->
     <div id="toast" style="display: none;"></div>
 
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="voice-handler.js"></script>
+    <script src="video-handler.js"></script>
     <script>
         // ========== BLACK HOLE CHAT V2 - COMPLETE CLIENT ==========
         
@@ -1367,6 +1507,10 @@
         // Voice chat
         let voiceChat = null;
         let isVoiceActive = false;
+        
+        // Video chat
+        let videoChat = null;
+        let isVideoActive = false;
         
         // File upload
         let selectedFile = null;
@@ -1908,6 +2052,153 @@
             }
         }
         
+        // ========== VIDEO CHAT ==========
+        
+        async function toggleVideoChat() {
+            if (!currentRoom) {
+                showToast('❌ Join a room first');
+                return;
+            }
+            
+            if (!videoChat || !isVideoActive) {
+                // Check if user has permission (VIP+)
+                if (!isVip) {
+                    showToast('❌ Video chat requires VIP+ rank');
+                    return;
+                }
+                
+                // Check if user is muted
+                if (isUserMuted) {
+                    showToast('❌ You are muted and cannot use video chat');
+                    return;
+                }
+                
+                videoChat = new VideoChatHandler(socket, currentRoom, currentUsername, currentRank);
+                const success = await videoChat.start();
+                if (success) {
+                    isVideoActive = true;
+                    document.getElementById('videoMuteBtn').style.display = 'flex';
+                    document.getElementById('audioMuteBtn').style.display = 'flex';
+                    document.getElementById('screenShareBtn').style.display = 'flex';
+                    document.getElementById('qualityBtn').style.display = 'flex';
+                    document.getElementById('video-controls').style.display = 'flex';
+                }
+            } else {
+                videoChat.stop();
+                isVideoActive = false;
+                videoChat = null;
+                document.getElementById('videoMuteBtn').style.display = 'none';
+                document.getElementById('audioMuteBtn').style.display = 'none';
+                document.getElementById('screenShareBtn').style.display = 'none';
+                document.getElementById('qualityBtn').style.display = 'none';
+                document.getElementById('video-controls').style.display = 'none';
+            }
+        }
+        
+        function toggleVideoMute() {
+            if (videoChat) {
+                videoChat.toggleVideo(!videoChat.isVideoEnabled);
+                const btn = document.getElementById('videoMuteBtn');
+                if (btn) {
+                    btn.innerHTML = videoChat.isVideoEnabled ? 
+                        '<span>🎥</span> <span>MUTE VIDEO</span>' : 
+                        '<span>🎥</span> <span>UNMUTE VIDEO</span>';
+                }
+            }
+        }
+        
+        function toggleAudioMute() {
+            if (videoChat) {
+                videoChat.toggleAudio(!videoChat.isAudioEnabled);
+                const btn = document.getElementById('audioMuteBtn');
+                if (btn) {
+                    btn.innerHTML = videoChat.isAudioEnabled ? 
+                        '<span>🎤</span> <span>MUTE AUDIO</span>' : 
+                        '<span>🎤</span> <span>UNMUTE AUDIO</span>';
+                }
+            }
+        }
+        
+        async function toggleScreenShare() {
+            if (videoChat) {
+                if (!videoChat.isScreenSharing) {
+                    await videoChat.startScreenShare();
+                    document.getElementById('screenShareBtn').innerHTML = '<span>🖥️</span> <span>STOP SHARE</span>';
+                } else {
+                    videoChat.stopScreenShare();
+                    document.getElementById('screenShareBtn').innerHTML = '<span>🖥️</span> <span>SHARE SCREEN</span>';
+                }
+            }
+        }
+        
+        function showVideoQualityMenu() {
+            showModal('videoQualityModal');
+        }
+        
+        function setVideoQuality(quality) {
+            if (videoChat) {
+                videoChat.setVideoQuality(quality);
+                closeModal('videoQualityModal');
+            }
+        }
+        
+        // ========== ENHANCED /users COMMAND ==========
+        
+        function handleUsersCommand() {
+            if (!currentRoom) {
+                addSystemMessage('❌ Not in a room');
+                return;
+            }
+            
+            // Request user list from server
+            socket.emit('get_user_list', { roomName: currentRoom });
+        }
+
+        // Listen for user list response
+        socket.on('user_list', (data) => {
+            if (data.error) {
+                addSystemMessage(`❌ ${data.error}`);
+                return;
+            }
+            
+            let userList = '👥 USER LIST\n';
+            userList += '═══════════════\n\n';
+            
+            // Users in current room (green)
+            if (data.roomUsers && data.roomUsers.length > 0) {
+                userList += '📍 IN THIS ROOM 🟢\n';
+                data.roomUsers.forEach(user => {
+                    userList += `   🟢 ${user.username} [${user.rank.toUpperCase()}]\n`;
+                });
+                userList += '\n';
+            }
+            
+            // Users online in other rooms (yellow)
+            if (data.otherRoomUsers && data.otherRoomUsers.length > 0) {
+                userList += '📍 ONLINE ELSEWHERE 🟡\n';
+                data.otherRoomUsers.forEach(user => {
+                    userList += `   🟡 ${user.username} [${user.rank.toUpperCase()}] - in: ${user.room}\n`;
+                });
+                userList += '\n';
+            }
+            
+            // Users offline (red)
+            if (data.notOnlineUsers && data.notOnlineUsers.length > 0) {
+                userList += '📍 OFFLINE 🔴\n';
+                data.notOnlineUsers.forEach(user => {
+                    userList += `   🔴 ${user.username} [${user.rank.toUpperCase()}]\n`;
+                });
+            }
+            
+            if ((!data.roomUsers || data.roomUsers.length === 0) && 
+                (!data.otherRoomUsers || data.otherRoomUsers.length === 0) && 
+                (!data.notOnlineUsers || data.notOnlineUsers.length === 0)) {
+                userList += 'No other users found\n';
+            }
+            
+            addSystemMessage(userList);
+        });
+        
         // ========== FILE UPLOAD ==========
         
         function showFileUpload() {
@@ -2059,6 +2350,10 @@
             if (isVoiceActive && voiceChat) {
                 voiceChat.stop();
                 isVoiceActive = false;
+            }
+            if (isVideoActive && videoChat) {
+                videoChat.stop();
+                isVideoActive = false;
             }
             socket.emit('logout');
             resetUI();
@@ -2498,7 +2793,7 @@
                 <div class="help-section">
                     <div class="help-title">💬 EVERYONE</div>
                     <div><span class="help-command">/help</span> <span class="help-desc">- Show this help menu</span></div>
-                    <div><span class="help-command">/users</span> <span class="help-desc">- List users in current room</span></div>
+                    <div><span class="help-command">/users</span> <span class="help-desc">- List users (🟢 in room, 🟡 online elsewhere, 🔴 offline)</span></div>
                     <div><span class="help-command">/msg &lt;user&gt; &lt;text&gt;</span> <span class="help-desc">- Send private message</span></div>
                     <div><span class="help-command">/flip</span> <span class="help-desc">- Flip a coin (heads/tails)</span></div>
                     <div><span class="help-command">/roll &lt;min&gt; &lt;max&gt;</span> <span class="help-desc">- Roll a random number</span></div>
@@ -2507,17 +2802,18 @@
                 
                 <div class="help-section">
                     <div class="help-title">📊 RANK SYSTEM</div>
-                    <div><span class="help-rank owner">OWNER</span> <span class="help-desc">- Can see ALL private messages</span></div>
-                    <div><span class="help-rank admin">ADMIN</span> <span class="help-desc">- Can see messages from rank 2-5</span></div>
-                    <div><span class="help-rank mod">MOD</span> <span class="help-desc">- Can see messages from rank 3-5</span></div>
-                    <div><span class="help-rank vip">VIP</span> <span class="help-desc">- Can see only their own messages</span></div>
-                    <div><span class="help-rank member">MEMBER</span> <span class="help-desc">- Can see only their own messages</span></div>
+                    <div><span class="help-rank owner">OWNER</span> <span class="help-desc">- Can see ALL private messages, Video enabled</span></div>
+                    <div><span class="help-rank admin">ADMIN</span> <span class="help-desc">- Can see messages from rank 2-5, Video enabled</span></div>
+                    <div><span class="help-rank mod">MOD</span> <span class="help-desc">- Can see messages from rank 3-5, Video enabled</span></div>
+                    <div><span class="help-rank vip">VIP</span> <span class="help-desc">- Can see only their own messages, Video enabled</span></div>
+                    <div><span class="help-rank member">MEMBER</span> <span class="help-desc">- Can see only their own messages, Video disabled</span></div>
                 </div>
                 
                 ${isVip ? `
                 <div class="help-section">
                     <div class="help-title">⭐ VIP+ COMMANDS</div>
                     <div><span class="help-command">/theme &lt;name&gt;</span> <span class="help-desc">- Change theme (dark, neon, ocean, etc)</span></div>
+                    <div><span class="help-command">/video</span> <span class="help-desc">- Toggle video chat (VIP+ only)</span></div>
                 </div>
                 ` : ''}
                 
@@ -2790,6 +3086,7 @@
                 case '/grant': handleGrantCommand(args); break;
                 case '/rank': handleRankCommand(); break;
                 case '/ping': handlePingCommand(); break;
+                case '/video': toggleVideoChat(); break;
                 default: addSystemMessage(`❌ Unknown command: ${command}. Type /help for commands.`);
             }
         }
@@ -2799,8 +3096,54 @@
                 addSystemMessage('❌ Not in a room');
                 return;
             }
-            showUserList();
+            
+            // Request user list from server
+            socket.emit('get_user_list', { roomName: currentRoom });
         }
+
+        socket.on('user_list', (data) => {
+            if (data.error) {
+                addSystemMessage(`❌ ${data.error}`);
+                return;
+            }
+            
+            let userList = '👥 USER LIST\n';
+            userList += '═══════════════\n\n';
+            
+            // Users in current room (green)
+            if (data.roomUsers && data.roomUsers.length > 0) {
+                userList += '📍 IN THIS ROOM 🟢\n';
+                data.roomUsers.forEach(user => {
+                    userList += `   🟢 ${user.username} [${user.rank.toUpperCase()}]\n`;
+                });
+                userList += '\n';
+            }
+            
+            // Users online in other rooms (yellow)
+            if (data.otherRoomUsers && data.otherRoomUsers.length > 0) {
+                userList += '📍 ONLINE ELSEWHERE 🟡\n';
+                data.otherRoomUsers.forEach(user => {
+                    userList += `   🟡 ${user.username} [${user.rank.toUpperCase()}] - in: ${user.room}\n`;
+                });
+                userList += '\n';
+            }
+            
+            // Users offline (red)
+            if (data.notOnlineUsers && data.notOnlineUsers.length > 0) {
+                userList += '📍 OFFLINE 🔴\n';
+                data.notOnlineUsers.forEach(user => {
+                    userList += `   🔴 ${user.username} [${user.rank.toUpperCase()}]\n`;
+                });
+            }
+            
+            if ((!data.roomUsers || data.roomUsers.length === 0) && 
+                (!data.otherRoomUsers || data.otherRoomUsers.length === 0) && 
+                (!data.notOnlineUsers || data.notOnlineUsers.length === 0)) {
+                userList += 'No other users found\n';
+            }
+            
+            addSystemMessage(userList);
+        });
         
         function handleMsgCommand(args) {
             if (args.length < 2) {
@@ -3192,6 +3535,10 @@
                 voiceChat.stop();
                 isVoiceActive = false;
             }
+            if (isVideoActive && videoChat) {
+                videoChat.stop();
+                isVideoActive = false;
+            }
             socket.emit('leave_room');
             currentRoom = null;
             roomScreen.style.display = 'flex';
@@ -3222,6 +3569,10 @@
         socket.on('user_banned', (data) => {
             if (data.bannedUser === currentUsername) {
                 showToast(`⛔ You have been banned for ${data.duration || '10m'}`);
+                if (isVideoActive && videoChat) {
+                    videoChat.stop();
+                    isVideoActive = false;
+                }
                 setTimeout(() => leaveRoom(), 2000);
             }
         });
@@ -3236,6 +3587,13 @@
                 const durationMs = parseDurationClient(data.duration || '10m');
                 muteExpiresAt = Date.now() + durationMs;
                 showToast(`🔇 You have been muted for ${data.duration || '10m'}`);
+                
+                // Disable video if active
+                if (isVideoActive && videoChat) {
+                    videoChat.setMutedStatus(true);
+                    videoChat.stop();
+                    isVideoActive = false;
+                }
             }
             addSystemMessage(`🔇 ${data.mutedUser} has been muted for ${data.duration || '10m'}`);
         });
@@ -3252,6 +3610,10 @@
         socket.on('force_leave', (data) => {
             if (data.reason === 'banned') {
                 showToast('⛔ You have been banned');
+                if (isVideoActive && videoChat) {
+                    videoChat.stop();
+                    isVideoActive = false;
+                }
                 setTimeout(() => leaveRoom(), 1000);
             }
         });
@@ -3279,6 +3641,15 @@
         
         socket.on('ping', (cb) => {
             if (cb) cb();
+        });
+        
+        // Listen for video notifications
+        socket.on('videoNotification', (data) => {
+            showToast(data.message);
+        });
+        
+        socket.on('video_error', (data) => {
+            showToast(`❌ ${data.message}`);
         });
         
         // ========== UI EVENT LISTENERS ==========

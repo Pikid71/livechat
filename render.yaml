@@ -37,7 +37,7 @@ services:
       - key: PORT
         value: 10000
       
-      # Enable WebRTC for voice chat
+      # Enable WebRTC for voice/video chat
       - key: ENABLE_WEBRTC
         value: true
       
@@ -68,3 +68,21 @@ services:
     logging:
       format: json
       level: info
+
+  # Optional: Background worker for cleanup tasks (if needed)
+  # - type: worker
+  #   name: black-hole-chat-worker
+  #   runtime: node
+  #   repo: https://github.com/Pikid71/livechat
+  #   branch: main
+  #   plan: free
+  #   buildCommand: npm install
+  #   startCommand: node cleanup-worker.js
+  #   envVars:
+  #     - key: NODE_ENV
+  #       value: production
+  #     - key: MONGODB_URI
+  #       fromService:
+  #         type: web
+  #         name: black-hole-chat-v2
+  #         envVarKey: MONGODB_URI
