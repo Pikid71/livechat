@@ -7,7 +7,6 @@ const mongoose = require('mongoose');
 const multer = require('multer');
 const sharp = require('sharp');
 const fs = require('fs').promises;
-const os = require('os');
 
 const app = express();
 const server = http.createServer(app);
@@ -24,21 +23,10 @@ const io = new Server(server, {
 // 🔐 ENVIRONMENT VARIABLES
 // ============================================
 let MONGODB_URI = process.env.MONGODB_URI;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'A@sh1shlivechat';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const PORT = process.env.PORT || 3000;
 const OWNER_USERNAME = 'Pi_Kid71';
 const NODE_ENV = process.env.NODE_ENV || 'development';
-
-// Fix MongoDB URI with special characters
-if (MONGODB_URI) {
-  try {
-    // Decode the URI properly - %40 should become @
-    MONGODB_URI = decodeURIComponent(MONGODB_URI);
-    console.log(`📡 MongoDB URI: ${MONGODB_URI.replace(/\/\/[^:]+:[^@]+@/, '//***:***@')}`);
-  } catch (e) {
-    console.error('Error decoding MongoDB URI:', e.message);
-  }
-}
 
 console.log('\n' + '='.repeat(70));
 console.log('🚀 BLACK HOLE CHAT V2 - SERVER STARTING');
@@ -470,12 +458,6 @@ function getRankLevel(rank) {
   return RANK_LEVELS[rank] || 5;
 }
 
-function canUserSeePrivateMessage(userRank, senderRank) {
-  const userLevel = getRankLevel(userRank);
-  const senderLevel = getRankLevel(senderRank);
-  return userLevel <= senderLevel;
-}
-
 function isUserMuted(username, roomName) {
   const muteKey = `${username}-${roomName}`;
   if (memoryStore.mutes.has(muteKey)) {
@@ -517,8 +499,7 @@ const PERMISSIONS = {
     canUseEffects: true, 
     canUpload: true, 
     canVoice: true, 
-    canVideo: true, // Owner can use video
-    canSeePrivate: true,
+    canVideo: true,
     canSeeAllPrivate: true
   },
   admin: { 
@@ -532,8 +513,7 @@ const PERMISSIONS = {
     canUseEffects: true, 
     canUpload: true, 
     canVoice: true, 
-    canVideo: true, // Admin can use video
-    canSeePrivate: true,
+    canVideo: true,
     canSeeAllPrivate: false
   },
   moderator: { 
@@ -547,8 +527,7 @@ const PERMISSIONS = {
     canUseEffects: false, 
     canUpload: true, 
     canVoice: true, 
-    canVideo: true, // Moderator can use video
-    canSeePrivate: true,
+    canVideo: true,
     canSeeAllPrivate: false
   },
   vip: { 
@@ -562,8 +541,7 @@ const PERMISSIONS = {
     canUseEffects: false, 
     canUpload: true, 
     canVoice: true, 
-    canVideo: true, // VIP can use video
-    canSeePrivate: false,
+    canVideo: true,
     canSeeAllPrivate: false
   },
   member: { 
@@ -577,8 +555,7 @@ const PERMISSIONS = {
     canUseEffects: false, 
     canUpload: false, 
     canVoice: true, 
-    canVideo: false, // Members cannot use video
-    canSeePrivate: false,
+    canVideo: false,
     canSeeAllPrivate: false
   }
 };
@@ -764,6 +741,88 @@ io.on('connection', (socket) => {
       socket.emit('room_users', { users });
     } catch (err) {
       console.error('get_room_users error:', err);
+    }
+  });
+  
+  // ========== ENHANCED USER LIST COMMAND ==========
+  
+  socket.on('get_user_list', (data) => {
+    try {
+      if (!currentUser || !currentRoom) {
+        return socket.emit('user_list', { error: 'Not in a room' });
+      }
+      
+      const { roomName } = data;
+      
+      // Get all users in current room
+      const roomUsers = [];
+      for (const [sid, session] of memoryStore.sessions) {
+        if (session.roomName === roomName && session.username !== currentUser) {
+          roomUsers.push({
+            username: session.username,
+            rank: session.rank || 'member'
+          });
+        }
+      }
+      
+      // Get all registered users
+      const allUsers = Array.from(memoryStore.users.keys()).filter(u => u !== currentUser);
+      
+      // Get users in other rooms
+      const otherRoomUsers = [];
+      const notOnlineUsers = [];
+      
+      allUsers.forEach(username => {
+        // Skip if already in current room
+        if (roomUsers.some(u => u.username === username)) {
+          return;
+        }
+        
+        // Check if user is online
+        let isOnline = false;
+        let userRoom = null;
+        let userRank = memoryStore.users.get(username)?.rank || 'member';
+        
+        for (const [sid, session] of memoryStore.sessions) {
+          if (session.username === username) {
+            isOnline = true;
+            userRoom = session.roomName || 'Unknown';
+            break;
+          }
+        }
+        
+        if (isOnline) {
+          otherRoomUsers.push({
+            username,
+            rank: userRank,
+            room: userRoom
+          });
+        } else {
+          notOnlineUsers.push({
+            username,
+            rank: userRank
+          });
+        }
+      });
+      
+      // Sort by rank
+      const rankOrder = { 'owner': 1, 'admin': 2, 'moderator': 3, 'vip': 4, 'member': 5 };
+      
+      roomUsers.sort((a, b) => (rankOrder[a.rank] || 5) - (rankOrder[b.rank] || 5));
+      otherRoomUsers.sort((a, b) => (rankOrder[a.rank] || 5) - (rankOrder[b.rank] || 5));
+      notOnlineUsers.sort((a, b) => (rankOrder[a.rank] || 5) - (rankOrder[b.rank] || 5));
+      
+      // Send back to client
+      socket.emit('user_list', {
+        currentRoom: roomName,
+        roomUsers,
+        otherRoomUsers,
+        notOnlineUsers
+      });
+      
+    } catch (err) {
+      console.error('get_user_list error:', err);
+      socket.emit('user_list', { error: 'Failed to get user list' });
     }
   });
   
@@ -953,13 +1012,13 @@ io.on('connection', (socket) => {
     }
   });
   
-  // ========== PRIVATE MESSAGES WITH RANK-BASED VISIBILITY ==========
+  // ========== PRIVATE MESSAGES ==========
   
   socket.on('private_message', (data) => {
     try {
       if (!currentUser) return;
       
-      const { recipient, message, senderRank, senderRankLevel } = data;
+      const { recipient, message } = data;
       
       if (!recipient || !message) return;
       
@@ -997,6 +1056,7 @@ io.on('connection', (socket) => {
         console.log(`💌 PM sent to recipient: ${recipient}`);
       }
       
+      // Send to admins/owner based on rank
       const senderLevel = getRankLevel(userRank);
       for (const [sid, session] of memoryStore.sessions) {
         if (session.username !== currentUser && session.username !== recipient) {
@@ -1011,6 +1071,7 @@ io.on('connection', (socket) => {
         }
       }
       
+      // Owner always sees all private messages
       if (userRank !== 'owner') {
         for (const [sid, session] of memoryStore.sessions) {
           if (session.rank === 'owner' && session.username !== currentUser && session.username !== recipient) {
@@ -1288,13 +1349,6 @@ io.on('connection', (socket) => {
       });
     } catch (err) {
       console.error('video_ice_candidate error:', err);
-    }
-  });
-  
-  socket.on('video_stats', (data) => {
-    // Just for debugging, can be ignored or logged
-    if (NODE_ENV === 'development') {
-      console.log('📊 Video stats:', data);
     }
   });
   
@@ -1803,6 +1857,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`   4. ⭐ VIP - Can see only their own messages, Video enabled`);
   console.log(`   5. 👤 Member - Can see only their own messages, Video disabled`);
   console.log(`🎥 Video Chat: VIP+ only (Owner, Admin, Moderator, VIP)`);
+  console.log(`👥 /users Command: Shows 🟢 in room, 🟡 online elsewhere, 🔴 offline`);
   console.log(`💾 MongoDB: ${isMongoConnected ? 'CONNECTED' : 'DISCONNECTED'}`);
   console.log(`📁 Uploads: ${uploadDir}`);
   console.log(`🌍 URL: http://localhost:${PORT}`);
