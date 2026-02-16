@@ -325,6 +325,36 @@
             display: inline-block;
         }
 
+        /* ========== AI MESSAGE STYLES ========== */
+        .msg.ai {
+            background: linear-gradient(135deg, #667eea 0%, #9b59b6 100%);
+            border-left: 4px solid #00ff88;
+            position: relative;
+            box-shadow: 0 0 20px rgba(102, 126, 234, 0.5);
+        }
+        .msg.ai::before {
+            content: '🤖';
+            position: absolute;
+            top: -10px;
+            left: -10px;
+            font-size: 16px;
+            background: #333;
+            border-radius: 50%;
+            padding: 4px;
+            border: 2px solid #00ff88;
+            z-index: 10;
+        }
+        .ai-prompt-badge {
+            display: inline-block;
+            background: rgba(0, 255, 136, 0.2);
+            color: #00ff88;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            margin-left: 8px;
+            border: 1px solid #00ff88;
+        }
+
         /* ========== PRIVATE MESSAGE STYLES ========== */
         .msg.private {
             border-left: 4px solid #ff00ff;
@@ -597,6 +627,13 @@
             text-align: center;
         }
 
+        .msg.ai {
+            background: linear-gradient(135deg, #667eea 0%, #9b59b6 100%);
+            border-left: 4px solid #00ff88;
+            position: relative;
+            box-shadow: 0 0 20px rgba(102, 126, 234, 0.5);
+        }
+
         .msg.file-share {
             background: rgba(0, 128, 128, 0.3);
             border-left: 4px solid #00ffff;
@@ -730,6 +767,9 @@
             max-height: 200px;
             overflow-y: auto;
             margin-top: 12px;
+            position: relative;
+            z-index: 100;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
 
         .emoji-panel.show { 
@@ -1026,20 +1066,23 @@
         #messages::-webkit-scrollbar,
         #room-content::-webkit-scrollbar,
         .modal-content::-webkit-scrollbar,
-        #video-grid::-webkit-scrollbar {
+        #video-grid::-webkit-scrollbar,
+        .emoji-panel::-webkit-scrollbar {
             width: 8px;
         }
         #messages::-webkit-scrollbar-track,
         #room-content::-webkit-scrollbar-track,
         .modal-content::-webkit-scrollbar-track,
-        #video-grid::-webkit-scrollbar-track {
+        #video-grid::-webkit-scrollbar-track,
+        .emoji-panel::-webkit-scrollbar-track {
             background: rgba(0,0,0,0.3);
             border-radius: 4px;
         }
         #messages::-webkit-scrollbar-thumb,
         #room-content::-webkit-scrollbar-thumb,
         .modal-content::-webkit-scrollbar-thumb,
-        #video-grid::-webkit-scrollbar-thumb {
+        #video-grid::-webkit-scrollbar-thumb,
+        .emoji-panel::-webkit-scrollbar-thumb {
             background: linear-gradient(to bottom, #667eea, #764ba2);
             border-radius: 4px;
         }
@@ -1115,6 +1158,33 @@
             from { bottom: 0; opacity: 0; }
             to { bottom: 20px; opacity: 1; }
         }
+
+        /* ========== AI LOADING ANIMATION ========== */
+        .ai-thinking {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 8px;
+            background: rgba(102, 126, 234, 0.2);
+            border-radius: 20px;
+            margin-left: 8px;
+        }
+
+        .ai-thinking span {
+            width: 6px;
+            height: 6px;
+            background: #667eea;
+            border-radius: 50%;
+            animation: aiThinking 1.4s infinite;
+        }
+
+        .ai-thinking span:nth-child(2) { animation-delay: 0.2s; }
+        .ai-thinking span:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes aiThinking {
+            0%, 60%, 100% { transform: translateY(0); opacity: 0.6; }
+            30% { transform: translateY(-6px); opacity: 1; }
+        }
     </style>
 </head>
 <body data-theme="default">
@@ -1138,6 +1208,10 @@
                         <div style="display: flex; flex-direction: column; gap: 15px;">
                             <input id="loginUsername" placeholder="Username..." maxlength="30" style="background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 14px 18px; color: white; border-radius: 30px; outline: none; font-size: 15px;" />
                             <input id="loginPassword" placeholder="Password..." maxlength="30" type="password" style="background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 14px 18px; color: white; border-radius: 30px; outline: none; font-size: 15px;" />
+                            <div style="display: flex; align-items: center; gap: 10px; margin: 5px 0;">
+                                <input type="checkbox" id="rememberMe" checked style="width: 16px; height: 16px;">
+                                <label for="rememberMe" style="color: #aaa; font-size: 13px;">Remember me (stay logged in)</label>
+                            </div>
                             <button onclick="handleLogin()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; padding: 14px; color: white; border-radius: 30px; font-weight: bold; cursor: pointer; margin-top: 5px; font-size: 16px;">🚀 LOGIN</button>
                             <div style="text-align: center; color: #aaa; font-size: 14px;">Don't have an account? <span onclick="switchToRegister()" style="cursor: pointer; color: #667eea; text-decoration: underline;">Register</span></div>
                         </div>
@@ -1281,7 +1355,7 @@
                 <!-- Message Input -->
                 <div class="input-row">
                     <input id="messageInput" placeholder="Type message... /help for commands" autocomplete="off">
-                    <button class="action-btn" onclick="toggleEmojiPanel()" title="Emoji">😊</button>
+                    <button class="action-btn" onclick="toggleEmojiPanel()" title="Emoji" id="emojiBtn">😊</button>
                     <button onclick="sendMessage()" class="action-btn success" style="min-width: 80px;">
                         <span>📤</span> SEND
                     </button>
@@ -1482,12 +1556,34 @@
         </div>
     </div>
 
+    <!-- AI Prompt Modal -->
+    <div id="aiPromptModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">🤖 Ask AI</div>
+                <button class="modal-close" onclick="closeModal('aiPromptModal')">×</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 20px;">
+                    <textarea id="aiPromptInput" placeholder="Ask the AI anything..." style="width: 100%; background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 14px; color: white; border-radius: 16px; outline: none; font-size: 14px; min-height: 100px; resize: vertical;"></textarea>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button onclick="closeModal('aiPromptModal')" class="action-btn danger" style="flex: 1;">CANCEL</button>
+                    <button onclick="sendAIPromptFromModal()" class="action-btn success" style="flex: 2;">ASK AI</button>
+                </div>
+                <div style="margin-top: 15px; font-size: 12px; color: #888; text-align: center;">
+                    ⚡ VIP+ only • Powered by OpenRouter
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Notification -->
     <div id="toast" style="display: none;"></div>
 
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
-        // ========== BLACK HOLE CHAT V2 - COMPLETE CLIENT ==========
+        // ========== BLACK HOLE CHAT V2 - COMPLETE CLIENT WITH ALL FIXES ==========
         
         // Socket.IO connection
         const socket = io();
@@ -1523,6 +1619,10 @@
         let notificationsEnabled = true;
         let notificationPermission = false;
         
+        // AI configuration
+        const OPENROUTER_API_KEY = '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';
+        const AI_MODEL = 'openai/gpt-3.5-turbo';
+        
         // UI Elements
         const msgContainer = document.getElementById('messages');
         const input = document.getElementById('messageInput');
@@ -1535,6 +1635,29 @@
         const loggedInUsernameDisplay = document.getElementById('loggedInUsername');
         const authMessage = document.getElementById('authMessage');
         const toast = document.getElementById('toast');
+        
+        // ========== COOKIE FUNCTIONS ==========
+        
+        function setCookie(name, value, days) {
+            const expires = new Date();
+            expires.setTime(expires.getTime() + days * 24 * 60 * 60 * 1000);
+            document.cookie = name + '=' + value + ';expires=' + expires.toUTCString() + ';path=/';
+        }
+        
+        function getCookie(name) {
+            const nameEQ = name + '=';
+            const ca = document.cookie.split(';');
+            for(let i = 0; i < ca.length; i++) {
+                let c = ca[i];
+                while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+                if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+            }
+            return null;
+        }
+        
+        function deleteCookie(name) {
+            document.cookie = name + '=; Max-Age=-99999999;path=/';
+        }
         
         // ========== HELPER FUNCTIONS ==========
         
@@ -1591,6 +1714,30 @@
             msgContainer.scrollTop = msgContainer.scrollHeight;
         }
         
+        function addAIMessage(username, prompt, response) {
+            if (!msgContainer) return;
+            
+            const wrapper = document.createElement('div');
+            wrapper.className = 'msg-wrapper';
+            
+            const header = document.createElement('div');
+            header.className = 'msg-header';
+            header.innerHTML = `
+                <span class="msg-username">🤖 AI by ${username}</span>
+                <span class="ai-prompt-badge">${prompt.substring(0, 30)}${prompt.length > 30 ? '...' : ''}</span>
+                <span class="msg-timestamp">${new Date().toLocaleTimeString()}</span>
+            `;
+            wrapper.appendChild(header);
+            
+            const item = document.createElement('div');
+            item.className = 'msg ai';
+            item.textContent = response;
+            wrapper.appendChild(item);
+            
+            msgContainer.appendChild(wrapper);
+            msgContainer.scrollTop = msgContainer.scrollHeight;
+        }
+        
         function parseDurationClient(duration) {
             const match = duration.match(/^(\d+)([hmd])$/);
             if (!match) return 10 * 60 * 1000;
@@ -1615,6 +1762,101 @@
         function updateOnlineUsers() {
             if (currentRoom) {
                 socket.emit('get_room_users', { roomName: currentRoom });
+            }
+        }
+        
+        // ========== AI FUNCTIONS ==========
+        
+        async function askAI(prompt) {
+            if (!prompt || prompt.trim() === '') {
+                showToast('❌ Please enter a prompt');
+                return;
+            }
+            
+            if (!isVip) {
+                showToast('❌ AI command requires VIP+ rank');
+                return;
+            }
+            
+            if (isUserMuted) {
+                showToast('❌ You are muted and cannot use AI');
+                return;
+            }
+            
+            addSystemMessage(`🤖 ${currentUsername} asked AI: "${prompt}"`);
+            
+            const loadingWrapper = document.createElement('div');
+            loadingWrapper.className = 'msg-wrapper';
+            const loadingItem = document.createElement('div');
+            loadingItem.className = 'msg system';
+            loadingItem.innerHTML = `
+                🤖 AI is thinking
+                <span class="ai-thinking">
+                    <span></span><span></span><span></span>
+                </span>
+            `;
+            loadingWrapper.appendChild(loadingItem);
+            msgContainer.appendChild(loadingWrapper);
+            msgContainer.scrollTop = msgContainer.scrollHeight;
+            
+            try {
+                const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+                        'Content-Type': 'application/json',
+                        'HTTP-Referer': window.location.origin,
+                        'X-Title': 'Black Hole Chat V2'
+                    },
+                    body: JSON.stringify({
+                        model: AI_MODEL,
+                        messages: [
+                            {
+                                role: 'system',
+                                content: 'You are a helpful AI assistant in a chat room. Keep responses concise and friendly.'
+                            },
+                            {
+                                role: 'user',
+                                content: prompt
+                            }
+                        ],
+                        max_tokens: 500,
+                        temperature: 0.7
+                    })
+                });
+                
+                loadingWrapper.remove();
+                
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                const aiResponse = data.choices[0].message.content;
+                
+                addAIMessage(currentUsername, prompt, aiResponse);
+                
+                socket.emit('chat message', {
+                    username: 'System',
+                    message: `🤖 AI by ${currentUsername}: ${aiResponse}`
+                });
+                
+            } catch (error) {
+                console.error('AI error:', error);
+                loadingWrapper.remove();
+                showToast('❌ AI request failed');
+                addSystemMessage(`❌ AI request failed: ${error.message}`);
+            }
+        }
+        
+        function sendAIPromptFromModal() {
+            const prompt = document.getElementById('aiPromptInput').value.trim();
+            if (prompt) {
+                askAI(prompt);
+                closeModal('aiPromptModal');
+                document.getElementById('aiPromptInput').value = '';
+            } else {
+                showToast('❌ Please enter a prompt');
             }
         }
         
@@ -1649,7 +1891,7 @@
             '🌕', '🌖', '🌗', '🌘', '🌑', '🌒', '🌓', '🌔', '☀️', '🌝', '🌛', '🌜', '🌚', '☁️', '⛅', '🌤️', '🌥️', '🌦️', '🌧️', '🌨️'
         ];
         
-        // Load emojis
+        // Load emojis - FIXED: Now properly loads and shows when clicked
         function loadEmojis() {
             if (!emojiPanel) return;
             emojiPanel.innerHTML = '';
@@ -1657,7 +1899,8 @@
                 const emojiItem = document.createElement('div');
                 emojiItem.className = 'emoji-item';
                 emojiItem.textContent = emoji;
-                emojiItem.onclick = () => {
+                emojiItem.onclick = (e) => {
+                    e.stopPropagation();
                     input.value += emoji;
                     input.focus();
                     emojiPanel.classList.remove('show');
@@ -1669,12 +1912,29 @@
         // Call after DOM is loaded
         document.addEventListener('DOMContentLoaded', loadEmojis);
         
+        // FIXED: Emoji panel toggle with better click handling
         function toggleEmojiPanel() {
             emojiPanel.classList.toggle('show');
-            input.focus();
+            // Ensure panel is visible and clickable
+            if (emojiPanel.classList.contains('show')) {
+                emojiPanel.style.display = 'grid';
+                input.blur(); // Remove focus from input to prevent keyboard from hiding panel
+            } else {
+                emojiPanel.style.display = 'none';
+            }
         }
         
-        // ========== BROWSER NOTIFICATIONS ==========
+        // FIXED: Close emoji panel when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.emoji-btn') && 
+                !e.target.closest('#emojiBtn') && 
+                !e.target.closest('.emoji-panel')) {
+                emojiPanel.classList.remove('show');
+                emojiPanel.style.display = 'none';
+            }
+        });
+        
+        // ========== BROWSER NOTIFICATIONS - FIXED to work in background ==========
         
         function checkNotificationSupport() {
             return "Notification" in window;
@@ -1694,13 +1954,15 @@
                     notificationsEnabled = true;
                     btn.classList.add('enabled');
                     btn.innerHTML = '<span>🔔</span> <span>Notifications Enabled</span>';
-                    showToast("✅ Notifications enabled!");
+                    showToast("✅ Notifications enabled! You will receive notifications even when tab is in background.");
+                    
+                    // Test notification
                     sendNotification('✅ Notifications Enabled', 'You will now receive notifications for new messages');
                 } else {
                     notificationsEnabled = false;
                     btn.classList.remove('enabled');
                     btn.innerHTML = '<span>🔕</span> <span>Enable Notifications</span>';
-                    showToast("❌ Notifications blocked");
+                    showToast("❌ Notifications blocked - please allow in browser settings");
                 }
             });
         }
@@ -1717,16 +1979,16 @@
                     if (notificationPermission) {
                         notificationsEnabled = true;
                         updateNotificationSwitch();
-                        showToast("✅ Notifications enabled!");
+                        showToast("✅ Notifications enabled! They will work in background.");
                         sendNotification('✅ Notifications Enabled', 'You will now receive notifications for new messages');
                     } else {
-                        showToast("❌ Please allow notifications in your browser");
+                        showToast("❌ Please allow notifications in your browser settings");
                     }
                 });
             } else {
                 notificationsEnabled = !notificationsEnabled;
                 updateNotificationSwitch();
-                showToast(notificationsEnabled ? '🔔 Notifications enabled' : '🔕 Notifications disabled');
+                showToast(notificationsEnabled ? '🔔 Notifications enabled (background mode)' : '🔕 Notifications disabled');
             }
         }
         
@@ -1741,17 +2003,28 @@
             }
         }
         
+        // FIXED: Send notification even when tab is in background
         function sendNotification(title, body, icon = '🕳️') {
-            if (!notificationPermission || document.hidden === false) return;
+            // Always send notification if permission granted, regardless of tab visibility
+            if (!notificationPermission) return;
+            
             try {
                 const notification = new Notification(title, {
                     body: body,
                     icon: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="#667eea" opacity="0.3"/><text x="50" y="70" font-size="50" text-anchor="middle" fill="white">🕳️</text></svg>'),
                     tag: 'chat-message',
-                    renotify: true
+                    renotify: true,
+                    silent: false,
+                    requireInteraction: false
                 });
-                notification.onclick = function() { window.focus(); this.close(); };
+                
+                notification.onclick = function() { 
+                    window.focus(); 
+                    this.close(); 
+                };
+                
                 setTimeout(() => notification.close(), 5000);
+                
             } catch (err) {
                 console.error('Notification error:', err);
             }
@@ -2428,6 +2701,11 @@
                 };
                 
                 pc.ontrack = (event) => {
+                    // Check if we already have a container for this user
+                    if (this.videoContainers.has(userId)) {
+                        return; // Already have a video for this user
+                    }
+                    
                     const container = document.createElement('div');
                     container.className = 'video-container';
                     
@@ -2912,18 +3190,26 @@
             }, 3000);
         }
         
-        // ========== AUTH HANDLERS ==========
+        // ========== AUTH HANDLERS WITH COOKIE STORAGE ==========
         
         function handleLogin() {
             const username = document.getElementById('loginUsername').value.trim();
             const password = document.getElementById('loginPassword').value;
+            const rememberMe = document.getElementById('rememberMe')?.checked || false;
             
             if (!username || !password) {
                 showAuthMessage('Please enter both username and password');
                 return;
             }
             
-            socket.emit('login', { username, password });
+            // Store credentials in cookies if remember me is checked
+            if (rememberMe) {
+                setCookie('username', username, 30);
+                setCookie('password', password, 30);
+                setCookie('rememberMe', 'true', 30);
+            }
+            
+            socket.emit('login', { username, password, rememberMe });
         }
         
         function handleRegister() {
@@ -2950,6 +3236,11 @@
         }
         
         function handleLogout() {
+            // Clear cookies on logout
+            deleteCookie('username');
+            deleteCookie('password');
+            deleteCookie('rememberMe');
+            
             if (currentRoom) {
                 socket.emit('leave_room');
             }
@@ -3217,6 +3508,7 @@
                 addMessage(data.username, data.message, data.rank);
             }
             
+            // Send notification even when tab is in background
             if (data.username !== currentUsername && currentRoom) {
                 sendNotification(`💬 New message in ${currentRoom}`, `${data.username}: ${data.message.substring(0, 50)}${data.message.length > 50 ? '...' : ''}`);
             }
@@ -3408,11 +3700,11 @@
                 
                 <div class="help-section">
                     <div class="help-title">📊 RANK SYSTEM</div>
-                    <div><span class="help-rank owner">OWNER</span> <span class="help-desc">- Can see ALL private messages, Video enabled</span></div>
+                    <div><span class="help-rank owner">OWNER</span> <span class="help-desc">- Can see ALL private messages, Video enabled, /clear</span></div>
                     <div><span class="help-rank admin">ADMIN</span> <span class="help-desc">- Can see messages from rank 2-5, Video enabled</span></div>
                     <div><span class="help-rank mod">MOD</span> <span class="help-desc">- Can see messages from rank 3-5, Video enabled</span></div>
-                    <div><span class="help-rank vip">VIP</span> <span class="help-desc">- Can see only their own messages, Video enabled</span></div>
-                    <div><span class="help-rank member">MEMBER</span> <span class="help-desc">- Can see only their own messages, Video disabled</span></div>
+                    <div><span class="help-rank vip">VIP</span> <span class="help-desc">- Can see only their own messages, Video enabled, AI access</span></div>
+                    <div><span class="help-rank member">MEMBER</span> <span class="help-desc">- Can see only their own messages, Video disabled, AI disabled</span></div>
                 </div>
                 
                 ${isVip ? `
@@ -3420,6 +3712,7 @@
                     <div class="help-title">⭐ VIP+ COMMANDS</div>
                     <div><span class="help-command">/theme &lt;name&gt;</span> <span class="help-desc">- Change theme (dark, neon, ocean, etc)</span></div>
                     <div><span class="help-command">/video</span> <span class="help-desc">- Toggle video chat (VIP+ only)</span></div>
+                    <div><span class="help-command">/ai &lt;prompt&gt;</span> <span class="help-desc">- Ask AI anything (VIP+ only)</span></div>
                 </div>
                 ` : ''}
                 
@@ -3429,7 +3722,6 @@
                     <div><span class="help-command">/ban &lt;user&gt; [duration]</span> <span class="help-desc">- Ban user (10m, 1h, 1d)</span></div>
                     <div><span class="help-command">/mute &lt;user&gt; [duration]</span> <span class="help-desc">- Mute user (default 10m)</span></div>
                     <div><span class="help-command">/unmute &lt;user&gt;</span> <span class="help-desc">- Unmute user</span></div>
-                    <div><span class="help-command">/clear</span> <span class="help-desc">- Clear all messages in room</span></div>
                 </div>
                 ` : ''}
                 
@@ -3446,6 +3738,7 @@
                 <div class="help-section">
                     <div class="help-title">👑 OWNER COMMANDS</div>
                     <div><span class="help-command">/grant &lt;user&gt; admin</span> <span class="help-desc">- Grant admin rank</span></div>
+                    <div><span class="help-command">/clear</span> <span class="help-desc">- Clear all messages (Owner only)</span></div>
                 </div>
                 ` : ''}
                 
@@ -3466,8 +3759,8 @@
                 </div>
                 ` : ''}
                 
-                <div style="text-align: center; margin-top: 15px; color: #888; font-size: 11px;">
-                    🔔 Click the notification button to enable browser notifications
+                <div style="text-align: center; margin-top: 15px; color: #888; font-size: 11px; border-top: 1px solid rgba(102,126,234,0.3); padding-top: 10px;">
+                    🤖 AI command available for VIP+ • 🔔 Notifications work in background • 🔐 Stay logged in with cookies
                 </div>
             `;
             
@@ -3478,40 +3771,26 @@
             msgContainer.scrollTop = msgContainer.scrollHeight;
         }
         
-        // ========== COMMANDS ==========
+        // ========== ENHANCED USERS COMMAND ==========
         
-        function handleCommand(commandText) {
-            if (checkIfUserMuted()) {
-                addSystemMessage('❌ You are muted and cannot use commands');
+        function handleUsersCommand() {
+            if (!currentRoom) {
+                addSystemMessage('❌ Not in a room');
                 return;
             }
             
-            const parts = commandText.split(' ');
-            const command = parts[0].toLowerCase();
-            const args = parts.slice(1);
+            // Show loading message
+            const loadingMsg = document.createElement('div');
+            loadingMsg.className = 'msg system';
+            loadingMsg.textContent = '👥 Fetching user list...';
+            loadingMsg.style.animation = 'pulse 1.5s infinite';
+            msgContainer.appendChild(loadingMsg);
+            msgContainer.scrollTop = msgContainer.scrollHeight;
             
-            switch(command) {
-                case '/help': showHelp(); break;
-                case '/users': socket.emit('get_user_list', { roomName: currentRoom }); break;
-                case '/msg': handleMsgCommand(args); break;
-                case '/clear': handleClearCommand(args); break;
-                case '/flip': handleFlipCommand(); break;
-                case '/roll': handleRollCommand(args); break;
-                case '/ban': handleBanCommand(args); break;
-                case '/mute': handleMuteCommand(args); break;
-                case '/unmute': handleUnmuteCommand(args); break;
-                case '/unban': handleUnbanCommand(args); break;
-                case '/delete': handleDeleteCommand(args); break;
-                case '/effect': handleEffectCommand(args); break;
-                case '/theme': handleThemeCommand(args); break;
-                case '/grant': handleGrantCommand(args); break;
-                case '/rank': handleRankCommand(); break;
-                case '/ping': handlePingCommand(); break;
-                case '/video': toggleVideoChat(); break;
-                default: addSystemMessage(`❌ Unknown command: ${command}. Type /help for commands.`);
-            }
+            // Request user list from server
+            socket.emit('get_user_list', { roomName: currentRoom });
         }
-        
+
         // Listen for user list response
         socket.on('user_list', (data) => {
             if (data.error) {
@@ -3519,39 +3798,118 @@
                 return;
             }
             
-            let userList = '👥 USER LIST\n';
-            userList += '═══════════════\n\n';
-            
-            if (data.roomUsers && data.roomUsers.length > 0) {
-                userList += '📍 IN THIS ROOM 🟢\n';
-                data.roomUsers.forEach(user => {
-                    userList += `   🟢 ${user.username} [${user.rank.toUpperCase()}]\n`;
-                });
-                userList += '\n';
+            // Remove loading message
+            const loadingMsg = document.querySelector('.msg.system:last-child');
+            if (loadingMsg && loadingMsg.textContent.includes('Fetching user list')) {
+                loadingMsg.remove();
             }
             
-            if (data.otherRoomUsers && data.otherRoomUsers.length > 0) {
-                userList += '📍 ONLINE ELSEWHERE 🟡\n';
-                data.otherRoomUsers.forEach(user => {
-                    userList += `   🟡 ${user.username} [${user.rank.toUpperCase()}] - in: ${user.room}\n`;
-                });
-                userList += '\n';
-            }
+            // Create beautiful user list UI similar to help menu
+            const userListDiv = document.createElement('div');
+            userListDiv.className = 'msg system help-menu';
             
-            if (data.notOnlineUsers && data.notOnlineUsers.length > 0) {
-                userList += '📍 OFFLINE 🔴\n';
-                data.notOnlineUsers.forEach(user => {
-                    userList += `   🔴 ${user.username} [${user.rank.toUpperCase()}]\n`;
-                });
-            }
+            // Get current room name
+            const currentRoomName = data.currentRoom || currentRoom || 'Unknown';
             
-            if ((!data.roomUsers || data.roomUsers.length === 0) && 
-                (!data.otherRoomUsers || data.otherRoomUsers.length === 0) && 
-                (!data.notOnlineUsers || data.notOnlineUsers.length === 0)) {
-                userList += 'No other users found\n';
-            }
+            // Calculate totals
+            const totalInRoom = data.roomUsers?.length || 0;
+            const totalOnlineElsewhere = data.otherRoomUsers?.length || 0;
+            const totalOffline = data.notOnlineUsers?.length || 0;
+            const totalUsers = totalInRoom + totalOnlineElsewhere + totalOffline;
             
-            addSystemMessage(userList);
+            // Build the HTML
+            userListDiv.innerHTML = `
+                <div style="text-align: center; margin-bottom: 15px;">
+                    <span style="font-size: 24px;">👥</span>
+                    <span style="font-weight: bold; font-size: 20px; color: gold;"> USER DIRECTORY</span>
+                    <span style="font-size: 24px;">📋</span>
+                </div>
+                
+                <div style="text-align: center; margin-bottom: 20px; padding: 10px; background: rgba(102, 126, 234, 0.2); border-radius: 12px;">
+                    <span style="font-size: 16px; color: #4ade80;">📍 Current Room: </span>
+                    <span style="font-size: 18px; font-weight: bold; color: white;">${currentRoomName}</span>
+                    <div style="display: flex; justify-content: center; gap: 20px; margin-top: 8px; font-size: 13px;">
+                        <span><span style="color: #4ade80;">🟢</span> ${totalInRoom} in room</span>
+                        <span><span style="color: #ffaa00;">🟡</span> ${totalOnlineElsewhere} elsewhere</span>
+                        <span><span style="color: #ff4444;">🔴</span> ${totalOffline} offline</span>
+                        <span><span style="color: #888;">👥</span> ${totalUsers} total</span>
+                    </div>
+                </div>
+                
+                ${data.roomUsers && data.roomUsers.length > 0 ? `
+                <div class="help-section">
+                    <div class="help-title">
+                        <span>🟢 IN THIS ROOM</span>
+                        <span style="font-size: 12px; color: #888;">(${data.roomUsers.length})</span>
+                    </div>
+                    ${data.roomUsers.map(user => `
+                        <div style="display: flex; align-items: center; margin: 8px 0; padding: 6px 10px; background: rgba(74, 222, 128, 0.1); border-radius: 8px;">
+                            <span style="font-size: 16px; margin-right: 10px;">🟢</span>
+                            <span style="font-weight: bold; color: #4ade80;">${user.username}</span>
+                            ${getRankBadge(user.rank)}
+                            <span style="margin-left: auto; font-size: 11px; color: #888;">Level ${getRankLevel(user.rank)}</span>
+                        </div>
+                    `).join('')}
+                </div>
+                ` : ''}
+                
+                ${data.otherRoomUsers && data.otherRoomUsers.length > 0 ? `
+                <div class="help-section">
+                    <div class="help-title">
+                        <span>🟡 ONLINE ELSEWHERE</span>
+                        <span style="font-size: 12px; color: #888;">(${data.otherRoomUsers.length})</span>
+                    </div>
+                    ${data.otherRoomUsers.map(user => `
+                        <div style="display: flex; align-items: center; margin: 8px 0; padding: 6px 10px; background: rgba(255, 170, 0, 0.1); border-radius: 8px;">
+                            <span style="font-size: 16px; margin-right: 10px;">🟡</span>
+                            <span style="font-weight: bold; color: #ffaa00;">${user.username}</span>
+                            ${getRankBadge(user.rank)}
+                            <span style="margin-left: auto; font-size: 11px; background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 12px;">
+                                📍 ${user.room}
+                            </span>
+                        </div>
+                    `).join('')}
+                </div>
+                ` : ''}
+                
+                ${data.notOnlineUsers && data.notOnlineUsers.length > 0 ? `
+                <div class="help-section">
+                    <div class="help-title">
+                        <span>🔴 OFFLINE</span>
+                        <span style="font-size: 12px; color: #888;">(${data.notOnlineUsers.length})</span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px;">
+                        ${data.notOnlineUsers.map(user => `
+                            <div style="display: flex; align-items: center; padding: 6px 10px; background: rgba(255, 68, 68, 0.1); border-radius: 8px;">
+                                <span style="font-size: 14px; margin-right: 8px;">🔴</span>
+                                <span style="color: #ff8888;">${user.username}</span>
+                                ${getRankBadge(user.rank)}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+                ` : ''}
+                
+                ${data.roomUsers?.length === 0 && data.otherRoomUsers?.length === 0 && data.notOnlineUsers?.length === 0 ? `
+                <div style="text-align: center; padding: 30px; color: #888;">
+                    <span style="font-size: 48px; display: block; margin-bottom: 10px;">👤</span>
+                    No other users found
+                </div>
+                ` : ''}
+                
+                <div style="text-align: center; margin-top: 15px; color: #888; font-size: 11px; border-top: 1px solid rgba(102,126,234,0.3); padding-top: 10px;">
+                    <span>🟢 In this room</span> • 
+                    <span>🟡 Online elsewhere</span> • 
+                    <span>🔴 Offline</span>
+                </div>
+            `;
+            
+            const wrapper = document.createElement('div');
+            wrapper.className = 'msg-wrapper';
+            wrapper.appendChild(userListDiv);
+            
+            msgContainer.appendChild(wrapper);
+            msgContainer.scrollTop = msgContainer.scrollHeight;
         });
         
         function handleMsgCommand(args) {
@@ -3574,21 +3932,23 @@
             });
         }
         
+        // FIXED: /clear is now only for owner
         function handleClearCommand(args) {
             if (!currentRoom) {
                 addSystemMessage('❌ Not in a room');
                 return;
             }
-            if (isModerator) {
-                socket.emit('clear_messages', { roomName: currentRoom, password: '' });
-            } else {
-                const password = args.join(' ');
-                if (!password) {
-                    addSystemMessage('Usage: /clear <password>');
-                    return;
-                }
-                socket.emit('clear_messages', { roomName: currentRoom, password });
+            
+            // Only owner can use /clear
+            if (!isOwner) {
+                addSystemMessage('❌ Only the Owner can use /clear command');
+                return;
             }
+            
+            socket.emit('clear_messages', { 
+                roomName: currentRoom, 
+                password: '' 
+            });
         }
         
         function handleFlipCommand() {
@@ -3808,6 +4168,63 @@
                 const latency = Date.now() - start;
                 addSystemMessage(`🏓 Pong! Latency: ${latency}ms`);
             });
+        }
+        
+        // ========== AI COMMAND HANDLER ==========
+        
+        async function handleAICommand(args) {
+            if (!isVip) {
+                addSystemMessage('❌ AI command requires VIP+ rank');
+                return;
+            }
+            
+            if (isUserMuted) {
+                addSystemMessage('❌ You are muted and cannot use AI');
+                return;
+            }
+            
+            if (args.length < 1) {
+                addSystemMessage('Usage: /ai <your question or prompt>');
+                return;
+            }
+            
+            const prompt = args.join(' ');
+            await askAI(prompt);
+        }
+        
+        // ========== COMMAND HANDLER ==========
+        
+        function handleCommand(commandText) {
+            if (checkIfUserMuted()) {
+                addSystemMessage('❌ You are muted and cannot use commands');
+                return;
+            }
+            
+            const parts = commandText.split(' ');
+            const command = parts[0].toLowerCase();
+            const args = parts.slice(1);
+            
+            switch(command) {
+                case '/help': showHelp(); break;
+                case '/users': handleUsersCommand(); break;
+                case '/msg': handleMsgCommand(args); break;
+                case '/clear': handleClearCommand(args); break;
+                case '/flip': handleFlipCommand(); break;
+                case '/roll': handleRollCommand(args); break;
+                case '/ban': handleBanCommand(args); break;
+                case '/mute': handleMuteCommand(args); break;
+                case '/unmute': handleUnmuteCommand(args); break;
+                case '/unban': handleUnbanCommand(args); break;
+                case '/delete': handleDeleteCommand(args); break;
+                case '/effect': handleEffectCommand(args); break;
+                case '/theme': handleThemeCommand(args); break;
+                case '/grant': handleGrantCommand(args); break;
+                case '/rank': handleRankCommand(); break;
+                case '/ping': handlePingCommand(); break;
+                case '/video': toggleVideoChat(); break;
+                case '/ai': handleAICommand(args); break;
+                default: addSystemMessage(`❌ Unknown command: ${command}. Type /help for commands.`);
+            }
         }
         
         // ========== EFFECTS ==========
@@ -4157,7 +4574,7 @@
         
         socket.on('messages_cleared', () => {
             msgContainer.innerHTML = '';
-            addSystemMessage('🧹 All messages cleared');
+            addSystemMessage('🧹 All messages cleared by Owner');
         });
         
         socket.on('user_banned', (data) => {
@@ -4249,12 +4666,6 @@
             }
         });
         
-        document.addEventListener('click', (e) => {
-            if (!e.target.closest('.emoji-btn') && !e.target.closest('.emoji-panel')) {
-                emojiPanel.classList.remove('show');
-            }
-        });
-        
         document.getElementById('loginUsername')?.addEventListener('keypress', (e) => { 
             if (e.key === 'Enter') handleLogin(); 
         });
@@ -4275,12 +4686,31 @@
             document.getElementById('pmRecipient').value = e.target.value;
         });
         
+        // ========== AUTO-LOGIN FROM COOKIES ==========
+        
+        function checkSavedLogin() {
+            const savedUsername = getCookie('username');
+            const savedPassword = getCookie('password');
+            const rememberMe = getCookie('rememberMe');
+            
+            if (savedUsername && savedPassword && rememberMe === 'true') {
+                document.getElementById('loginUsername').value = savedUsername;
+                document.getElementById('loginPassword').value = savedPassword;
+                document.getElementById('rememberMe').checked = true;
+                // Auto login after a short delay
+                setTimeout(() => {
+                    handleLogin();
+                }, 500);
+            }
+        }
+        
         // ========== INITIAL CONNECTION ==========
         
         socket.on('connect', () => {
             console.log('✅ Connected to Black Hole Chat V2');
             showToast('✅ Connected to server');
             socket.emit('check_auth');
+            checkSavedLogin(); // Check for saved credentials
         });
         
         socket.on('auth_status', (data) => {
@@ -4303,6 +4733,7 @@
                 authScreen.style.display = 'flex';
                 roomScreen.style.display = 'none';
                 chatScreen.style.display = 'none';
+                checkSavedLogin(); // Check for saved credentials
             }
         });
         

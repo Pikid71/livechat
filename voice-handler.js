@@ -99,15 +99,10 @@ class VoiceChatHandler {
         this.handleVoiceError = this.handleVoiceError.bind(this);
     }
     
-    /**
-     * Initialize and start voice chat
-     * @returns {Promise<boolean>} Success status
-     */
     async start() {
         try {
             console.log('🎤 Starting voice chat...');
             
-            // Request microphone access with optimal settings
             this.localStream = await navigator.mediaDevices.getUserMedia({ 
                 audio: {
                     echoCancellation: this.options.echoCancellation,
@@ -123,24 +118,16 @@ class VoiceChatHandler {
             console.log('✅ Microphone access granted');
             this.isActive = true;
             
-            // Join voice room - this will trigger system message from server
             this.socket.emit('join_voice', { 
                 roomName: this.roomName,
                 username: this.username 
             });
             
-            // Set up socket listeners
             this.setupSocketListeners();
-            
-            // Update UI
             this.updateUIVoiceStatus(true);
-            
-            // Start monitoring connection quality
             this.startConnectionMonitoring();
             
-            // Show local notification
             this.showNotification('🎤 Joined voice chat', 'success');
-            
             return true;
             
         } catch (err) {
@@ -150,13 +137,9 @@ class VoiceChatHandler {
         }
     }
     
-    /**
-     * Stop voice chat and clean up
-     */
     stop() {
         console.log('🎤 Stopping voice chat...');
         
-        // Stop all local tracks
         if (this.localStream) {
             this.localStream.getTracks().forEach(track => {
                 track.stop();
@@ -165,13 +148,11 @@ class VoiceChatHandler {
             this.localStream = null;
         }
         
-        // Close all peer connections
         this.peerConnections.forEach((pc, userId) => {
             this.closePeerConnection(userId);
         });
         this.peerConnections.clear();
         
-        // Remove all audio elements
         this.audioElements.forEach((audio, userId) => {
             audio.pause();
             audio.srcObject = null;
@@ -179,29 +160,19 @@ class VoiceChatHandler {
         });
         this.audioElements.clear();
         
-        // Leave voice room - this will trigger system message from server
         this.socket.emit('leave_voice', { 
             roomName: this.roomName,
             username: this.username 
         });
         
-        // Remove socket listeners
         this.removeSocketListeners();
-        
         this.isActive = false;
-        
-        // Update UI
         this.updateUIVoiceStatus(false);
         
-        // Show local notification
         this.showNotification('🎤 Left voice chat', 'info');
-        
         console.log('✅ Voice chat stopped');
     }
     
-    /**
-     * Set up socket event listeners for voice signaling
-     */
     setupSocketListeners() {
         this.socket.on('user_joined_voice', this.handleUserJoined);
         this.socket.on('user_left_voice', this.handleUserLeft);
@@ -211,9 +182,6 @@ class VoiceChatHandler {
         this.socket.on('voice_error', this.handleVoiceError);
     }
     
-    /**
-     * Remove socket listeners
-     */
     removeSocketListeners() {
         this.socket.off('user_joined_voice', this.handleUserJoined);
         this.socket.off('user_left_voice', this.handleUserLeft);
@@ -223,19 +191,13 @@ class VoiceChatHandler {
         this.socket.off('voice_error', this.handleVoiceError);
     }
     
-    /**
-     * Handle new user joining voice chat
-     * @param {Object} data - User joined data
-     */
     async handleUserJoined(data) {
         console.log(`👤 User joined voice: ${data.username || data.userId}`);
         
         if (!this.isActive) return;
         
-        // Don't create connection to self
         if (data.userId === this.socket.id) return;
         
-        // Check if connection already exists
         if (this.peerConnections.has(data.userId)) {
             console.log(`Connection already exists for ${data.userId}`);
             return;
@@ -243,33 +205,22 @@ class VoiceChatHandler {
         
         try {
             await this.createPeerConnection(data.userId, true);
-            // Show notification for new user (system message is handled by server)
             this.showNotification(`🎤 ${data.username} joined voice`, 'info');
         } catch (err) {
             console.error(`Failed to create connection to ${data.userId}:`, err);
         }
     }
     
-    /**
-     * Handle user leaving voice chat
-     * @param {Object} data - User left data
-     */
     handleUserLeft(data) {
         console.log(`👋 User left voice: ${data.userId}`);
         
-        // Get username before closing connection
         const username = data.username || 'A user';
         
         this.closePeerConnection(data.userId);
         
-        // Show notification for user leaving (system message is handled by server)
         this.showNotification(`🎤 ${username} left voice`, 'info');
     }
     
-    /**
-     * Handle incoming voice offer
-     * @param {Object} data - Offer data
-     */
     async handleVoiceOffer(data) {
         console.log(`📞 Received voice offer from ${data.from}`);
         
@@ -294,10 +245,6 @@ class VoiceChatHandler {
         }
     }
     
-    /**
-     * Handle incoming voice answer
-     * @param {Object} data - Answer data
-     */
     async handleVoiceAnswer(data) {
         console.log(`📞 Received voice answer from ${data.from}`);
         
@@ -315,10 +262,6 @@ class VoiceChatHandler {
         }
     }
     
-    /**
-     * Handle incoming ICE candidate
-     * @param {Object} data - ICE candidate data
-     */
     async handleIceCandidate(data) {
         const pc = this.peerConnections.get(data.from);
         if (!pc) return;
@@ -330,28 +273,17 @@ class VoiceChatHandler {
         }
     }
     
-    /**
-     * Handle voice error
-     * @param {Object} data - Error data
-     */
     handleVoiceError(data) {
         console.error('Voice error:', data.message);
         this.showNotification(`❌ Voice error: ${data.message}`, 'error');
     }
     
-    /**
-     * Create a new peer connection
-     * @param {string} userId - Target user ID
-     * @param {boolean} initiator - Whether this connection is the initiator
-     * @returns {RTCPeerConnection} The created peer connection
-     */
     async createPeerConnection(userId, initiator = false) {
         console.log(`🔌 Creating peer connection to ${userId} (initiator: ${initiator})`);
         
         const pc = new RTCPeerConnection(this.iceServers);
         this.peerConnections.set(userId, pc);
         
-        // Add local tracks
         if (this.localStream) {
             this.localStream.getTracks().forEach(track => {
                 pc.addTrack(track, this.localStream);
@@ -359,7 +291,6 @@ class VoiceChatHandler {
             });
         }
         
-        // Handle ICE candidates
         pc.onicecandidate = (event) => {
             if (event.candidate) {
                 this.socket.emit('ice_candidate', {
@@ -369,7 +300,6 @@ class VoiceChatHandler {
             }
         };
         
-        // Handle connection state changes
         pc.onconnectionstatechange = () => {
             console.log(`Connection state to ${userId}: ${pc.connectionState}`);
             
@@ -396,21 +326,17 @@ class VoiceChatHandler {
             }
         };
         
-        // Handle ICE gathering state
         pc.onicegatheringstatechange = () => {
             console.log(`ICE gathering state to ${userId}: ${pc.iceGatheringState}`);
         };
         
-        // Handle signaling state
         pc.onsignalingstatechange = () => {
             console.log(`Signaling state to ${userId}: ${pc.signalingState}`);
         };
         
-        // Handle incoming tracks
         pc.ontrack = (event) => {
             console.log(`📻 Received track from ${userId}: ${event.track.kind}`);
             
-            // Create or update audio element
             let audio = this.audioElements.get(userId);
             if (!audio) {
                 audio = document.createElement('audio');
@@ -423,7 +349,6 @@ class VoiceChatHandler {
             
             audio.srcObject = event.streams[0];
             
-            // Handle track events
             event.track.onended = () => {
                 console.log(`Track from ${userId} ended`);
                 this.audioElements.delete(userId);
@@ -434,7 +359,6 @@ class VoiceChatHandler {
             event.track.onunmute = () => console.log(`Track from ${userId} unmuted`);
         };
         
-        // If initiator, create and send offer
         if (initiator) {
             try {
                 const offer = await pc.createOffer({
@@ -461,10 +385,6 @@ class VoiceChatHandler {
         return pc;
     }
     
-    /**
-     * Close a specific peer connection
-     * @param {string} userId - User ID to close connection to
-     */
     closePeerConnection(userId) {
         const pc = this.peerConnections.get(userId);
         if (pc) {
@@ -482,10 +402,6 @@ class VoiceChatHandler {
         }
     }
     
-    /**
-     * Mute/unmute local microphone
-     * @param {boolean} muted - Whether to mute
-     */
     setMuted(muted) {
         if (this.localStream) {
             this.localStream.getAudioTracks().forEach(track => {
@@ -496,10 +412,6 @@ class VoiceChatHandler {
         }
     }
     
-    /**
-     * Toggle mute state
-     * @returns {boolean} New mute state
-     */
     toggleMute() {
         if (this.localStream) {
             const track = this.localStream.getAudioTracks()[0];
@@ -508,16 +420,12 @@ class VoiceChatHandler {
                 track.enabled = newState;
                 console.log(`🎤 Microphone ${newState ? 'unmuted' : 'muted'}`);
                 this.showNotification(`🎤 Microphone ${newState ? 'unmuted' : 'muted'}`);
-                return !newState; // Return true if muted
+                return !newState;
             }
         }
         return false;
     }
     
-    /**
-     * Get voice chat statistics
-     * @returns {Object} Voice stats
-     */
     async getStats() {
         const stats = {
             active: this.isActive,
@@ -527,7 +435,6 @@ class VoiceChatHandler {
             ...this.stats
         };
         
-        // Get detailed stats from first peer connection
         if (this.peerConnections.size > 0) {
             const firstPc = this.peerConnections.values().next().value;
             try {
@@ -553,31 +460,22 @@ class VoiceChatHandler {
         return stats;
     }
     
-    /**
-     * Start monitoring connection quality
-     */
     startConnectionMonitoring() {
         this.monitoringInterval = setInterval(async () => {
             if (!this.isActive) return;
             
             const stats = await this.getStats();
             
-            // Check for poor connection
             if (stats.packetsLost > 100 || stats.jitter > 0.1) {
                 console.warn('⚠️ Poor connection quality detected');
                 this.showNotification('⚠️ Poor connection quality', 'warning');
             }
             
-            // Emit stats for debugging
             this.socket.emit('voice_stats', stats);
             
         }, 5000);
     }
     
-    /**
-     * Handle errors
-     * @param {Error} err - Error object
-     */
     handleError(err) {
         let message = 'Voice chat error';
         
@@ -595,35 +493,23 @@ class VoiceChatHandler {
         
         this.showNotification(`❌ ${message}`, 'error');
         
-        // Emit error
         this.socket.emit('voice_error', {
             message: message,
             code: err.name
         });
     }
     
-    /**
-     * Show notification
-     * @param {string} message - Message to show
-     * @param {string} type - Notification type (info, success, warning, error)
-     */
     showNotification(message, type = 'info') {
-        // Dispatch custom event for UI
         const event = new CustomEvent('voiceNotification', {
             detail: { message, type }
         });
         window.dispatchEvent(event);
         
-        // Also try to use toast if available
         if (window.showToast) {
             window.showToast(message);
         }
     }
     
-    /**
-     * Update UI based on voice status
-     * @param {boolean} active - Whether voice is active
-     */
     updateUIVoiceStatus(active) {
         const voiceIndicator = document.getElementById('voice-indicator');
         const voiceBtn = document.getElementById('voiceBtn');
@@ -643,33 +529,20 @@ class VoiceChatHandler {
             }
         }
         
-        // Dispatch event
         const event = new CustomEvent('voiceStatusChange', {
             detail: { active, peerCount: this.peerConnections.size }
         });
         window.dispatchEvent(event);
     }
     
-    /**
-     * Get list of connected users
-     * @returns {Array} List of user IDs
-     */
     getConnectedUsers() {
         return Array.from(this.peerConnections.keys());
     }
     
-    /**
-     * Check if voice is active
-     * @returns {boolean} Active status
-     */
     isVoiceActive() {
         return this.isActive;
     }
     
-    /**
-     * Get audio levels (for visualization)
-     * @returns {number} Audio level (0-100)
-     */
     getAudioLevel() {
         if (!this.localStream) return 0;
         
@@ -695,10 +568,6 @@ class VoiceChatHandler {
         }
     }
     
-    /**
-     * Get connection quality rating
-     * @returns {string} Quality rating (excellent, good, fair, poor)
-     */
     getConnectionQuality() {
         if (this.stats.packetsLost > 200 || this.stats.jitter > 0.2) {
             return 'poor';
@@ -711,9 +580,6 @@ class VoiceChatHandler {
         }
     }
     
-    /**
-     * Destroy the voice handler and clean up
-     */
     destroy() {
         this.stop();
         
@@ -729,7 +595,6 @@ class VoiceChatHandler {
     }
 }
 
-// ========== EXPORT FOR USE IN HTML ==========
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = VoiceChatHandler;
 } else {
