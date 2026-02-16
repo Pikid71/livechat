@@ -44,6 +44,11 @@ services:
       # Maximum file upload size (50MB)
       - key: MAX_FILE_SIZE
         value: 52428800
+      
+      # OpenRouter AI API Key
+      - key: OPENROUTER_API_KEY
+        value: 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
+        sync: false
     
     # Disk storage for uploaded files
     disk:
