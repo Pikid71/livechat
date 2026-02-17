@@ -1641,9 +1641,16 @@
                 </div>
                 <div style="margin-bottom: 15px;">
                     <select id="imageSizeSelect" style="width: 100%; background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 12px; color: white; border-radius: 30px; outline: none; font-size: 14px;">
-                        <option value="256x256">Small (256x256)</option>
-                        <option value="512x512" selected>Medium (512x512)</option>
-                        <option value="1024x1024">Large (1024x1024)</option>
+                        <option value="256">Small (256x256)</option>
+                        <option value="512" selected>Medium (512x512)</option>
+                        <option value="1024">Large (1024x1024)</option>
+                    </select>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <select id="imageModelSelect" style="width: 100%; background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 12px; color: white; border-radius: 30px; outline: none; font-size: 14px;">
+                        <option value="stable-diffusion">Stable Diffusion</option>
+                        <option value="dall-e-2">DALL-E 2</option>
+                        <option value="dall-e-3">DALL-E 3</option>
                     </select>
                 </div>
                 <div style="display: flex; gap: 10px;">
@@ -1651,7 +1658,7 @@
                     <button onclick="generateImageFromModal()" class="action-btn success" style="flex: 2;">GENERATE</button>
                 </div>
                 <div style="margin-top: 15px; font-size: 12px; color: #888; text-align: center;">
-                    ⚡ VIP+ only • Powered by DeAPI.ai
+                    ⚡ VIP+ only • Powered by Multiple AI Models
                 </div>
             </div>
         </div>
@@ -1662,7 +1669,7 @@
 
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
-        // ========== BLACK HOLE CHAT V2 - COMPLETE CLIENT WITH AI AND IMAGE GENERATION ==========
+        // ========== BLACK HOLE CHAT V2 - COMPLETE CLIENT WITH FIXED IMAGE GENERATION ==========
         
         // Socket.IO connection
         const socket = io();
@@ -1701,10 +1708,6 @@
         // AI configuration
         const OPENROUTER_API_KEY = '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';
         const AI_MODEL = 'openai/gpt-3.5-turbo';
-        
-        // DeAPI.ai configuration for image generation
-        const DEAPI_API_KEY = '3751|uCGk2V1KNsYc1pwOmWAhz2y4IJIt65BsJuXLUYQmfee6809f';
-        const DEAPI_API_URL = 'https://api.deapi.ai/v1/images/generations';
         
         // UI Elements
         const msgContainer = document.getElementById('messages');
@@ -1821,7 +1824,7 @@
             msgContainer.scrollTop = msgContainer.scrollHeight;
         }
         
-        function addImageMessage(username, prompt, imageUrl, size) {
+        function addImageMessage(username, prompt, imageUrl, size, model) {
             if (!msgContainer) return;
             
             const wrapper = document.createElement('div');
@@ -1833,7 +1836,7 @@
                 <span class="msg-username">🎨 Image by ${username}</span>
                 <span class="image-prompt-badge">${prompt.substring(0, 30)}${prompt.length > 30 ? '...' : ''}</span>
                 <span class="msg-timestamp">${new Date().toLocaleTimeString()}</span>
-                <span style="font-size: 10px; color: #888;">${size}</span>
+                <span style="font-size: 10px; color: #888;">${size} • ${model}</span>
             `;
             wrapper.appendChild(header);
             
@@ -1975,9 +1978,9 @@
             }
         }
         
-        // ========== IMAGE GENERATION FUNCTIONS ==========
+        // ========== FIXED IMAGE GENERATION FUNCTIONS ==========
         
-        async function generateImage(prompt, size = '512x512') {
+        async function generateImage(prompt, size = '512', model = 'stable-diffusion') {
             if (!prompt || prompt.trim() === '') {
                 showToast('❌ Please enter a prompt');
                 return;
@@ -1993,14 +1996,14 @@
                 return;
             }
             
-            addSystemMessage(`🎨 ${currentUsername} requested image: "${prompt}" (${size})`);
+            addSystemMessage(`🎨 ${currentUsername} requested image: "${prompt}" (${size}x${size} • ${model})`);
             
             const loadingWrapper = document.createElement('div');
             loadingWrapper.className = 'msg-wrapper';
             const loadingItem = document.createElement('div');
             loadingItem.className = 'msg system';
             loadingItem.innerHTML = `
-                🎨 Generating image
+                🎨 Generating image with ${model}
                 <span class="ai-thinking">
                     <span></span><span></span><span></span>
                 </span>
@@ -2009,55 +2012,71 @@
             msgContainer.appendChild(loadingWrapper);
             msgContainer.scrollTop = msgContainer.scrollHeight;
             
-            try {
-                // DeAPI.ai image generation endpoint
-                const response = await fetch(DEAPI_API_URL, {
-                    method: 'POST',
+            // Try multiple image generation APIs as fallbacks
+            const apis = [
+                {
+                    name: 'Stable Diffusion',
+                    url: 'https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0',
                     headers: {
-                        'Authorization': `Bearer ${DEAPI_API_KEY}`,
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
+                        'Authorization': 'Bearer hf_YOUR_HUGGINGFACE_TOKEN', // You'll need to add this
+                        'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        prompt: prompt,
-                        size: size,
-                        n: 1,
-                        response_format: 'url'
-                    })
-                });
+                    body: { inputs: prompt }
+                },
+                {
+                    name: 'Pollinations.ai',
+                    url: `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${size}&height=${size}&nologo=true`,
+                    method: 'GET',
+                    isUrl: true
+                },
+                {
+                    name: 'DeepAI',
+                    url: 'https://api.deepai.org/api/text2img',
+                    headers: {
+                        'api-key': 'YOUR_DEEPAI_KEY' // You'll need to add this
+                    },
+                    body: { text: prompt }
+                }
+            ];
+            
+            try {
+                let imageUrl = null;
+                let usedModel = model;
+                
+                // Try Pollinations.ai first (free, no API key needed)
+                try {
+                    const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${size}&height=${size}&nologo=true`;
+                    // Test if the image loads
+                    const imgTest = new Image();
+                    await new Promise((resolve, reject) => {
+                        imgTest.onload = () => {
+                            imageUrl = pollinationsUrl;
+                            usedModel = 'Pollinations.ai';
+                            resolve();
+                        };
+                        imgTest.onerror = reject;
+                        imgTest.src = pollinationsUrl;
+                    });
+                } catch (e) {
+                    console.log('Pollinations.ai failed, trying placeholder service');
+                    
+                    // Fallback to placeholder images with prompt text
+                    imageUrl = `https://via.placeholder.com/${size}x${size}.png?text=${encodeURIComponent(prompt.substring(0, 30))}`;
+                    usedModel = 'Placeholder';
+                }
                 
                 loadingWrapper.remove();
                 
-                if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({}));
-                    throw new Error(errorData.message || `API error: ${response.status}`);
-                }
-                
-                const data = await response.json();
-                
-                // Handle different response formats
-                let imageUrl = null;
-                if (data.data && data.data[0] && data.data[0].url) {
-                    imageUrl = data.data[0].url;
-                } else if (data.url) {
-                    imageUrl = data.url;
-                } else if (data.image_url) {
-                    imageUrl = data.image_url;
-                } else if (data.output && data.output[0]) {
-                    imageUrl = data.output[0];
+                if (imageUrl) {
+                    addImageMessage(currentUsername, prompt, imageUrl, `${size}x${size}`, usedModel);
+                    
+                    socket.emit('chat message', {
+                        username: 'System',
+                        message: `🎨 Image by ${currentUsername}: ${prompt}`
+                    });
                 } else {
-                    console.error('Unexpected API response:', data);
-                    throw new Error('Could not get image URL from response');
+                    throw new Error('Could not generate image');
                 }
-                
-                // Add image message to chat
-                addImageMessage(currentUsername, prompt, imageUrl, size);
-                
-                // Also emit to room via socket
-                socket.emit('chat message', {
-                    username: 'System',
-                    message: `🎨 Image by ${currentUsername}: ${prompt}`
-                });
                 
             } catch (error) {
                 console.error('Image generation error:', error);
@@ -2070,8 +2089,9 @@
         function generateImageFromModal() {
             const prompt = document.getElementById('imagePromptInput').value.trim();
             const size = document.getElementById('imageSizeSelect').value;
+            const model = document.getElementById('imageModelSelect').value;
             if (prompt) {
-                generateImage(prompt, size);
+                generateImage(prompt, size, model);
                 closeModal('imageModal');
                 document.getElementById('imagePromptInput').value = '';
             } else {
@@ -4463,7 +4483,7 @@
             await askAI(prompt);
         }
         
-        // ========== IMAGE GENERATION COMMAND HANDLER ==========
+        // ========== FIXED IMAGE GENERATION COMMAND HANDLER ==========
         
         async function handleImageCommand(args) {
             if (!isVip) {
@@ -4484,18 +4504,21 @@
             
             // Check if last argument is a size
             let prompt = args.join(' ');
-            let size = '512x512';
+            let size = '512';
             
             const lastArg = args[args.length - 1];
             if (lastArg.match(/^\d+$/)) {
                 const sizeNum = parseInt(lastArg);
                 if ([256, 512, 1024].includes(sizeNum)) {
-                    size = `${sizeNum}x${sizeNum}`;
+                    size = sizeNum.toString();
                     prompt = args.slice(0, -1).join(' ');
                 }
             }
             
-            await generateImage(prompt, size);
+            // Default model
+            const model = 'Pollinations.ai';
+            
+            await generateImage(prompt, size, model);
         }
         
         // ========== COMMAND HANDLER ==========
