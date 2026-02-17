@@ -355,6 +355,49 @@
             border: 1px solid #00ff88;
         }
 
+        /* ========== IMAGE GENERATION STYLES ========== */
+        .msg.image-gen {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ff8e8e 100%);
+            border-left: 4px solid #ffd700;
+            position: relative;
+            box-shadow: 0 0 20px rgba(255, 107, 107, 0.5);
+        }
+        .msg.image-gen::before {
+            content: '🎨';
+            position: absolute;
+            top: -10px;
+            left: -10px;
+            font-size: 16px;
+            background: #333;
+            border-radius: 50%;
+            padding: 4px;
+            border: 2px solid #ffd700;
+            z-index: 10;
+        }
+        .image-prompt-badge {
+            display: inline-block;
+            background: rgba(255, 215, 0, 0.2);
+            color: #ffd700;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            margin-left: 8px;
+            border: 1px solid #ffd700;
+        }
+        .generated-image {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 12px;
+            margin-top: 10px;
+            cursor: pointer;
+            transition: transform 0.2s;
+            border: 2px solid #ffd700;
+        }
+        .generated-image:hover {
+            transform: scale(1.02);
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+        }
+
         /* ========== PRIVATE MESSAGE STYLES ========== */
         .msg.private {
             border-left: 4px solid #ff00ff;
@@ -632,6 +675,13 @@
             border-left: 4px solid #00ff88;
             position: relative;
             box-shadow: 0 0 20px rgba(102, 126, 234, 0.5);
+        }
+
+        .msg.image-gen {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ff8e8e 100%);
+            border-left: 4px solid #ffd700;
+            position: relative;
+            box-shadow: 0 0 20px rgba(255, 107, 107, 0.5);
         }
 
         .msg.file-share {
@@ -1578,12 +1628,41 @@
         </div>
     </div>
 
+    <!-- Image Generation Modal -->
+    <div id="imageModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">🎨 Generate Image</div>
+                <button class="modal-close" onclick="closeModal('imageModal')">×</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 20px;">
+                    <textarea id="imagePromptInput" placeholder="Describe the image you want to generate..." style="width: 100%; background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 14px; color: white; border-radius: 16px; outline: none; font-size: 14px; min-height: 100px; resize: vertical;"></textarea>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <select id="imageSizeSelect" style="width: 100%; background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 12px; color: white; border-radius: 30px; outline: none; font-size: 14px;">
+                        <option value="256x256">Small (256x256)</option>
+                        <option value="512x512" selected>Medium (512x512)</option>
+                        <option value="1024x1024">Large (1024x1024)</option>
+                    </select>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button onclick="closeModal('imageModal')" class="action-btn danger" style="flex: 1;">CANCEL</button>
+                    <button onclick="generateImageFromModal()" class="action-btn success" style="flex: 2;">GENERATE</button>
+                </div>
+                <div style="margin-top: 15px; font-size: 12px; color: #888; text-align: center;">
+                    ⚡ VIP+ only • Powered by DeAPI.ai
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Notification -->
     <div id="toast" style="display: none;"></div>
 
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
-        // ========== BLACK HOLE CHAT V2 - COMPLETE CLIENT WITH ALL FIXES ==========
+        // ========== BLACK HOLE CHAT V2 - COMPLETE CLIENT WITH AI AND IMAGE GENERATION ==========
         
         // Socket.IO connection
         const socket = io();
@@ -1622,6 +1701,10 @@
         // AI configuration
         const OPENROUTER_API_KEY = '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';
         const AI_MODEL = 'openai/gpt-3.5-turbo';
+        
+        // DeAPI.ai configuration for image generation
+        const DEAPI_API_KEY = '3751|uCGk2V1KNsYc1pwOmWAhz2y4IJIt65BsJuXLUYQmfee6809f';
+        const DEAPI_API_URL = 'https://api.deapi.ai/v1/images/generations';
         
         // UI Elements
         const msgContainer = document.getElementById('messages');
@@ -1732,6 +1815,38 @@
             const item = document.createElement('div');
             item.className = 'msg ai';
             item.textContent = response;
+            wrapper.appendChild(item);
+            
+            msgContainer.appendChild(wrapper);
+            msgContainer.scrollTop = msgContainer.scrollHeight;
+        }
+        
+        function addImageMessage(username, prompt, imageUrl, size) {
+            if (!msgContainer) return;
+            
+            const wrapper = document.createElement('div');
+            wrapper.className = 'msg-wrapper';
+            
+            const header = document.createElement('div');
+            header.className = 'msg-header';
+            header.innerHTML = `
+                <span class="msg-username">🎨 Image by ${username}</span>
+                <span class="image-prompt-badge">${prompt.substring(0, 30)}${prompt.length > 30 ? '...' : ''}</span>
+                <span class="msg-timestamp">${new Date().toLocaleTimeString()}</span>
+                <span style="font-size: 10px; color: #888;">${size}</span>
+            `;
+            wrapper.appendChild(header);
+            
+            const item = document.createElement('div');
+            item.className = 'msg image-gen';
+            
+            const img = document.createElement('img');
+            img.src = imageUrl;
+            img.className = 'generated-image';
+            img.alt = prompt;
+            img.onclick = () => window.open(imageUrl, '_blank');
+            
+            item.appendChild(img);
             wrapper.appendChild(item);
             
             msgContainer.appendChild(wrapper);
@@ -1860,6 +1975,110 @@
             }
         }
         
+        // ========== IMAGE GENERATION FUNCTIONS ==========
+        
+        async function generateImage(prompt, size = '512x512') {
+            if (!prompt || prompt.trim() === '') {
+                showToast('❌ Please enter a prompt');
+                return;
+            }
+            
+            if (!isVip) {
+                showToast('❌ Image generation requires VIP+ rank');
+                return;
+            }
+            
+            if (isUserMuted) {
+                showToast('❌ You are muted and cannot generate images');
+                return;
+            }
+            
+            addSystemMessage(`🎨 ${currentUsername} requested image: "${prompt}" (${size})`);
+            
+            const loadingWrapper = document.createElement('div');
+            loadingWrapper.className = 'msg-wrapper';
+            const loadingItem = document.createElement('div');
+            loadingItem.className = 'msg system';
+            loadingItem.innerHTML = `
+                🎨 Generating image
+                <span class="ai-thinking">
+                    <span></span><span></span><span></span>
+                </span>
+            `;
+            loadingWrapper.appendChild(loadingItem);
+            msgContainer.appendChild(loadingWrapper);
+            msgContainer.scrollTop = msgContainer.scrollHeight;
+            
+            try {
+                // DeAPI.ai image generation endpoint
+                const response = await fetch(DEAPI_API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${DEAPI_API_KEY}`,
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        prompt: prompt,
+                        size: size,
+                        n: 1,
+                        response_format: 'url'
+                    })
+                });
+                
+                loadingWrapper.remove();
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.message || `API error: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                // Handle different response formats
+                let imageUrl = null;
+                if (data.data && data.data[0] && data.data[0].url) {
+                    imageUrl = data.data[0].url;
+                } else if (data.url) {
+                    imageUrl = data.url;
+                } else if (data.image_url) {
+                    imageUrl = data.image_url;
+                } else if (data.output && data.output[0]) {
+                    imageUrl = data.output[0];
+                } else {
+                    console.error('Unexpected API response:', data);
+                    throw new Error('Could not get image URL from response');
+                }
+                
+                // Add image message to chat
+                addImageMessage(currentUsername, prompt, imageUrl, size);
+                
+                // Also emit to room via socket
+                socket.emit('chat message', {
+                    username: 'System',
+                    message: `🎨 Image by ${currentUsername}: ${prompt}`
+                });
+                
+            } catch (error) {
+                console.error('Image generation error:', error);
+                loadingWrapper.remove();
+                showToast('❌ Image generation failed');
+                addSystemMessage(`❌ Image generation failed: ${error.message}`);
+            }
+        }
+        
+        function generateImageFromModal() {
+            const prompt = document.getElementById('imagePromptInput').value.trim();
+            const size = document.getElementById('imageSizeSelect').value;
+            if (prompt) {
+                generateImage(prompt, size);
+                closeModal('imageModal');
+                document.getElementById('imagePromptInput').value = '';
+            } else {
+                showToast('❌ Please enter a prompt');
+            }
+        }
+        
         // ========== RANK LEVELS ==========
         const RANK_LEVELS = {
             'owner': 1,
@@ -1891,7 +2110,7 @@
             '🌕', '🌖', '🌗', '🌘', '🌑', '🌒', '🌓', '🌔', '☀️', '🌝', '🌛', '🌜', '🌚', '☁️', '⛅', '🌤️', '🌥️', '🌦️', '🌧️', '🌨️'
         ];
         
-        // Load emojis - FIXED: Now properly loads and shows when clicked
+        // Load emojis
         function loadEmojis() {
             if (!emojiPanel) return;
             emojiPanel.innerHTML = '';
@@ -1909,22 +2128,18 @@
             });
         }
         
-        // Call after DOM is loaded
         document.addEventListener('DOMContentLoaded', loadEmojis);
         
-        // FIXED: Emoji panel toggle with better click handling
         function toggleEmojiPanel() {
             emojiPanel.classList.toggle('show');
-            // Ensure panel is visible and clickable
             if (emojiPanel.classList.contains('show')) {
                 emojiPanel.style.display = 'grid';
-                input.blur(); // Remove focus from input to prevent keyboard from hiding panel
+                input.blur();
             } else {
                 emojiPanel.style.display = 'none';
             }
         }
         
-        // FIXED: Close emoji panel when clicking outside
         document.addEventListener('click', (e) => {
             if (!e.target.closest('.emoji-btn') && 
                 !e.target.closest('#emojiBtn') && 
@@ -1934,7 +2149,7 @@
             }
         });
         
-        // ========== BROWSER NOTIFICATIONS - FIXED to work in background ==========
+        // ========== BROWSER NOTIFICATIONS ==========
         
         function checkNotificationSupport() {
             return "Notification" in window;
@@ -1954,15 +2169,13 @@
                     notificationsEnabled = true;
                     btn.classList.add('enabled');
                     btn.innerHTML = '<span>🔔</span> <span>Notifications Enabled</span>';
-                    showToast("✅ Notifications enabled! You will receive notifications even when tab is in background.");
-                    
-                    // Test notification
+                    showToast("✅ Notifications enabled!");
                     sendNotification('✅ Notifications Enabled', 'You will now receive notifications for new messages');
                 } else {
                     notificationsEnabled = false;
                     btn.classList.remove('enabled');
                     btn.innerHTML = '<span>🔕</span> <span>Enable Notifications</span>';
-                    showToast("❌ Notifications blocked - please allow in browser settings");
+                    showToast("❌ Notifications blocked");
                 }
             });
         }
@@ -1979,16 +2192,16 @@
                     if (notificationPermission) {
                         notificationsEnabled = true;
                         updateNotificationSwitch();
-                        showToast("✅ Notifications enabled! They will work in background.");
+                        showToast("✅ Notifications enabled!");
                         sendNotification('✅ Notifications Enabled', 'You will now receive notifications for new messages');
                     } else {
-                        showToast("❌ Please allow notifications in your browser settings");
+                        showToast("❌ Please allow notifications in your browser");
                     }
                 });
             } else {
                 notificationsEnabled = !notificationsEnabled;
                 updateNotificationSwitch();
-                showToast(notificationsEnabled ? '🔔 Notifications enabled (background mode)' : '🔕 Notifications disabled');
+                showToast(notificationsEnabled ? '🔔 Notifications enabled' : '🔕 Notifications disabled');
             }
         }
         
@@ -2003,9 +2216,7 @@
             }
         }
         
-        // FIXED: Send notification even when tab is in background
         function sendNotification(title, body, icon = '🕳️') {
-            // Always send notification if permission granted, regardless of tab visibility
             if (!notificationPermission) return;
             
             try {
@@ -2014,8 +2225,7 @@
                     icon: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="#667eea" opacity="0.3"/><text x="50" y="70" font-size="50" text-anchor="middle" fill="white">🕳️</text></svg>'),
                     tag: 'chat-message',
                     renotify: true,
-                    silent: false,
-                    requireInteraction: false
+                    silent: false
                 });
                 
                 notification.onclick = function() { 
@@ -2606,7 +2816,12 @@
             }
             
             async handleUserJoined(data) {
-                if (!this.isActive || data.userId === this.socket.id || this.peerConnections.has(data.userId)) return;
+                if (!this.isActive || data.userId === this.socket.id) return;
+                
+                if (this.peerConnections.has(data.userId)) {
+                    console.log(`Already connected to ${data.userId}, skipping duplicate`);
+                    return;
+                }
                 
                 try {
                     await this.createPeerConnection(data.userId, true, data.username, data.rank);
@@ -2623,6 +2838,11 @@
             
             async handleVideoOffer(data) {
                 if (!this.isActive) return;
+                
+                if (this.peerConnections.has(data.from)) {
+                    console.log(`Already have connection for ${data.from}, ignoring duplicate offer`);
+                    return;
+                }
                 
                 try {
                     const pc = await this.createPeerConnection(data.from, false, data.username, data.rank);
@@ -2669,6 +2889,11 @@
             }
             
             async createPeerConnection(userId, initiator = false, username = 'Unknown', rank = 'member') {
+                if (this.peerConnections.has(userId)) {
+                    console.log(`Connection for ${userId} already exists, returning existing`);
+                    return this.peerConnections.get(userId);
+                }
+                
                 const pc = new RTCPeerConnection(this.iceServers);
                 this.peerConnections.set(userId, pc);
                 
@@ -2701,9 +2926,9 @@
                 };
                 
                 pc.ontrack = (event) => {
-                    // Check if we already have a container for this user
                     if (this.videoContainers.has(userId)) {
-                        return; // Already have a video for this user
+                        console.log(`Already have video container for ${userId}, skipping duplicate`);
+                        return;
                     }
                     
                     const container = document.createElement('div');
@@ -2973,6 +3198,17 @@
                 showToast(`❌ ${message}`);
             }
             
+            showNotification(message, type = 'info') {
+                const event = new CustomEvent('videoNotification', {
+                    detail: { message, type }
+                });
+                window.dispatchEvent(event);
+                
+                if (window.showToast) {
+                    window.showToast(message);
+                }
+            }
+            
             updateUIVideoStatus(active) {
                 const videoIndicator = document.getElementById('video-indicator');
                 const videoBtn = document.getElementById('videoBtn');
@@ -2994,6 +3230,52 @@
                 
                 if (videoGrid) videoGrid.style.display = active ? 'grid' : 'none';
                 if (videoControls) videoControls.style.display = active && this.hasPermission() ? 'flex' : 'none';
+            }
+            
+            getConnectedUsers() {
+                const users = [];
+                this.peerStats.forEach((stats, userId) => {
+                    users.push({
+                        userId,
+                        username: stats.username,
+                        rank: stats.rank,
+                        quality: stats.quality,
+                        frameRate: stats.frameRate
+                    });
+                });
+                return users;
+            }
+            
+            isVideoActive() {
+                return this.isActive;
+            }
+            
+            async takeSnapshot(userId) {
+                const video = this.videoElements.get(userId);
+                if (!video) return null;
+                
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                return canvas.toDataURL('image/png');
+            }
+            
+            destroy() {
+                this.stop();
+                
+                if (this.monitoringInterval) {
+                    clearInterval(this.monitoringInterval);
+                }
+                
+                this.socket = null;
+                this.roomName = null;
+                this.username = null;
+                
+                console.log('🗑️ Video handler destroyed');
             }
         }
         
@@ -3202,7 +3484,6 @@
                 return;
             }
             
-            // Store credentials in cookies if remember me is checked
             if (rememberMe) {
                 setCookie('username', username, 30);
                 setCookie('password', password, 30);
@@ -3236,7 +3517,6 @@
         }
         
         function handleLogout() {
-            // Clear cookies on logout
             deleteCookie('username');
             deleteCookie('password');
             deleteCookie('rememberMe');
@@ -3508,7 +3788,6 @@
                 addMessage(data.username, data.message, data.rank);
             }
             
-            // Send notification even when tab is in background
             if (data.username !== currentUsername && currentRoom) {
                 sendNotification(`💬 New message in ${currentRoom}`, `${data.username}: ${data.message.substring(0, 50)}${data.message.length > 50 ? '...' : ''}`);
             }
@@ -3703,8 +3982,8 @@
                     <div><span class="help-rank owner">OWNER</span> <span class="help-desc">- Can see ALL private messages, Video enabled, /clear</span></div>
                     <div><span class="help-rank admin">ADMIN</span> <span class="help-desc">- Can see messages from rank 2-5, Video enabled</span></div>
                     <div><span class="help-rank mod">MOD</span> <span class="help-desc">- Can see messages from rank 3-5, Video enabled</span></div>
-                    <div><span class="help-rank vip">VIP</span> <span class="help-desc">- Can see only their own messages, Video enabled, AI access</span></div>
-                    <div><span class="help-rank member">MEMBER</span> <span class="help-desc">- Can see only their own messages, Video disabled, AI disabled</span></div>
+                    <div><span class="help-rank vip">VIP</span> <span class="help-desc">- Can see only their own messages, Video enabled, AI access, Image generation</span></div>
+                    <div><span class="help-rank member">MEMBER</span> <span class="help-desc">- Can see only their own messages, Video disabled, AI disabled, Image disabled</span></div>
                 </div>
                 
                 ${isVip ? `
@@ -3713,6 +3992,8 @@
                     <div><span class="help-command">/theme &lt;name&gt;</span> <span class="help-desc">- Change theme (dark, neon, ocean, etc)</span></div>
                     <div><span class="help-command">/video</span> <span class="help-desc">- Toggle video chat (VIP+ only)</span></div>
                     <div><span class="help-command">/ai &lt;prompt&gt;</span> <span class="help-desc">- Ask AI anything (VIP+ only)</span></div>
+                    <div><span class="help-command">/image &lt;prompt&gt;</span> <span class="help-desc">- Generate an image (VIP+ only)</span></div>
+                    <div><span class="help-command">/image &lt;prompt&gt; &lt;size&gt;</span> <span class="help-desc">- Generate image with size (256,512,1024)</span></div>
                 </div>
                 ` : ''}
                 
@@ -3760,7 +4041,7 @@
                 ` : ''}
                 
                 <div style="text-align: center; margin-top: 15px; color: #888; font-size: 11px; border-top: 1px solid rgba(102,126,234,0.3); padding-top: 10px;">
-                    🤖 AI command available for VIP+ • 🔔 Notifications work in background • 🔐 Stay logged in with cookies
+                    🤖 AI command available for VIP+ • 🎨 Image generation available for VIP+ • 🔔 Notifications work in background
                 </div>
             `;
             
@@ -3779,7 +4060,6 @@
                 return;
             }
             
-            // Show loading message
             const loadingMsg = document.createElement('div');
             loadingMsg.className = 'msg system';
             loadingMsg.textContent = '👥 Fetching user list...';
@@ -3787,37 +4067,30 @@
             msgContainer.appendChild(loadingMsg);
             msgContainer.scrollTop = msgContainer.scrollHeight;
             
-            // Request user list from server
             socket.emit('get_user_list', { roomName: currentRoom });
         }
 
-        // Listen for user list response
         socket.on('user_list', (data) => {
             if (data.error) {
                 addSystemMessage(`❌ ${data.error}`);
                 return;
             }
             
-            // Remove loading message
             const loadingMsg = document.querySelector('.msg.system:last-child');
             if (loadingMsg && loadingMsg.textContent.includes('Fetching user list')) {
                 loadingMsg.remove();
             }
             
-            // Create beautiful user list UI similar to help menu
             const userListDiv = document.createElement('div');
             userListDiv.className = 'msg system help-menu';
             
-            // Get current room name
             const currentRoomName = data.currentRoom || currentRoom || 'Unknown';
             
-            // Calculate totals
             const totalInRoom = data.roomUsers?.length || 0;
             const totalOnlineElsewhere = data.otherRoomUsers?.length || 0;
             const totalOffline = data.notOnlineUsers?.length || 0;
             const totalUsers = totalInRoom + totalOnlineElsewhere + totalOffline;
             
-            // Build the HTML
             userListDiv.innerHTML = `
                 <div style="text-align: center; margin-bottom: 15px;">
                     <span style="font-size: 24px;">👥</span>
@@ -3932,14 +4205,12 @@
             });
         }
         
-        // FIXED: /clear is now only for owner
         function handleClearCommand(args) {
             if (!currentRoom) {
                 addSystemMessage('❌ Not in a room');
                 return;
             }
             
-            // Only owner can use /clear
             if (!isOwner) {
                 addSystemMessage('❌ Only the Owner can use /clear command');
                 return;
@@ -4192,6 +4463,41 @@
             await askAI(prompt);
         }
         
+        // ========== IMAGE GENERATION COMMAND HANDLER ==========
+        
+        async function handleImageCommand(args) {
+            if (!isVip) {
+                addSystemMessage('❌ Image generation requires VIP+ rank');
+                return;
+            }
+            
+            if (isUserMuted) {
+                addSystemMessage('❌ You are muted and cannot generate images');
+                return;
+            }
+            
+            if (args.length < 1) {
+                addSystemMessage('Usage: /image <prompt> [size]');
+                addSystemMessage('Sizes: 256, 512, 1024 (default: 512)');
+                return;
+            }
+            
+            // Check if last argument is a size
+            let prompt = args.join(' ');
+            let size = '512x512';
+            
+            const lastArg = args[args.length - 1];
+            if (lastArg.match(/^\d+$/)) {
+                const sizeNum = parseInt(lastArg);
+                if ([256, 512, 1024].includes(sizeNum)) {
+                    size = `${sizeNum}x${sizeNum}`;
+                    prompt = args.slice(0, -1).join(' ');
+                }
+            }
+            
+            await generateImage(prompt, size);
+        }
+        
         // ========== COMMAND HANDLER ==========
         
         function handleCommand(commandText) {
@@ -4223,6 +4529,7 @@
                 case '/ping': handlePingCommand(); break;
                 case '/video': toggleVideoChat(); break;
                 case '/ai': handleAICommand(args); break;
+                case '/image': handleImageCommand(args); break;
                 default: addSystemMessage(`❌ Unknown command: ${command}. Type /help for commands.`);
             }
         }
@@ -4697,7 +5004,6 @@
                 document.getElementById('loginUsername').value = savedUsername;
                 document.getElementById('loginPassword').value = savedPassword;
                 document.getElementById('rememberMe').checked = true;
-                // Auto login after a short delay
                 setTimeout(() => {
                     handleLogin();
                 }, 500);
@@ -4710,7 +5016,7 @@
             console.log('✅ Connected to Black Hole Chat V2');
             showToast('✅ Connected to server');
             socket.emit('check_auth');
-            checkSavedLogin(); // Check for saved credentials
+            checkSavedLogin();
         });
         
         socket.on('auth_status', (data) => {
@@ -4733,7 +5039,7 @@
                 authScreen.style.display = 'flex';
                 roomScreen.style.display = 'none';
                 chatScreen.style.display = 'none';
-                checkSavedLogin(); // Check for saved credentials
+                checkSavedLogin();
             }
         });
         
@@ -4750,7 +5056,6 @@
             }
         });
         
-        // Check notification support on load
         if (checkNotificationSupport() && Notification.permission === 'granted') {
             notificationPermission = true;
             notificationsEnabled = true;

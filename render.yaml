@@ -23,12 +23,12 @@ services:
       - key: NODE_ENV
         value: production
       
-      # MongoDB Connection String (YOUR EXACT STRING)
+      # MongoDB Connection String
       - key: MONGODB_URI
         value: mongodb+srv://livechatdb:A%40sh1shmongodb@cluster0.j2qik61.mongodb.net/blackholechat?retryWrites=true&w=majority
         sync: false
       
-      # Admin Password (used for owner account)
+      # Admin Password (used for owner and admin accounts)
       - key: ADMIN_PASSWORD
         value: A@sh1shlivechat
         sync: false
@@ -45,9 +45,14 @@ services:
       - key: MAX_FILE_SIZE
         value: 52428800
       
-      # OpenRouter AI API Key
+      # OpenRouter AI API Key for /ai command
       - key: OPENROUTER_API_KEY
         value: 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
+        sync: false
+      
+      # DeAPI.ai Image Generation API Key for /image command
+      - key: DEAPI_API_KEY
+        value: 3751|uCGk2V1KNsYc1pwOmWAhz2y4IJIt65BsJuXLUYQmfee6809f
         sync: false
     
     # Disk storage for uploaded files
@@ -73,21 +78,3 @@ services:
     logging:
       format: json
       level: info
-
-  # Optional: Background worker for cleanup tasks (if needed)
-  # - type: worker
-  #   name: black-hole-chat-worker
-  #   runtime: node
-  #   repo: https://github.com/Pikid71/livechat
-  #   branch: main
-  #   plan: free
-  #   buildCommand: npm install
-  #   startCommand: node cleanup-worker.js
-  #   envVars:
-  #     - key: NODE_ENV
-  #       value: production
-  #     - key: MONGODB_URI
-  #       fromService:
-  #         type: web
-  #         name: black-hole-chat-v2
-  #         envVarKey: MONGODB_URI
