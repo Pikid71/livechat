@@ -1640,6 +1640,7 @@
                     <textarea id="imagePromptInput" placeholder="Describe the image you want to generate..." style="width: 100%; background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 14px; color: white; border-radius: 16px; outline: none; font-size: 14px; min-height: 100px; resize: vertical;"></textarea>
                 </div>
                 <div style="margin-bottom: 15px;">
+                    <label style="color: #ccc; display: block; margin-bottom: 5px;">Size:</label>
                     <select id="imageSizeSelect" style="width: 100%; background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 12px; color: white; border-radius: 30px; outline: none; font-size: 14px;">
                         <option value="256">Small (256x256)</option>
                         <option value="512" selected>Medium (512x512)</option>
@@ -1647,10 +1648,11 @@
                     </select>
                 </div>
                 <div style="margin-bottom: 15px;">
+                    <label style="color: #ccc; display: block; margin-bottom: 5px;">Model:</label>
                     <select id="imageModelSelect" style="width: 100%; background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 12px; color: white; border-radius: 30px; outline: none; font-size: 14px;">
-                        <option value="stable-diffusion">Stable Diffusion</option>
-                        <option value="dall-e-2">DALL-E 2</option>
-                        <option value="dall-e-3">DALL-E 3</option>
+                        <option value="prodia/sdxl" selected>Prodia SDXL</option>
+                        <option value="stabilityai/stable-diffusion-3-5-large">Stable Diffusion 3.5</option>
+                        <option value="black-forest-labs/flux-schnell">Flux Schnell</option>
                     </select>
                 </div>
                 <div style="display: flex; gap: 10px;">
@@ -1658,7 +1660,7 @@
                     <button onclick="generateImageFromModal()" class="action-btn success" style="flex: 2;">GENERATE</button>
                 </div>
                 <div style="margin-top: 15px; font-size: 12px; color: #888; text-align: center;">
-                    ⚡ VIP+ only • Powered by Multiple AI Models
+                    ⚡ VIP+ only • Powered by DeAPI.ai
                 </div>
             </div>
         </div>
@@ -1978,9 +1980,9 @@
             }
         }
         
-        // ========== FIXED IMAGE GENERATION WITH DEAPI.AI ONLY ==========
+        // ========== FIXED IMAGE GENERATION WITH DEAPI.AI CORRECT PARAMETERS ==========
 
-        async function generateImage(prompt, size = '512', model = 'stable-diffusion') {
+        async function generateImage(prompt, size = '512', model = 'prodia/sdxl') {
             if (!prompt || prompt.trim() === '') {
                 showToast('❌ Please enter a prompt');
                 return;
@@ -2018,8 +2020,11 @@
             try {
                 console.log('🎨 Sending request to DeAPI.ai...');
                 
-                // Try DeAPI.ai first (your primary API)
-                const deapiResponse = await fetch('https://api.deapi.ai/v1/images/generations', {
+                // Generate a random seed
+                const randomSeed = Math.floor(Math.random() * 1000000);
+                
+                // CORRECT PARAMETERS based on API error message
+                const response = await fetch('https://api.deapi.ai/api/v1/client/txt2img', {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${DEAPI_API_KEY}`,
@@ -2028,72 +2033,152 @@
                     },
                     body: JSON.stringify({
                         prompt: prompt,
-                        size: `${size}x${size}`,
-                        n: 1,
-                        response_format: 'url'
+                        model: model,           // Required field
+                        seed: randomSeed,        // Required field
+                        width: parseInt(size),
+                        height: parseInt(size),
+                        // Optional parameters you might want to add
+                        // guidance_scale: 7.5,
+                        // num_inference_steps: 30,
+                        // negative_prompt: ""
                     })
                 });
                 
-                if (deapiResponse.ok) {
-                    const data = await deapiResponse.json();
-                    console.log('✅ DeAPI.ai response:', data);
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    console.error('DeAPI.ai error response:', errorData);
                     
-                    // Handle different response formats
-                    let imageUrl = null;
+                    let errorMessage = errorData.message || errorData.error || `HTTP ${response.status}`;
                     
-                    // Check various possible response formats
-                    if (data.data && data.data[0] && data.data[0].url) {
-                        imageUrl = data.data[0].url; // OpenAI format
-                    } else if (data.url) {
-                        imageUrl = data.url; // Direct URL format
-                    } else if (data.image_url) {
-                        imageUrl = data.image_url; // Another common format
-                    } else if (data.output && data.output[0]) {
-                        imageUrl = data.output[0]; // Some APIs use output array
-                    } else if (data.images && data.images[0]) {
-                        imageUrl = data.images[0].url; // Another format
-                    } else if (typeof data === 'string') {
-                        imageUrl = data; // Direct string response
+                    // Handle specific validation errors
+                    if (errorData.errors) {
+                        const errorFields = Object.keys(errorData.errors).map(field => 
+                            `${field}: ${errorData.errors[field].join(', ')}`
+                        ).join('; ');
+                        errorMessage = `Validation errors: ${errorFields}`;
                     }
                     
-                    if (imageUrl) {
-                        loadingWrapper.remove();
-                        addImageMessage(currentUsername, prompt, imageUrl, `${size}x${size}`, 'DeAPI.ai');
-                        
-                        socket.emit('chat message', {
-                            username: 'System',
-                            message: `🎨 Image by ${currentUsername}: ${prompt}`
-                        });
-                        return;
-                    } else {
-                        console.error('Unexpected API response format:', data);
-                        throw new Error('Could not get image URL from response');
-                    }
-                } else {
-                    // Handle API error
-                    const errorData = await deapiResponse.json().catch(() => ({}));
-                    console.error('DeAPI.ai error:', deapiResponse.status, errorData);
-                    
-                    let errorMessage = errorData.message || errorData.error || `HTTP ${deapiResponse.status}`;
-                    
-                    if (deapiResponse.status === 401) {
-                        errorMessage = 'Invalid DeAPI.ai API key. Please check your API key.';
-                    } else if (deapiResponse.status === 402) {
-                        errorMessage = 'Payment required. Your DeAPI.ai account needs credits.';
-                    } else if (deapiResponse.status === 429) {
-                        errorMessage = 'Rate limit exceeded. Please try again later.';
-                    } else if (deapiResponse.status >= 500) {
-                        errorMessage = 'DeAPI.ai server error. Please try again later.';
-                    }
-                    
-                    throw new Error(`DeAPI.ai error: ${errorMessage}`);
+                    throw new Error(errorMessage);
                 }
+                
+                const data = await response.json();
+                console.log('✅ DeAPI.ai response:', data);
+                
+                // Try to extract image URL from various possible response formats
+                let imageUrl = null;
+                
+                // Common response formats to check
+                if (data.data && data.data[0] && data.data[0].url) {
+                    imageUrl = data.data[0].url;
+                } else if (data.images && data.images[0] && data.images[0].url) {
+                    imageUrl = data.images[0].url;
+                } else if (data.output && data.output[0]) {
+                    imageUrl = data.output[0];
+                } else if (data.url) {
+                    imageUrl = data.url;
+                } else if (data.image_url) {
+                    imageUrl = data.image_url;
+                } else if (data.result && data.result[0]) {
+                    imageUrl = data.result[0];
+                } else if (typeof data === 'string') {
+                    imageUrl = data;
+                } else if (data.image) {
+                    imageUrl = data.image;
+                }
+                
+                if (!imageUrl) {
+                    console.error('Could not extract image URL from response:', data);
+                    throw new Error('Could not get image URL from response');
+                }
+                
+                loadingWrapper.remove();
+                addImageMessage(currentUsername, prompt, imageUrl, `${size}x${size}`, model);
+                
+                socket.emit('chat message', {
+                    username: 'System',
+                    message: `🎨 Image by ${currentUsername}: ${prompt}`
+                });
                 
             } catch (error) {
                 console.error('❌ Image generation error:', error);
                 loadingWrapper.remove();
                 showToast('❌ Image generation failed');
                 addSystemMessage(`❌ Image generation failed: ${error.message}`);
+            }
+        }
+
+        // Update the command handler to include model selection
+        async function handleImageCommand(args) {
+            if (!isVip) {
+                addSystemMessage('❌ Image generation requires VIP+ rank');
+                return;
+            }
+            
+            if (isUserMuted) {
+                addSystemMessage('❌ You are muted and cannot generate images');
+                return;
+            }
+            
+            if (args.length < 1) {
+                addSystemMessage('Usage: /image <prompt> [size] [model]');
+                addSystemMessage('Sizes: 256, 512, 1024 (default: 512)');
+                addSystemMessage('Models: prodia/sdxl, stabilityai/stable-diffusion-3-5-large, black-forest-labs/flux-schnell');
+                return;
+            }
+            
+            let prompt = args.join(' ');
+            let size = '512';
+            let model = 'prodia/sdxl'; // Default model
+            
+            // Parse arguments (last two could be size and model)
+            const argsArray = [...args];
+            const possibleSize = argsArray[argsArray.length - 1];
+            const possibleModel = argsArray[argsArray.length - 2];
+            
+            // Check if last argument is a size
+            if (possibleSize && possibleSize.match(/^\d+$/)) {
+                const sizeNum = parseInt(possibleSize);
+                if ([256, 512, 1024].includes(sizeNum)) {
+                    size = sizeNum.toString();
+                    prompt = argsArray.slice(0, -1).join(' ');
+                    
+                    // Check if the new last argument is a model
+                    const newLastArg = argsArray[argsArray.length - 2];
+                    if (newLastArg && (newLastArg.includes('/') || ['sdxl', 'sd3', 'flux'].some(m => newLastArg.includes(m)))) {
+                        model = newLastArg;
+                        prompt = argsArray.slice(0, -2).join(' ');
+                    }
+                }
+            } else if (possibleModel && (possibleModel.includes('/') || ['sdxl', 'sd3', 'flux'].some(m => possibleModel.includes(m)))) {
+                // If second last is a model and last might be size
+                model = possibleModel;
+                if (possibleSize && possibleSize.match(/^\d+$/)) {
+                    const sizeNum = parseInt(possibleSize);
+                    if ([256, 512, 1024].includes(sizeNum)) {
+                        size = sizeNum.toString();
+                        prompt = argsArray.slice(0, -2).join(' ');
+                    } else {
+                        prompt = argsArray.slice(0, -1).join(' ');
+                    }
+                } else {
+                    prompt = argsArray.slice(0, -1).join(' ');
+                }
+            }
+            
+            await generateImage(prompt, size, model);
+        }
+
+        // Update the modal function to include model selection
+        function generateImageFromModal() {
+            const prompt = document.getElementById('imagePromptInput').value.trim();
+            const size = document.getElementById('imageSizeSelect').value;
+            const model = document.getElementById('imageModelSelect').value;
+            if (prompt) {
+                generateImage(prompt, size, model);
+                closeModal('imageModal');
+                document.getElementById('imagePromptInput').value = '';
+            } else {
+                showToast('❌ Please enter a prompt');
             }
         }
         
@@ -4018,13 +4103,18 @@
                 </div>
                 
                 ${isVip ? `
+                // In the showHelp() function, update the VIP+ section:
                 <div class="help-section">
                     <div class="help-title">⭐ VIP+ COMMANDS</div>
-                    <div><span class="help-command">/theme &lt;name&gt;</span> <span class="help-desc">- Change theme (dark, neon, ocean, etc)</span></div>
-                    <div><span class="help-command">/video</span> <span class="help-desc">- Toggle video chat (VIP+ only)</span></div>
-                    <div><span class="help-command">/ai &lt;prompt&gt;</span> <span class="help-desc">- Ask AI anything (VIP+ only)</span></div>
-                    <div><span class="help-command">/image &lt;prompt&gt;</span> <span class="help-desc">- Generate an image (VIP+ only)</span></div>
-                    <div><span class="help-command">/image &lt;prompt&gt; &lt;size&gt;</span> <span class="help-desc">- Generate image with size (256,512,1024)</span></div>
+                    <div><span class="help-command">/theme &lt;name&gt;</span> <span class="help-desc">- Change theme</span></div>
+                    <div><span class="help-command">/video</span> <span class="help-desc">- Toggle video chat</span></div>
+                    <div><span class="help-command">/ai &lt;prompt&gt;</span> <span class="help-desc">- Ask AI anything</span></div>
+                    <div><span class="help-command">/image &lt;prompt&gt;</span> <span class="help-desc">- Generate an image</span></div>
+                    <div><span class="help-command">/image &lt;prompt&gt; &lt;size&gt;</span> <span class="help-desc">- Generate with size (256,512,1024)</span></div>
+                    <div><span class="help-command">/image &lt;prompt&gt; &lt;size&gt; &lt;model&gt;</span> <span class="help-desc">- Generate with model</span></div>
+                    <div style="margin-top: 8px; font-size: 11px; color: #888;">
+                        Models: prodia/sdxl, stabilityai/stable-diffusion-3-5-large, black-forest-labs/flux-schnell
+                    </div>
                 </div>
                 ` : ''}
                 
