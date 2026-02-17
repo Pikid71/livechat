@@ -1,5 +1,4 @@
 # Black Hole Chat V2 - Render Deployment Configuration
-# This file automatically configures your service on Render
 
 services:
   # Main Web Service
@@ -19,38 +18,32 @@ services:
     
     # Environment variables
     envVars:
-      # Node environment
       - key: NODE_ENV
         value: production
       
-      # MongoDB Connection String
       - key: MONGODB_URI
         value: mongodb+srv://livechatdb:A%40sh1shmongodb@cluster0.j2qik61.mongodb.net/blackholechat?retryWrites=true&w=majority
         sync: false
       
-      # Admin Password (used for owner and admin accounts)
       - key: ADMIN_PASSWORD
         value: A@sh1shlivechat
         sync: false
       
-      # Server Port (Render will override this automatically)
       - key: PORT
         value: 10000
       
-      # Enable WebRTC for voice/video chat
       - key: ENABLE_WEBRTC
         value: true
       
-      # Maximum file upload size (50MB)
       - key: MAX_FILE_SIZE
         value: 52428800
       
-      # OpenRouter AI API Key for /ai command
+      # OpenRouter AI API Key
       - key: OPENROUTER_API_KEY
         value: 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
         sync: false
       
-      # DeAPI.ai Image Generation API Key for /image command
+      # DeAPI.ai Image Generation API Key
       - key: DEAPI_API_KEY
         value: 3751|uCGk2V1KNsYc1pwOmWAhz2y4IJIt65BsJuXLUYQmfee6809f
         sync: false
@@ -61,20 +54,8 @@ services:
       mountPath: /opt/render/project/src/uploads
       sizeGB: 1
     
-    # Auto-deploy on git push
     autoDeploy: true
     
-    # Custom domains (optional - uncomment and add your domain)
-    # domains:
-    #   - chat.yourdomain.com
-    
-    # Environment-specific settings
-    envSpecific:
-      production:
-        - key: NODE_OPTIONS
-          value: "--max-old-space-size=512"
-    
-    # Logging configuration
     logging:
       format: json
       level: info

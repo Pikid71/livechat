@@ -1978,8 +1978,8 @@
             }
         }
         
-        // ========== FIXED IMAGE GENERATION FUNCTIONS ==========
-        
+        // ========== FIXED IMAGE GENERATION WITH DEAPI.AI ONLY ==========
+
         async function generateImage(prompt, size = '512', model = 'stable-diffusion') {
             if (!prompt || prompt.trim() === '') {
                 showToast('❌ Please enter a prompt');
@@ -2012,74 +2012,85 @@
             msgContainer.appendChild(loadingWrapper);
             msgContainer.scrollTop = msgContainer.scrollHeight;
             
-            // Try multiple image generation APIs as fallbacks
-            const apis = [
-                {
-                    name: 'Stable Diffusion',
-                    url: 'https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0',
-                    headers: {
-                        'Authorization': 'Bearer hf_YOUR_HUGGINGFACE_TOKEN', // You'll need to add this
-                        'Content-Type': 'application/json'
-                    },
-                    body: { inputs: prompt }
-                },
-                {
-                    name: 'Pollinations.ai',
-                    url: `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${size}&height=${size}&nologo=true`,
-                    method: 'GET',
-                    isUrl: true
-                },
-                {
-                    name: 'DeepAI',
-                    url: 'https://api.deepai.org/api/text2img',
-                    headers: {
-                        'api-key': 'YOUR_DEEPAI_KEY' // You'll need to add this
-                    },
-                    body: { text: prompt }
-                }
-            ];
+            // DeAPI.ai API Key
+            const DEAPI_API_KEY = '3751|uCGk2V1KNsYc1pwOmWAhz2y4IJIt65BsJuXLUYQmfee6809f';
             
             try {
-                let imageUrl = null;
-                let usedModel = model;
+                console.log('🎨 Sending request to DeAPI.ai...');
                 
-                // Try Pollinations.ai first (free, no API key needed)
-                try {
-                    const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${size}&height=${size}&nologo=true`;
-                    // Test if the image loads
-                    const imgTest = new Image();
-                    await new Promise((resolve, reject) => {
-                        imgTest.onload = () => {
-                            imageUrl = pollinationsUrl;
-                            usedModel = 'Pollinations.ai';
-                            resolve();
-                        };
-                        imgTest.onerror = reject;
-                        imgTest.src = pollinationsUrl;
-                    });
-                } catch (e) {
-                    console.log('Pollinations.ai failed, trying placeholder service');
+                // Try DeAPI.ai first (your primary API)
+                const deapiResponse = await fetch('https://api.deapi.ai/v1/images/generations', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${DEAPI_API_KEY}`,
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        prompt: prompt,
+                        size: `${size}x${size}`,
+                        n: 1,
+                        response_format: 'url'
+                    })
+                });
+                
+                if (deapiResponse.ok) {
+                    const data = await deapiResponse.json();
+                    console.log('✅ DeAPI.ai response:', data);
                     
-                    // Fallback to placeholder images with prompt text
-                    imageUrl = `https://via.placeholder.com/${size}x${size}.png?text=${encodeURIComponent(prompt.substring(0, 30))}`;
-                    usedModel = 'Placeholder';
-                }
-                
-                loadingWrapper.remove();
-                
-                if (imageUrl) {
-                    addImageMessage(currentUsername, prompt, imageUrl, `${size}x${size}`, usedModel);
+                    // Handle different response formats
+                    let imageUrl = null;
                     
-                    socket.emit('chat message', {
-                        username: 'System',
-                        message: `🎨 Image by ${currentUsername}: ${prompt}`
-                    });
+                    // Check various possible response formats
+                    if (data.data && data.data[0] && data.data[0].url) {
+                        imageUrl = data.data[0].url; // OpenAI format
+                    } else if (data.url) {
+                        imageUrl = data.url; // Direct URL format
+                    } else if (data.image_url) {
+                        imageUrl = data.image_url; // Another common format
+                    } else if (data.output && data.output[0]) {
+                        imageUrl = data.output[0]; // Some APIs use output array
+                    } else if (data.images && data.images[0]) {
+                        imageUrl = data.images[0].url; // Another format
+                    } else if (typeof data === 'string') {
+                        imageUrl = data; // Direct string response
+                    }
+                    
+                    if (imageUrl) {
+                        loadingWrapper.remove();
+                        addImageMessage(currentUsername, prompt, imageUrl, `${size}x${size}`, 'DeAPI.ai');
+                        
+                        socket.emit('chat message', {
+                            username: 'System',
+                            message: `🎨 Image by ${currentUsername}: ${prompt}`
+                        });
+                        return;
+                    } else {
+                        console.error('Unexpected API response format:', data);
+                        throw new Error('Could not get image URL from response');
+                    }
                 } else {
-                    throw new Error('Could not generate image');
+                    // Handle API error
+                    const errorData = await deapiResponse.json().catch(() => ({}));
+                    console.error('DeAPI.ai error:', deapiResponse.status, errorData);
+                    
+                    let errorMessage = errorData.message || errorData.error || `HTTP ${deapiResponse.status}`;
+                    
+                    if (deapiResponse.status === 401) {
+                        errorMessage = 'Invalid DeAPI.ai API key. Please check your API key.';
+                    } else if (deapiResponse.status === 402) {
+                        errorMessage = 'Payment required. Your DeAPI.ai account needs credits.';
+                    } else if (deapiResponse.status === 429) {
+                        errorMessage = 'Rate limit exceeded. Please try again later.';
+                    } else if (deapiResponse.status >= 500) {
+                        errorMessage = 'DeAPI.ai server error. Please try again later.';
+                    }
+                    
+                    throw new Error(`DeAPI.ai error: ${errorMessage}`);
                 }
                 
             } catch (error) {
-                console.error('Image generation error:', error);
+                console.error('❌ Image generation error:', error);
                 loadingWrapper.remove();
                 showToast('❌ Image generation failed');
                 addSystemMessage(`❌ Image generation failed: ${error.message}`);
