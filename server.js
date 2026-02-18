@@ -755,8 +755,11 @@ const memoryStore = {
     theme: 'default'
   }]]),
   sessions: new Map(),
-  bans: new Map(),
-  mutes: new Map(),
+  bans: new Map(),            // room-specific bans by username
+  mutes: new Map(),           // room-specific mutes by username
+  deviceBans: new Map(),      // global bans keyed by deviceId
+  deviceMutes: new Map(),     // global mutes keyed by deviceId
+  userDevices: new Map(),     // map username -> Set of deviceIds seen
   privateMessages: []
 };
 
@@ -784,6 +787,35 @@ function isUserMuted(username, roomName) {
       return true;
     } else {
       memoryStore.mutes.delete(muteKey);
+      return false;
+    }
+  }
+  return false;
+}
+
+// device helpers
+function isDeviceBanned(deviceId) {
+  if (!deviceId) return false;
+  if (memoryStore.deviceBans.has(deviceId)) {
+    const ban = memoryStore.deviceBans.get(deviceId);
+    if (Date.now() < ban.expiresAt) {
+      return true;
+    } else {
+      memoryStore.deviceBans.delete(deviceId);
+      return false;
+    }
+  }
+  return false;
+}
+
+function isDeviceMuted(deviceId) {
+  if (!deviceId) return false;
+  if (memoryStore.deviceMutes.has(deviceId)) {
+    const mute = memoryStore.deviceMutes.get(deviceId);
+    if (Date.now() < mute.expiresAt) {
+      return true;
+    } else {
+      memoryStore.deviceMutes.delete(deviceId);
       return false;
     }
   }
@@ -842,7 +874,7 @@ const PERMISSIONS = {
     canDeleteRoom: false, 
     canClear: true, 
     canGrant: [], 
-    canUseEffects: false, 
+    canUseEffects: true,    // moderators also get vip commands
     canUpload: true, 
     canVoice: true, 
     canVideo: true,
@@ -856,7 +888,7 @@ const PERMISSIONS = {
     canDeleteRoom: false, 
     canClear: false, 
     canGrant: [], 
-    canUseEffects: false, 
+    canUseEffects: true,   // vip allowed to trigger effects
     canUpload: true, 
     canVoice: true, 
     canVideo: true,
@@ -901,55 +933,71 @@ io.on('connection', (socket) => {
   
   socket.on('login', async (data) => {
     try {
-      const { username, password } = data;
-      console.log(`🔑 Login attempt: ${username}`);
-      
+      const { username, password, rememberMe, deviceId: providedDevice } = data;
+      console.log(`🔑 Login attempt: ${username} (device=${providedDevice || 'unknown'})`);
+
+      // attach device id for this session
+      let deviceId = providedDevice || null;
+      if (deviceId && typeof deviceId !== 'string') deviceId = String(deviceId);
+
+      // check device bans/mutes before doing anything else
+      if (isDeviceBanned(deviceId)) {
+        return socket.emit('auth_error', { message: '⛔ This device is banned' });
+      }
+      if (isDeviceMuted(deviceId)) {
+        return socket.emit('auth_error', { message: '🔇 This device is muted' });
+      }
+
       if (!username || !password) {
         return socket.emit('auth_error', { message: 'Username and password required' });
       }
-      
+
+      const createSession = (name, rank, theme) => {
+        currentUser = name;
+        userRank = rank;
+        memoryStore.sessions.set(socket.id, { username: name, rank, roomName: null, deviceId });
+
+        // remember which devices the user has used
+        if (deviceId) {
+          if (!memoryStore.userDevices.has(name)) {
+            memoryStore.userDevices.set(name, new Set());
+          }
+          memoryStore.userDevices.get(name).add(deviceId);
+        }
+
+        socket.emit('auth_success', { username: name, rank, theme, message: `Login successful!` });
+      };
+
       if (username === OWNER_USERNAME && password === ADMIN_PASSWORD) {
-        currentUser = username;
-        userRank = 'owner';
-        memoryStore.sessions.set(socket.id, { username, rank: 'owner' });
-        socket.emit('auth_success', { username, rank: 'owner', theme: 'dark', message: 'Welcome Owner!' });
+        createSession(username, 'owner', 'dark');
         console.log(`✅ Owner logged in: ${username}`);
         return;
       }
-      
+
       if (username === 'admin' && password === ADMIN_PASSWORD) {
-        currentUser = username;
-        userRank = 'admin';
-        memoryStore.sessions.set(socket.id, { username, rank: 'admin' });
-        socket.emit('auth_success', { username, rank: 'admin', theme: 'default', message: 'Welcome Admin!' });
+        createSession(username, 'admin', 'default');
         console.log(`✅ Admin logged in: ${username}`);
         return;
       }
-      
+
       if (memoryStore.users.has(username)) {
         const user = memoryStore.users.get(username);
         if (user.password === password) {
-          currentUser = username;
-          userRank = user.rank;
-          memoryStore.sessions.set(socket.id, { username, rank: userRank });
-          socket.emit('auth_success', { username, rank: userRank, theme: user.theme || 'default', message: 'Login successful!' });
-          console.log(`✅ User logged in: ${username} (${userRank})`);
+          createSession(username, user.rank || 'member', user.theme || 'default');
+          console.log(`✅ User logged in: ${username} (${user.rank})`);
           return;
         }
       }
-      
+
       if (!memoryStore.users.has(username)) {
         memoryStore.users.set(username, { username, password, rank: 'member', theme: 'default' });
-        currentUser = username;
-        userRank = 'member';
-        memoryStore.sessions.set(socket.id, { username, rank: 'member' });
-        socket.emit('auth_success', { username, rank: 'member', theme: 'default', message: 'Account created!' });
+        createSession(username, 'member', 'default');
         console.log(`✅ New user created: ${username}`);
         return;
       }
-      
+
       socket.emit('auth_error', { message: 'Invalid credentials' });
-      
+
     } catch (err) {
       console.error('Login error:', err);
       socket.emit('auth_error', { message: 'Server error' });
@@ -958,8 +1006,18 @@ io.on('connection', (socket) => {
   
   socket.on('register', async (data) => {
     try {
-      const { username, password } = data;
-      
+      const { username, password, deviceId: providedDevice } = data;
+      let deviceId = providedDevice || null;
+      if (deviceId && typeof deviceId !== 'string') deviceId = String(deviceId);
+
+      // device ban/mute checks
+      if (isDeviceBanned(deviceId)) {
+        return socket.emit('auth_error', { message: '⛔ This device is banned' });
+      }
+      if (isDeviceMuted(deviceId)) {
+        return socket.emit('auth_error', { message: '🔇 This device is muted' });
+      }
+
       if (!username || !password) {
         return socket.emit('auth_error', { message: 'Username and password required' });
       }
@@ -981,7 +1039,12 @@ io.on('connection', (socket) => {
       }
       
       memoryStore.users.set(username, { username, password, rank: 'member', theme: 'default' });
-      memoryStore.sessions.set(socket.id, { username, rank: 'member' });
+      memoryStore.sessions.set(socket.id, { username, rank: 'member', roomName: null, deviceId });
+      
+      if (deviceId) {
+        if (!memoryStore.userDevices.has(username)) memoryStore.userDevices.set(username, new Set());
+        memoryStore.userDevices.get(username).add(deviceId);
+      }
       
       currentUser = username;
       userRank = 'member';
@@ -1209,6 +1272,10 @@ io.on('connection', (socket) => {
       if (!currentUser) {
         return socket.emit('error', { message: 'Not authenticated' });
       }
+      // ensure device isn't banned
+      if (isDeviceBanned(memoryStore.sessions.get(socket.id)?.deviceId)) {
+        return socket.emit('error', { message: '⛔ This device is banned' });
+      }
       
       const { roomName, password } = data;
       
@@ -1312,7 +1379,14 @@ io.on('connection', (socket) => {
     try {
       if (!currentUser || !currentRoom) return;
       
-      if (isUserMuted(currentUser, currentRoom)) {
+      const sidSession = memoryStore.sessions.get(socket.id);
+      if (isDeviceBanned(sidSession?.deviceId)) {
+        socket.emit('system_message', { message: '⛔ Your device is banned' });
+        socket.disconnect(true);
+        return;
+      }
+
+      if (isUserMuted(currentUser, currentRoom) || isDeviceMuted(sidSession?.deviceId)) {
         socket.emit('system_message', { message: '🔇 You are muted and cannot send messages' });
         return;
       }
@@ -1483,8 +1557,8 @@ io.on('connection', (socket) => {
     try {
       const { roomName, username } = data;
       
-      // Check if user is muted
-      if (isUserMuted(username, roomName)) {
+      // Check if user or device is muted
+      if (isUserMuted(username, roomName) || isDeviceMuted(memoryStore.sessions.get(socket.id)?.deviceId)) {
         socket.emit('voice_error', { message: 'You are muted and cannot join voice chat' });
         return;
       }
@@ -1684,7 +1758,7 @@ io.on('connection', (socket) => {
     try {
       if (!currentUser || !currentRoom) return;
       
-      if (isUserMuted(currentUser, currentRoom)) {
+      if (isUserMuted(currentUser, currentRoom) || isDeviceMuted(memoryStore.sessions.get(socket.id)?.deviceId)) {
         return socket.emit('error', { message: '❌ You are muted and cannot use commands' });
       }
       
@@ -1730,7 +1804,7 @@ io.on('connection', (socket) => {
     try {
       if (!currentUser || !currentRoom) return;
       
-      if (isUserMuted(currentUser, currentRoom)) {
+      if (isUserMuted(currentUser, currentRoom) || isDeviceMuted(memoryStore.sessions.get(socket.id)?.deviceId)) {
         return socket.emit('error', { message: '❌ You are muted and cannot use commands' });
       }
       
@@ -1751,9 +1825,7 @@ io.on('connection', (socket) => {
         return socket.emit('error', { message: '❌ Cannot ban users of equal or higher rank' });
       }
       
-      if (userRank === 'moderator' && password !== ADMIN_PASSWORD) {
-        return socket.emit('error', { message: '❌ Incorrect password' });
-      }
+      // moderators no longer need admin password to ban
       
       let durationMs = 10 * 60 * 1000;
       const match = duration.match(/^(\d+)([hmd])$/);
@@ -1791,6 +1863,22 @@ io.on('connection', (socket) => {
         }
       }
       
+      // also ban any devices associated with the user
+      const userDeviceSet = memoryStore.userDevices.get(bannedUser);
+      if (userDeviceSet && userDeviceSet.size > 0) {
+        userDeviceSet.forEach(did => {
+          memoryStore.deviceBans.set(did, { expiresAt, bannedBy: currentUser });
+          // disconnect all sessions on that device
+          for (const [sid, session] of memoryStore.sessions) {
+            if (session.deviceId === did) {
+              io.to(sid).emit('device_banned', { by: currentUser, duration });
+              // force disconnect to prevent further activity
+              try { io.sockets.sockets.get(sid)?.disconnect(true); } catch(e){}
+            }
+          }
+        });
+      }
+      
       if (bannedSocketId) {
         io.to(bannedSocketId).emit('force_leave', { roomName: currentRoom, reason: 'banned' });
       }
@@ -1806,7 +1894,7 @@ io.on('connection', (socket) => {
     try {
       if (!currentUser || !currentRoom) return;
       
-      if (isUserMuted(currentUser, currentRoom)) {
+      if (isUserMuted(currentUser, currentRoom) || isDeviceMuted(memoryStore.sessions.get(socket.id)?.deviceId)) {
         return socket.emit('error', { message: '❌ You are muted and cannot use commands' });
       }
       
@@ -1826,6 +1914,19 @@ io.on('connection', (socket) => {
       const roomBans = memoryStore.bans.get(currentRoom);
       if (roomBans) {
         roomBans.delete(unbannedUser);
+      }
+
+      // clear any device bans for the user's known devices
+      const userDeviceSet = memoryStore.userDevices.get(unbannedUser);
+      if (userDeviceSet && userDeviceSet.size > 0) {
+        userDeviceSet.forEach(did => {
+          memoryStore.deviceBans.delete(did);
+          for (const [sid, session] of memoryStore.sessions) {
+            if (session.deviceId === did) {
+              io.to(sid).emit('device_unbanned');
+            }
+          }
+        });
       }
       
       io.to(currentRoom).emit('user_unbanned', { unbannedUser, unbannerName: currentUser });
@@ -1850,7 +1951,7 @@ io.on('connection', (socket) => {
     try {
       if (!currentUser || !currentRoom) return;
       
-      if (isUserMuted(currentUser, currentRoom)) {
+      if (isUserMuted(currentUser, currentRoom) || isDeviceMuted(memoryStore.sessions.get(socket.id)?.deviceId)) {
         return socket.emit('error', { message: '❌ You are muted and cannot use commands' });
       }
       
@@ -1877,6 +1978,20 @@ io.on('connection', (socket) => {
       
       memoryStore.mutes.set(muteKey, { roomName: currentRoom, expiresAt, mutedBy: currentUser });
       
+      // apply device mutes as well
+      const userDeviceSet = memoryStore.userDevices.get(mutedUser);
+      if (userDeviceSet && userDeviceSet.size > 0) {
+        userDeviceSet.forEach(did => {
+          memoryStore.deviceMutes.set(did, { expiresAt, mutedBy: currentUser });
+          // notify sessions on that device
+          for (const [sid, session] of memoryStore.sessions) {
+            if (session.deviceId === did) {
+              io.to(sid).emit('device_muted', { duration, mutedBy: currentUser });
+            }
+          }
+        });
+      }
+      
       io.to(currentRoom).emit('user_muted', { mutedUser, duration, muterName: currentUser });
       
       const systemMsg = {
@@ -1899,7 +2014,7 @@ io.on('connection', (socket) => {
     try {
       if (!currentUser || !currentRoom) return;
       
-      if (isUserMuted(currentUser, currentRoom)) {
+      if (isUserMuted(currentUser, currentRoom) || isDeviceMuted(memoryStore.sessions.get(socket.id)?.deviceId)) {
         return socket.emit('error', { message: '❌ You are muted and cannot use commands' });
       }
       
@@ -1922,6 +2037,20 @@ io.on('connection', (socket) => {
       
       const muteKey = `${unmutedUser}-${currentRoom}`;
       memoryStore.mutes.delete(muteKey);
+
+      // also clear any device mutes for this user
+      const userDeviceSet = memoryStore.userDevices.get(unmutedUser);
+      if (userDeviceSet && userDeviceSet.size > 0) {
+        userDeviceSet.forEach(did => {
+          memoryStore.deviceMutes.delete(did);
+          // inform any connected sessions on that device
+          for (const [sid, session] of memoryStore.sessions) {
+            if (session.deviceId === did) {
+              io.to(sid).emit('device_unmuted');
+            }
+          }
+        });
+      }
       
       io.to(currentRoom).emit('user_unmuted', { unmutedUser, unmuterName: currentUser });
       
@@ -1983,13 +2112,13 @@ io.on('connection', (socket) => {
     try {
       if (!currentUser || !currentRoom) return;
       
-      if (isUserMuted(currentUser, currentRoom)) {
+      if (isUserMuted(currentUser, currentRoom) || isDeviceMuted(memoryStore.sessions.get(socket.id)?.deviceId)) {
         return socket.emit('error', { message: '❌ You are muted and cannot use commands' });
       }
       
       const permissions = PERMISSIONS[userRank] || PERMISSIONS.member;
       if (!permissions.canUseEffects) {
-        return socket.emit('error', { message: '❌ Only admins can use effects' });
+        return socket.emit('error', { message: '❌ You do not have permission to use effects' });
       }
       
       const { effect } = data;
@@ -2017,7 +2146,7 @@ io.on('connection', (socket) => {
     try {
       if (!currentUser) return;
       
-      if (currentRoom && isUserMuted(currentUser, currentRoom)) {
+      if (currentRoom && (isUserMuted(currentUser, currentRoom) || isDeviceMuted(memoryStore.sessions.get(socket.id)?.deviceId))) {
         return socket.emit('error', { message: '❌ You are muted and cannot use commands' });
       }
       
@@ -2034,10 +2163,7 @@ io.on('connection', (socket) => {
         return socket.emit('error', { message: `❌ Cannot grant ${newRank} rank` });
       }
       
-      if (userRank !== 'owner' && password !== ADMIN_PASSWORD) {
-        return socket.emit('error', { message: '❌ Incorrect password' });
-      }
-      
+      // no password required for admins/owner to grant ranks
       // Update in memory store
       if (memoryStore.users.has(targetUser)) {
         const user = memoryStore.users.get(targetUser);
@@ -2084,7 +2210,7 @@ io.on('connection', (socket) => {
       
       const { theme, scope } = data;
       
-      if (scope === 'room' && currentRoom && isUserMuted(currentUser, currentRoom)) {
+      if (scope === 'room' && currentRoom && (isUserMuted(currentUser, currentRoom) || isDeviceMuted(memoryStore.sessions.get(socket.id)?.deviceId))) {
         return socket.emit('error', { message: '❌ You are muted and cannot use commands' });
       }
       
@@ -2253,4 +2379,11 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('\n' + '='.repeat(70) + '\n');
 });
 
-module.exports = { app, server, io };
+module.exports = { 
+  app, server, io,
+  PERMISSIONS,
+  memoryStore,
+  getRankLevel,
+  isDeviceBanned,
+  isDeviceMuted
+};

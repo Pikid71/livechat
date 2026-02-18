@@ -1528,7 +1528,7 @@
                         <option value="vip">⭐ VIP</option>
                         <option value="member">👤 Member</option>
                     </select>
-                    <input type="password" id="grantPassword" placeholder="Admin Password (if not owner)" style="width: 100%; background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 12px; color: white; border-radius: 30px; margin-bottom: 15px;">
+                    <!-- password not required for admins/owner -->
                     <button onclick="grantRank()" class="action-btn success" style="width: 100%;">GRANT RANK</button>
                 </div>
             </div>
@@ -1688,6 +1688,11 @@
         let isUserMuted = false;
         let muteExpiresAt = 0;
         
+        // device tracking
+        let deviceId = null;
+        let isDeviceMuted = false;
+        let deviceMuteExpiresAt = 0;
+        
         // Voice chat
         let voiceChat = null;
         let isVoiceActive = false;
@@ -1760,6 +1765,19 @@
         }
         
         function showModal(modalId) {
+            if (modalId === 'grantRankModal') {
+                // rebuild rank options depending on who is opening
+                const sel = document.getElementById('grantRankSelect');
+                if (sel) {
+                    sel.innerHTML = '';
+                    if (isOwner) {
+                        sel.add(new Option('👑 Admin', 'admin'));
+                    }
+                    sel.add(new Option('🛡️ Moderator', 'moderator'));
+                    sel.add(new Option('⭐ VIP', 'vip'));
+                    sel.add(new Option('👤 Member', 'member'));
+                }
+            }
             document.getElementById(modalId).classList.add('show');
         }
         
@@ -1901,7 +1919,11 @@
                 isUserMuted = false;
                 muteExpiresAt = 0;
             }
-            return isUserMuted;
+            if (isDeviceMuted && deviceMuteExpiresAt && Date.now() >= deviceMuteExpiresAt) {
+                isDeviceMuted = false;
+                deviceMuteExpiresAt = 0;
+            }
+            return isUserMuted || isDeviceMuted;
         }
         
         function updateOnlineUsers() {
@@ -2328,7 +2350,7 @@
                 document.querySelector('.header .user-info')?.after(grantBtn);
             }
             
-            if (isAdmin || isOwner) {
+            if (isAdmin || isOwner || isModerator || isVip) {
                 const effectsBtn = document.createElement('button');
                 effectsBtn.id = 'effectsBtn';
                 effectsBtn.className = 'action-btn';
@@ -3539,7 +3561,7 @@
                 setCookie('rememberMe', 'true', 30);
             }
             
-            socket.emit('login', { username, password, rememberMe });
+            socket.emit('login', { username, password, rememberMe, deviceId });
         }
         
         function handleRegister() {
@@ -3562,7 +3584,7 @@
                 return;
             }
             
-            socket.emit('register', { username, password });
+            socket.emit('register', { username, password, deviceId });
         }
         
         function handleLogout() {
@@ -3611,7 +3633,6 @@
         function grantRank() {
             const targetUser = document.getElementById('grantUsername').value.trim();
             const newRank = document.getElementById('grantRankSelect').value;
-            const password = document.getElementById('grantPassword').value;
             
             if (!targetUser || !newRank) {
                 showToast('❌ Please enter username and select rank');
@@ -3621,7 +3642,7 @@
             socket.emit('grant_rank', {
                 targetUser,
                 newRank,
-                password
+                password: ''
             });
             
             closeModal('grantRankModal');
@@ -3975,7 +3996,7 @@
                 const messageText = input.value;
                 
                 if (messageText.startsWith('/')) {
-                    if (checkIfUserMuted()) {
+                    if (checkIfUserMuted() || checkIfDeviceMuted()) {
                         addSystemMessage('❌ You are muted and cannot use commands');
                         return;
                     }
@@ -4059,23 +4080,23 @@
                     <div class="help-title">👮 ADMIN+ COMMANDS</div>
                     <div><span class="help-command">/unban &lt;user&gt;</span> <span class="help-desc">- Unban user</span></div>
                     <div><span class="help-command">/delete &lt;room&gt;</span> <span class="help-desc">- Delete any room</span></div>
-                    <div><span class="help-command">/grant &lt;user&gt; &lt;rank&gt;</span> <span class="help-desc">- Grant mod/vip/member</span></div>
+                    <div><span class="help-command">/grant &lt;user&gt; &lt;rank&gt;</span> <span class="help-desc">- Grant mod/vip/member (admin+)</span></div>
                 </div>
                 ` : ''}
                 
                 ${isOwner ? `
                 <div class="help-section">
                     <div class="help-title">👑 OWNER COMMANDS</div>
-                    <div><span class="help-command">/grant &lt;user&gt; admin</span> <span class="help-desc">- Grant admin rank</span></div>
+                    <div><span class="help-command">/grant &lt;user&gt; admin</span> <span class="help-desc">- Grant admin rank (owner only)</span></div>
                     <div><span class="help-command">/clear</span> <span class="help-desc">- Clear all messages (Owner only)</span></div>
                 </div>
                 ` : ''}
                 
-                ${isAdmin || isOwner ? `
+                ${isAdmin || isOwner || isModerator || isVip ? `
                 <div class="help-section">
-                    <div class="help-title">🎮 EFFECT COMMANDS (ADMIN+)</div>
+                    <div class="help-title">🎮 EFFECT COMMANDS (VIP+)</div>
                     <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px;">
-                        <div><span class="help-command">/effect glitch</span> <span class="help-desc">- Glitch</span></div>
+                        <div><span class="help-command">/effect glitch</span> <span class="help-desc">- Glitch (VIP+)</span></div>
                         <div><span class="help-command">/effect flashbang</span> <span class="help-desc">- Flash</span></div>
                         <div><span class="help-command">/effect black</span> <span class="help-desc">- Blackout</span></div>
                         <div><span class="help-command">/effect hack</span> <span class="help-desc">- Hacker</span></div>
@@ -4422,8 +4443,8 @@
         }
         
         function handleEffectCommand(args) {
-            if (!isAdmin && !isOwner) {
-                addSystemMessage('❌ Only admins can use effects');
+            if (!isAdmin && !isOwner && !isModerator && !isVip) {
+                addSystemMessage('❌ You do not have permission to use effects');
                 return;
             }
             if (!currentRoom) {
@@ -4467,14 +4488,7 @@
                 addSystemMessage(`❌ You can only grant: ${validRanks.join(', ')}`);
                 return;
             }
-            if (isOwner) {
-                socket.emit('grant_rank', { targetUser, newRank, password: '' });
-            } else {
-                const password = prompt('Enter admin password:');
-                if (password) {
-                    socket.emit('grant_rank', { targetUser, newRank, password });
-                }
-            }
+            socket.emit('grant_rank', { targetUser, newRank, password: '' });
         }
         
         function handleRankCommand() {
@@ -4514,7 +4528,7 @@
         // ========== COMMAND HANDLER ==========
         
         function handleCommand(commandText) {
-            if (checkIfUserMuted()) {
+            if (checkIfUserMuted() || checkIfDeviceMuted()) {
                 addSystemMessage('❌ You are muted and cannot use commands');
                 return;
             }
@@ -4906,6 +4920,42 @@
                 setTimeout(() => leaveRoom(), 2000);
             }
         });
+
+        socket.on('device_banned', (data) => {
+            showToast('⛔ This device has been banned');
+            // force logout
+            socket.disconnect();
+            resetUI();
+        });
+
+        socket.on('device_banned', (data) => {
+            showToast('⛔ This device has been banned');
+            // force a disconnect / reload
+            setTimeout(() => {
+                socket.disconnect();
+                location.reload();
+            }, 1000);
+        });
+
+        socket.on('device_unbanned', () => {
+            showToast('✅ Device ban lifted');
+        });
+
+        socket.on('device_muted', (data) => {
+            isDeviceMuted = true;
+            const dur = data.duration || 'unknown';
+            showToast(`🔇 This device has been muted for ${dur}`);
+            if (data.duration) {
+                deviceMuteExpiresAt = Date.now() + parseDurationClient(data.duration);
+            }
+            // we don't automatically leave but future commands/messages will fail
+        });
+
+        socket.on('device_unmuted', () => {
+            isDeviceMuted = false;
+            deviceMuteExpiresAt = 0;
+            showToast('✅ Device mute lifted');
+        });
         
         socket.on('user_unbanned', (data) => {
             addSystemMessage(`✅ ${data.unbannedUser} unbanned by ${data.unbannerName}`);
@@ -4925,6 +4975,18 @@
                 }
             }
             addSystemMessage(`🔇 ${data.mutedUser} has been muted for ${data.duration || '10m'}`);
+        });
+
+        socket.on('device_muted', (data) => {
+            isDeviceMuted = true;
+            const durationMs = parseDurationClient(data.duration || '10m');
+            deviceMuteExpiresAt = Date.now() + durationMs;
+            showToast(`🔇 This device has been muted for ${data.duration || '10m'}`);
+            if (isVideoActive && videoChat) {
+                videoChat.setMutedStatus(true);
+                videoChat.stop();
+                isVideoActive = false;
+            }
         });
         
         socket.on('user_unmuted', (data) => {
@@ -5004,6 +5066,20 @@
         document.getElementById('pmRecipientSelect')?.addEventListener('change', (e) => {
             document.getElementById('pmRecipient').value = e.target.value;
         });
+        
+        // ========== DEVICE IDENTIFICATION ==========
+        
+        function getDeviceId() {
+            let id = localStorage.getItem('deviceId');
+            if (!id) {
+                id = 'dev-' + Math.random().toString(36).substr(2, 12);
+                localStorage.setItem('deviceId', id);
+            }
+            return id;
+        }
+
+        // call immediately on load
+        deviceId = getDeviceId();
         
         // ========== AUTO-LOGIN FROM COOKIES ==========
         

@@ -25,8 +25,7 @@ A full-featured real-time chat application with private messaging, voice/video c
 - **File Upload**: Multer + Sharp (image optimization)
 - **WebRTC**: Native browser WebRTC API
 - **AI**: OpenRouter API
-- **Image Generation**: Stable Horde API
-- **Hosting**: Render.com (or similar Node hosting)
+- **Hosting**: Render.com
 
 ## 📋 Requirements
 
@@ -153,16 +152,18 @@ PORT=10000 (Render assigns dynamically)
 - `/video` - Toggle video chat
 
 ### Moderator+ Commands
-- `/ban <user> [duration]` - Ban user (10m, 1h, 1d)
-- `/unban <user>` - Unban user
-- `/mute <user> [duration]` - Mute user
-- `/unmute <user>` - Unmute user
+- `/ban <user> [duration]` - Ban user (10m, 1h, 1d); device is also banned
+- `/unban <user>` - Unban user (admin/owner only); clears device ban
+- `/mute <user> [duration]` - Mute user; device is also muted
+- `/unmute <user>` - Unmute user (mods can unmute)
 - `/clear` - Clear all messages in room
 
+> 🔒 **Device bans/mutes** apply to the entire device (based on a generated ID stored in `localStorage`).
+> Banned or muted users cannot login with any account on that device.
 ### Admin+ Commands
-- `/grant <user> <rank>` - Grant rank to user
+- `/grant <user> <rank>` - Grant rank to user (admins can assign mod/vip/member; owner can also grant admin)
 - `/delete_room <name>` - Delete a room
-- `/effect <name>` - Trigger room effect
+- `/effect <name>` - Trigger room effect (now available to VIP+ users)
 
 ## 📊 Database Schema
 
