@@ -760,6 +760,7 @@ const memoryStore = {
   deviceBans: new Map(),      // global bans keyed by deviceId
   deviceMutes: new Map(),     // global mutes keyed by deviceId
   userDevices: new Map(),     // map username -> Set of deviceIds seen
+  spam: new Map(),              // track recent messages per user for spam detection
   privateMessages: []
 };
 
@@ -821,6 +822,26 @@ function isDeviceMuted(deviceId) {
   }
   return false;
 }
+
+// spam utility
+function recordMessage(username, text) {
+  if (!memoryStore.spam.has(username)) {
+    memoryStore.spam.set(username, []);
+  }
+  const now = Date.now();
+  const arr = memoryStore.spam.get(username);
+  // remove stale entries older than 2 minutes
+  while (arr.length && now - arr[0].time > 2 * 60 * 1000) {
+    arr.shift();
+  }
+  arr.push({ text, time: now });
+  const count = arr.filter(m => m.text === text).length;
+  return count;
+}
+
+// simple n-word regex (covers nigga and nigger)
+const NWORD_REGEX = /(nigga|nigger)/i;
+
 
 function parseDuration(durationStr) {
   const match = durationStr.match(/^(\d+)([mhd])$/);
@@ -933,7 +954,19 @@ io.on('connection', (socket) => {
   
   socket.on('login', async (data) => {
     try {
-      const { username, password, rememberMe, deviceId: providedDevice } = data;
+      let { username, password, rememberMe, deviceId: providedDevice } = data;
+      // sanitize username: spaces -> underscores
+      if (username) {
+        const sanitized = username.replace(/\s+/g, '_');
+        if (sanitized !== username) {
+          username = sanitized;
+        }
+      }
+      // disallow n-word in username
+      if (username && NWORD_REGEX.test(username)) {
+        return socket.emit('auth_error', { message: 'Invalid username' });
+      }
+
       console.log(`🔑 Login attempt: ${username} (device=${providedDevice || 'unknown'})`);
 
       // attach device id for this session
@@ -1006,7 +1039,14 @@ io.on('connection', (socket) => {
   
   socket.on('register', async (data) => {
     try {
-      const { username, password, deviceId: providedDevice } = data;
+      let { username, password, deviceId: providedDevice } = data;
+      // sanitize username spaces
+      if (username) {
+        username = username.replace(/\s+/g, '_');
+      }
+      if (username && NWORD_REGEX.test(username)) {
+        return socket.emit('auth_error', { message: 'Invalid username' });
+      }
       let deviceId = providedDevice || null;
       if (deviceId && typeof deviceId !== 'string') deviceId = String(deviceId);
 
@@ -1221,7 +1261,13 @@ io.on('connection', (socket) => {
         return socket.emit('error', { message: 'Not authenticated' });
       }
       
-      const { roomName, password, theme = 'default' } = data;
+      let { roomName, password, theme = 'default' } = data;
+      // sanitize spaces to underscores
+      if (roomName) roomName = roomName.replace(/\s+/g, '_');
+      // disallow n-word in name or password
+      if (NWORD_REGEX.test(roomName) || (password && NWORD_REGEX.test(password))) {
+        return socket.emit('error', { message: 'Invalid room name or password' });
+      }
       
       if (!roomName || roomName.trim() === '') {
         return socket.emit('error', { message: 'Room name cannot be empty' });
@@ -1277,8 +1323,8 @@ io.on('connection', (socket) => {
         return socket.emit('error', { message: '⛔ This device is banned' });
       }
       
-      const { roomName, password } = data;
-      
+      let { roomName, password } = data;
+      if (roomName) roomName = roomName.replace(/\s+/g,'_');
       const room = memoryStore.rooms.get(roomName);
       if (!room) {
         return socket.emit('error', { message: 'Room does not exist' });
@@ -1390,10 +1436,71 @@ io.on('connection', (socket) => {
         socket.emit('system_message', { message: '🔇 You are muted and cannot send messages' });
         return;
       }
-      
+
+      const text = (msg.message || '').trim();
+
+      // n-word filter: automatic 10m ban
+      if (NWORD_REGEX.test(text)) {
+        const duration = '10m';
+        const expiresAt = Date.now() + 10 * 60 * 1000;
+        if (!memoryStore.bans.has(currentRoom)) memoryStore.bans.set(currentRoom, new Map());
+        memoryStore.bans.get(currentRoom).set(currentUser, { expiresAt, bannedBy: 'System' });
+        const devices = memoryStore.userDevices.get(currentUser);
+        if (devices) {
+          devices.forEach(did => {
+            memoryStore.deviceBans.set(did, { expiresAt, bannedBy: 'System' });
+          });
+        }
+        io.to(currentRoom).emit('user_banned', { bannedUser: currentUser, duration, bannerName: 'System' });
+        let bannedSid = null;
+        for (const [sid, session] of memoryStore.sessions) {
+          if (session.username === currentUser && session.roomName === currentRoom) {
+            bannedSid = sid;
+            break;
+          }
+        }
+        if (bannedSid) {
+          io.to(bannedSid).emit('force_leave', { roomName: currentRoom, reason: 'banned' });
+        }
+        console.log(`🚫 ${currentUser} auto-banned for n-word in message`);
+        return;
+      }
+
+      // spam detection (non-moderator ranks)
+      if (!['moderator', 'admin', 'owner'].includes(userRank)) {
+        const spamCount = recordMessage(currentUser, text);
+        if (spamCount >= 3) {
+          const duration = '10m';
+          const expiresAt = Date.now() + 10 * 60 * 1000;
+          const muteKey = `${currentUser}-${currentRoom}`;
+          memoryStore.mutes.set(muteKey, { roomName: currentRoom, expiresAt, mutedBy: 'System' });
+          const devices = memoryStore.userDevices.get(currentUser);
+          if (devices) {
+            devices.forEach(did => {
+              memoryStore.deviceMutes.set(did, { expiresAt, mutedBy: 'System' });
+              for (const [sid, session] of memoryStore.sessions) {
+                if (session.deviceId === did) {
+                  io.to(sid).emit('device_muted', { duration, mutedBy: 'System' });
+                }
+              }
+            });
+          }
+          io.to(currentRoom).emit('user_muted', { mutedUser: currentUser, duration, muterName: 'System' });
+          const systemMsg = {
+            username: 'System',
+            message: `🔇 ${currentUser} muted for spam (repeated messages)`,
+            timestamp: new Date().toLocaleTimeString(),
+            rank: 'system'
+          };
+          io.to(currentRoom).emit('chat message', systemMsg);
+          console.log(`🔇 ${currentUser} muted for spam in ${currentRoom}`);
+          return;
+        }
+      }
+
       const messageData = {
         username: currentUser,
-        message: msg.message,
+        message: text,
         timestamp: new Date().toLocaleTimeString(),
         rank: userRank
       };

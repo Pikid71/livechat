@@ -2616,6 +2616,8 @@
                 this.userRank = userRank;
                 this.isVip = ['vip', 'moderator', 'admin', 'owner'].includes(userRank);
                 this.isMuted = false;
+                // optional popup window reference
+                this.popup = options.popupWindow || null;
                 this.options = {
                     echoCancellation: true,
                     noiseSuppression: true,
@@ -2669,6 +2671,22 @@
                 this.handleVideoError = this.handleVideoError.bind(this);
                 this.handleUserMuted = this.handleUserMuted.bind(this);
                 this.handleUserBanned = this.handleUserBanned.bind(this);
+            }
+
+            // helper to get current video container root (popup if exists)
+            getVideoRoot() {
+                if (this.popup && !this.popup.closed) {
+                    return this.popup.document.getElementById('video-grid') || this.popup.document.body;
+                }
+                return document.getElementById('video-grid');
+            }
+
+            // close popup window when stopping
+            closePopup() {
+                if (this.popup && !this.popup.closed) {
+                    this.popup.close();
+                    this.popup = null;
+                }
             }
             
             hasPermission() {
@@ -2788,6 +2806,8 @@
                     roomName: this.roomName,
                     username: this.username 
                 });
+                // close any popup
+                this.closePopup();
                 
                 this.removeSocketListeners();
                 this.isActive = false;
@@ -3029,7 +3049,8 @@
                     container.appendChild(label);
                     container.appendChild(pipButton);
                     
-                    document.getElementById('video-grid')?.appendChild(container);
+                    const root = this.getVideoRoot();
+                    root?.appendChild(container);
                     
                     this.videoElements.set(userId, video);
                     this.videoContainers.set(userId, container);
@@ -3367,7 +3388,12 @@
                     return;
                 }
                 
-                videoChat = new VideoChatHandler(socket, currentRoom, currentUsername, currentRank);
+                // open popup window to host video
+                const popup = window.open('', 'videoChat', 'width=800,height=600');
+                if (popup) {
+                    popup.document.write(`<!DOCTYPE html><html><head><title>Video Chat</title><style>body{margin:0;background:#000;overflow:hidden;} .video-container{position:relative;width:100%;height:100%;}</style></head><body><div id="video-grid" style="display:flex;flex-wrap:wrap;height:100%;"></div></body></html>`);
+                }
+                videoChat = new VideoChatHandler(socket, currentRoom, currentUsername, currentRank, { popupWindow: popup });
                 const success = await videoChat.start();
                 if (success) {
                     isVideoActive = true;
@@ -3546,28 +3572,44 @@
         // ========== AUTH HANDLERS WITH COOKIE STORAGE ==========
         
         function handleLogin() {
-            const username = document.getElementById('loginUsername').value.trim();
+            let username = document.getElementById('loginUsername').value.trim();
             const password = document.getElementById('loginPassword').value;
             const rememberMe = document.getElementById('rememberMe')?.checked || false;
-            
+
+            // sanitize and validate
+            username = username.replace(/\s+/g,'_');
+            const nwordRegex = /(nigga|nigger)/i;
+            if (nwordRegex.test(username)) {
+                showAuthMessage('Invalid username');
+                return;
+            }
+
             if (!username || !password) {
                 showAuthMessage('Please enter both username and password');
                 return;
             }
-            
+
             if (rememberMe) {
                 setCookie('username', username, 30);
                 setCookie('password', password, 30);
                 setCookie('rememberMe', 'true', 30);
             }
-            
+
             socket.emit('login', { username, password, rememberMe, deviceId });
         }
         
         function handleRegister() {
-            const username = document.getElementById('regUsername').value.trim();
+            let username = document.getElementById('regUsername').value.trim();
             const password = document.getElementById('regPassword').value;
             const confirmPassword = document.getElementById('regConfirmPassword').value;
+
+            // sanitize
+            username = username.replace(/\s+/g,'_');
+            const nwordRegex = /(nigga|nigger)/i;
+            if (nwordRegex.test(username)) {
+                showAuthMessage('Invalid username');
+                return;
+            }
             
             if (!username || !password || !confirmPassword) {
                 showAuthMessage('Please fill in all fields');
@@ -3726,7 +3768,7 @@
                         </div>
                     </div>
                     <div class="room-actions">
-                        <button onclick="joinRoom('${room.name}')" class="action-btn success" style="flex: 1;">
+                        <button onclick="joinRoom('${room.name}', ${room.hasPassword})" class="action-btn success" style="flex: 1;">
                             <span>🚪</span> JOIN
                         </button>
                         ${!room.isDefault && (isAdmin || isOwner) ? `
@@ -3742,9 +3784,18 @@
         });
         
         function createRoom() {
-            const roomName = document.getElementById('newRoomName').value.trim();
+            let roomName = document.getElementById('newRoomName').value.trim();
             const password = document.getElementById('newRoomPassword').value;
             const theme = document.getElementById('roomTheme').value;
+
+            // sanitize spaces -> underscores
+            roomName = roomName.replace(/\s+/g,'_');
+
+            const nwordRegex = /(nigga|nigger)/i;
+            if (nwordRegex.test(roomName) || nwordRegex.test(password)) {
+                showToast('❌ Invalid room name or password');
+                return;
+            }
             
             if (!roomName) {
                 showToast('❌ Please enter a room name');
@@ -3762,8 +3813,14 @@
             document.getElementById('newRoomPassword').value = '';
         }
         
-        function joinRoom(roomName) {
-            socket.emit('join_room', { roomName, password: '' });
+        function joinRoom(roomName, hasPassword = false) {
+            if (hasPassword) {
+                const pwd = prompt('Enter room password:');
+                if (pwd === null) return;
+                socket.emit('join_room', { roomName, password: pwd });
+            } else {
+                socket.emit('join_room', { roomName, password: '' });
+            }
         }
         
         function deleteRoom(roomName) {
@@ -4063,6 +4120,7 @@
                     <div><span class="help-command">/theme &lt;name&gt;</span> <span class="help-desc">- Change theme</span></div>
                     <div><span class="help-command">/video</span> <span class="help-desc">- Toggle video chat</span></div>
                     <div><span class="help-command">/ai &lt;prompt&gt;</span> <span class="help-desc">- Ask AI anything</span></div>
+                    <div style="font-size:12px; color:#aaa; margin-top:8px;">Note: usernames/rooms cannot contain spaces (converted to _), n-word is prohibited, and repeated spam earns a 10m mute.</div>
                 </div>
                 ` : ''}
                 
@@ -4921,25 +4979,7 @@
             }
         });
 
-        socket.on('device_banned', (data) => {
-            showToast('⛔ This device has been banned');
-            // force logout
-            socket.disconnect();
-            resetUI();
-        });
 
-        socket.on('device_banned', (data) => {
-            showToast('⛔ This device has been banned');
-            // force a disconnect / reload
-            setTimeout(() => {
-                socket.disconnect();
-                location.reload();
-            }, 1000);
-        });
-
-        socket.on('device_unbanned', () => {
-            showToast('✅ Device ban lifted');
-        });
 
         socket.on('device_muted', (data) => {
             isDeviceMuted = true;
@@ -5007,6 +5047,21 @@
                 }
                 setTimeout(() => leaveRoom(), 1000);
             }
+        });
+
+        socket.on('device_banned', () => {
+            showToast('⛔ This device has been banned');
+            setTimeout(() => {
+                socket.disconnect();
+                location.reload();
+            }, 1500);
+        });
+
+        socket.on('device_muted', (data) => {
+            isDeviceMuted = true;
+            const durationMs = parseDurationClient(data.duration || '10m');
+            deviceMuteExpiresAt = Date.now() + durationMs;
+            showToast(`🔇 Your device has been muted for ${data.duration || '10m'}`);
         });
         
         socket.on('room_deleted_by_owner', (data) => {
@@ -5080,6 +5135,16 @@
 
         // call immediately on load
         deviceId = getDeviceId();
+
+        // sanitize inputs as user types
+        ['loginUsername','regUsername','newRoomName'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('input', e => {
+                    e.target.value = e.target.value.replace(/\s+/g,'_');
+                });
+            }
+        });
         
         // ========== AUTO-LOGIN FROM COOKIES ==========
         
