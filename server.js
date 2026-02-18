@@ -125,6 +125,14 @@ async function connectToMongoDB() {
     
     initializeModels();
     setTimeout(() => initializeDefaultData(), 2000);
+    // Load recent data into memory store after defaults are ensured
+    setTimeout(() => {
+      try {
+        loadInitialData();
+      } catch (err) {
+        console.error('Error scheduling loadInitialData:', err.message);
+      }
+    }, 4000);
     
     return true;
   } catch (err) {
@@ -279,6 +287,81 @@ async function initializeDefaultData() {
   }
 }
 
+// Load users, rooms, recent messages and bans from MongoDB into in-memory store
+async function loadInitialData() {
+  if (!isMongoConnected) return;
+  try {
+    console.log('🔁 Loading initial data from MongoDB into memory store...');
+
+    const users = await User.find({}).lean();
+    users.forEach(u => {
+      memoryStore.users.set(u.username, {
+        username: u.username,
+        password: u.password,
+        rank: u.rank || 'member',
+        theme: u.theme || 'default'
+      });
+    });
+
+    const rooms = await Room.find({}).lean();
+    rooms.forEach(r => {
+      if (!memoryStore.rooms.has(r.name)) {
+        memoryStore.rooms.set(r.name, {
+          name: r.name,
+          password: r.password || '',
+          isDefault: !!r.isDefault,
+          members: new Map(),
+          messages: [],
+          theme: r.theme || 'default'
+        });
+      } else {
+        const existing = memoryStore.rooms.get(r.name);
+        existing.theme = r.theme || existing.theme;
+      }
+    });
+
+    // Load recent messages per room (limit 200)
+    for (const [roomName, roomObj] of memoryStore.rooms.entries()) {
+      try {
+        const msgs = await Message.find({ roomName }).sort({ timestamp: -1 }).limit(200).lean();
+        roomObj.messages = msgs.reverse().map(m => ({
+          username: m.username,
+          message: m.message,
+          timestamp: m.timestamp ? m.timestamp.toLocaleTimeString() : new Date().toLocaleTimeString(),
+          rank: m.senderRank || 'member',
+          fileUrl: m.fileUrl || null,
+          fileName: m.fileName || null,
+          fileType: m.fileType || null,
+          fileSize: m.fileSize || null
+        }));
+      } catch (err) {
+        console.error(`Failed to load messages for room ${roomName}:`, err.message);
+      }
+    }
+
+    // Load active bans
+    const bans = await Ban.find({ isActive: true }).lean();
+    bans.forEach(b => {
+      const roomBans = memoryStore.bans.get(b.roomName) || [];
+      roomBans.push({ username: b.username, bannedBy: b.bannedBy, expiresAt: b.expiresAt });
+      memoryStore.bans.set(b.roomName, roomBans);
+    });
+
+    // Load recent private messages
+    const pms = await PrivateMessage.find({}).sort({ timestamp: -1 }).limit(200).lean();
+    memoryStore.privateMessages = pms.reverse().map(pm => ({
+      from: pm.from,
+      to: pm.to,
+      message: pm.message,
+      timestamp: pm.timestamp
+    }));
+
+    console.log('✅ Initial data loaded into memory store');
+  } catch (err) {
+    console.error('❌ loadInitialData error:', err.message);
+  }
+}
+
 connectToMongoDB();
 
 // ============================================
@@ -287,6 +370,161 @@ connectToMongoDB();
 app.use(express.static(path.join(__dirname)));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// ============================================
+// 🖼️ IMAGE GENERATION (Stable Horde fallback)
+// ============================================
+const imageJobs = new Map(); // requestId -> { status, url, prompt, createdAt }
+
+app.post('/api/generate-image', async (req, res) => {
+  try {
+    const { prompt, size = '512', model = '' } = req.body || {};
+    if (!prompt) return res.status(400).json({ error: 'Missing prompt' });
+
+    const key = process.env.STABLE_HORDE_API_KEY;
+    if (!key) return res.status(500).json({ error: 'Stable Horde API key not configured (STABLE_HORDE_API_KEY)' });
+
+    // Build request payload for Stable Horde
+    const width = parseInt(size, 10) || 512;
+    const height = width;
+    const steps = 20;
+
+    const body = {
+      prompt: prompt,
+      params: {
+        steps: steps,
+        width: width,
+        height: height,
+        cfg_scale: 7
+      }
+    };
+
+    const createResp = await fetch('https://stablehorde.net/api/v2/generate/text2img', {
+      method: 'POST',
+      headers: {
+        'apikey': key,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+
+    const createJson = await createResp.json().catch(() => null);
+    if (!createResp.ok || !createJson) {
+      const details = createJson || { status: createResp.status, statusText: createResp.statusText };
+      return res.status(502).json({ error: 'Image provider error', details });
+    }
+
+    const requestId = createJson?.id || createJson?.generations?.[0]?.id || createJson?.request_id || createJson?.task_id;
+    if (!requestId) {
+      // If provider returned an image immediately
+      const maybeImage = extractImageFromProvider(createJson);
+      if (maybeImage) {
+        const fileName = `gen-${Date.now()}.png`;
+        const filePath = path.join(uploadDir, fileName);
+        await fs.writeFile(filePath, Buffer.from(maybeImage, 'base64'));
+        const url = `/uploads/${fileName}`;
+        return res.json({ imageUrl: url });
+      }
+      return res.status(502).json({ error: 'Image provider did not return request id' , details: createJson});
+    }
+
+    // store job as pending and start background poller
+    imageJobs.set(requestId, { status: 'pending', url: null, prompt, createdAt: Date.now() });
+    pollStableHordeResult(requestId, key);
+
+    return res.json({ requestId, status: 'pending' });
+  } catch (err) {
+    console.error('generate-image error:', err);
+    return res.status(500).json({ error: 'Internal server error', message: err.message });
+  }
+});
+
+app.get('/api/image-result/:id', async (req, res) => {
+  const id = req.params.id;
+  if (!imageJobs.has(id)) return res.status(404).json({ error: 'Unknown request id' });
+  return res.json(imageJobs.get(id));
+});
+
+function extractImageFromProvider(json) {
+  try {
+    if (!json) return null;
+    // common patterns
+    if (json.images && Array.isArray(json.images) && json.images[0]) return json.images[0];
+    if (json.data && Array.isArray(json.data) && json.data[0]?.b64_json) return json.data[0].b64_json;
+    if (json.result && json.result[0]?.b64) return json.result[0].b64;
+    if (json.image && typeof json.image === 'string') return json.image;
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function pollStableHordeResult(requestId, key) {
+  const endpoints = [
+    `https://stablehorde.net/api/v2/generate/status/${requestId}`,
+    `https://stablehorde.net/api/v2/generate/${requestId}/status`,
+    `https://stablehorde.net/api/v2/generate/${requestId}`,
+    `https://stablehorde.net/api/v2/generate/${requestId}/result`,
+    `https://stablehorde.net/api/v2/generate/status/${requestId}/result`
+  ];
+
+  const maxAttempts = 30;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    for (const ep of endpoints) {
+      try {
+        const r = await fetch(ep, { headers: { 'apikey': key } });
+        const j = await r.json().catch(() => null);
+        if (!j) continue;
+
+        // check for ready images
+        const imgB64 = extractImageFromProvider(j) || (Array.isArray(j.generations) && j.generations[0]?.img) || (j.generations && j.generations[0]?.b64);
+        if (imgB64) {
+          const fileName = `gen-${Date.now()}.png`;
+          const filePath = path.join(uploadDir, fileName);
+          await fs.writeFile(filePath, Buffer.from(imgB64, 'base64'));
+          const url = `/uploads/${fileName}`;
+          imageJobs.set(requestId, { status: 'done', url, prompt: imageJobs.get(requestId)?.prompt, createdAt: Date.now() });
+          return;
+        }
+
+        // some responses include 'done' flag or 'status'
+        if (j.status && (j.status === 'done' || j.status === 'completed')) {
+          // try to find images field
+          const img = extractImageFromProvider(j);
+          if (img) {
+            const fileName = `gen-${Date.now()}.png`;
+            const filePath = path.join(uploadDir, fileName);
+            await fs.writeFile(filePath, Buffer.from(img, 'base64'));
+            const url = `/uploads/${fileName}`;
+            imageJobs.set(requestId, { status: 'done', url, prompt: imageJobs.get(requestId)?.prompt, createdAt: Date.now() });
+            return;
+          }
+        }
+      } catch (err) {
+        // ignore individual endpoint errors and continue
+      }
+    }
+
+    // wait before next attempt
+    await new Promise(r => setTimeout(r, 2000));
+  }
+
+  // mark as failed after attempts
+  imageJobs.set(requestId, { status: 'failed', url: null, prompt: imageJobs.get(requestId)?.prompt, createdAt: Date.now() });
+}
+
+
+// ============================================
+// 🏥 HEALTH CHECK ENDPOINT
+// ============================================
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    mongodb: isMongoConnected ? 'connected' : 'disconnected',
+    uptime: process.uptime()
+  });
+});
 
 // ============================================
 // 📁 FILE UPLOAD ENDPOINT
@@ -418,6 +656,95 @@ app.get('/stats', async (req, res) => {
 
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// ========== IMAGE GENERATION PROXY (server-side) ==========
+app.post('/api/generate-image', express.json(), async (req, res) => {
+  if (!isMongoConnected && !process.env.DEAPI_API_KEY) {
+    // still allow if env key present
+  }
+
+  try {
+    const { prompt, size = '512', model } = req.body;
+    if (!prompt || prompt.trim() === '') return res.status(400).json({ error: 'Missing prompt' });
+
+    const DEAPI_API_KEY = process.env.DEAPI_API_KEY || process.env.DEAPI_API_KEY || '';
+    if (!DEAPI_API_KEY) return res.status(500).json({ error: 'Image API key not configured' });
+
+    const width = parseInt(size) || 512;
+    const height = width;
+
+    const bodyObj = {
+      prompt,
+      seed: Math.floor(Math.random() * 1000000),
+      width,
+      height,
+      steps: 20
+    };
+    if (model) bodyObj.model = model;
+
+    // Try requested model first; if it fails due to non-existent model, try fallbacks
+    const candidateModels = [];
+    if (model) candidateModels.push(model);
+    // Add known DeAPI client model slugs as fallbacks (from provider listing)
+    candidateModels.push('Flux1schnell', 'prodia/sdxl', 'sdxl', 'stabilityai/sdxl', 'stabilityai/stable-diffusion-3-5-large', 'black-forest-labs/flux-schnell');
+
+    let data = null;
+    let lastErr = null;
+
+    for (const candidate of candidateModels) {
+      try {
+        const tryBody = { ...bodyObj, model: candidate };
+        const resp = await fetch('https://api.deapi.ai/api/v1/client/txt2img', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${DEAPI_API_KEY}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify(tryBody)
+        });
+
+        if (!resp.ok) {
+          const errData = await resp.json().catch(() => ({}));
+          lastErr = errData;
+
+          // If the model specifically doesn't exist, try next candidate
+          if (errData && errData.errors && errData.errors.model && Array.isArray(errData.errors.model) && errData.errors.model.some(e => /does not exist|required/i.test(e))) {
+            continue;
+          }
+
+          // Otherwise stop and return provider error
+          return res.status(502).json({ error: 'Image provider error', details: errData });
+        }
+
+        data = await resp.json();
+        // success
+        break;
+      } catch (err) {
+        lastErr = { message: err.message };
+      }
+    }
+
+    if (!data) {
+      return res.status(502).json({ error: 'Image provider error', details: lastErr || {} });
+    }
+
+    // try to extract image url/base64
+    let imageUrl = null;
+    if (data.data && data.data[0] && data.data[0].url) imageUrl = data.data[0].url;
+    else if (data.images && data.images[0] && data.images[0].url) imageUrl = data.images[0].url;
+    else if (data.output && data.output[0]) imageUrl = data.output[0];
+    else if (data.url) imageUrl = data.url;
+    else if (data.image) imageUrl = data.image;
+
+    if (!imageUrl) return res.status(500).json({ error: 'Could not extract image from provider response', details: data });
+
+    return res.json({ imageUrl });
+  } catch (err) {
+    console.error('generate-image error:', err);
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 // ============================================
@@ -565,6 +892,14 @@ const PERMISSIONS = {
 // ============================================
 
 io.on('connection', (socket) => {
+    // Simple ping handler for latency checks from clients (acknowledgement)
+    socket.on('ping', (cb) => {
+      try {
+        if (typeof cb === 'function') cb();
+      } catch (err) {
+        // ignore
+      }
+    });
   console.log(`👤 New connection: ${socket.id} (Total: ${io.engine.clientsCount})`);
   
   let currentUser = null;

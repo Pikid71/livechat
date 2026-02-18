@@ -29,6 +29,10 @@ services:
         value: A@sh1shlivechat
         sync: false
       
+      - key: OWNER_USERNAME
+        value: Pi_Kid71
+        sync: false
+      
       - key: PORT
         value: 10000
       
@@ -47,12 +51,17 @@ services:
       - key: DEAPI_API_KEY
         value: 3751|uCGk2V1KNsYc1pwOmWAhz2y4IJIt65BsJuXLUYQmfee6809f
         sync: false
+      
+      # Stable Horde Image Generation API Key
+      - key: STABLE_HORDE_API_KEY
+        value: 0da65d6c-00fb-4731-8424-9574cc5bf318
+        sync: false
     
-    # Disk storage for uploaded files
+    # Disk storage for uploaded files and generated images
     disk:
       name: uploads
-      mountPath: /opt/render/project/src/uploads
-      sizeGB: 1
+      mountPath: /opt/render/project/uploads
+      sizeGB: 5
     
     autoDeploy: true
     

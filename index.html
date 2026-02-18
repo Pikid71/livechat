@@ -761,7 +761,7 @@
         .action-btn {
             background: rgba(102, 126, 234, 0.2);
             border: 2px solid #667eea;
-            padding: 12px 18px;
+            padding: 8px 12px;
             color: white;
             border-radius: 30px;
             cursor: pointer;
@@ -770,7 +770,7 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            font-size: 14px;
+            font-size: 13px;
             white-space: nowrap;
         }
 
@@ -1982,7 +1982,7 @@
         
         // ========== FIXED IMAGE GENERATION WITH DEAPI.AI CORRECT PARAMETERS ==========
 
-        async function generateImage(prompt, size = '512', model = 'prodia/sdxl') {
+        async function generateImage(prompt, size = '512', model = '') {
             if (!prompt || prompt.trim() === '') {
                 showToast('❌ Please enter a prompt');
                 return;
@@ -2014,91 +2014,60 @@
             msgContainer.appendChild(loadingWrapper);
             msgContainer.scrollTop = msgContainer.scrollHeight;
             
-            // DeAPI.ai API Key
-            const DEAPI_API_KEY = '3751|uCGk2V1KNsYc1pwOmWAhz2y4IJIt65BsJuXLUYQmfee6809f';
-            
             try {
-                console.log('🎨 Sending request to DeAPI.ai...');
-                
-                // Generate a random seed
-                const randomSeed = Math.floor(Math.random() * 1000000);
-                
-                // CORRECT PARAMETERS based on API error message
-                const response = await fetch('https://api.deapi.ai/api/v1/client/txt2img', {
+                // Forward request to server-side image-generation proxy
+                const resp = await fetch('/api/generate-image', {
                     method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${DEAPI_API_KEY}`,
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        prompt: prompt,
-                        model: model,           // Required field
-                        seed: randomSeed,        // Required field
-                        width: parseInt(size),
-                        height: parseInt(size),
-                        // Optional parameters you might want to add
-                        // guidance_scale: 7.5,
-                        // num_inference_steps: 30,
-                        // negative_prompt: ""
-                    })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt, size, model })
                 });
-                
-                if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({}));
-                    console.error('DeAPI.ai error response:', errorData);
-                    
-                    let errorMessage = errorData.message || errorData.error || `HTTP ${response.status}`;
-                    
-                    // Handle specific validation errors
-                    if (errorData.errors) {
-                        const errorFields = Object.keys(errorData.errors).map(field => 
-                            `${field}: ${errorData.errors[field].join(', ')}`
-                        ).join('; ');
-                        errorMessage = `Validation errors: ${errorFields}`;
+
+                if (!resp.ok) {
+                    const errData = await resp.json().catch(() => ({}));
+                    throw new Error(errData.error || 'Image service failed');
+                }
+
+                const result = await resp.json();
+
+                // If server returned immediate image
+                if (result.imageUrl) {
+                    loadingWrapper.remove();
+                    addImageMessage(currentUsername, prompt, result.imageUrl, `${size}x${size}`, model || 'stable-horde');
+                    return;
+                }
+
+                // Otherwise server provided a requestId to poll
+                const requestId = result.requestId || result.id;
+                if (!requestId) throw new Error('No image returned and no request id');
+
+                // Poll for result
+                const pollMax = 30;
+                let attempts = 0;
+                while (attempts < pollMax) {
+                    await new Promise(r => setTimeout(r, 2000));
+                    attempts++;
+                    const pollResp = await fetch(`/api/image-result/${requestId}`);
+                    if (!pollResp.ok) continue;
+                    const pollData = await pollResp.json().catch(() => null);
+                    if (!pollData) continue;
+                    if (pollData.status === 'done' && pollData.url) {
+                        loadingWrapper.remove();
+                        addImageMessage(currentUsername, prompt, pollData.url, `${size}x${size}`, model || 'stable-horde');
+                        return;
                     }
-                    
-                    throw new Error(errorMessage);
+                    if (pollData.status === 'failed') {
+                        loadingWrapper.remove();
+                        throw new Error('Image generation failed');
+                    }
                 }
-                
-                const data = await response.json();
-                console.log('✅ DeAPI.ai response:', data);
-                
-                // Try to extract image URL from various possible response formats
-                let imageUrl = null;
-                
-                // Common response formats to check
-                if (data.data && data.data[0] && data.data[0].url) {
-                    imageUrl = data.data[0].url;
-                } else if (data.images && data.images[0] && data.images[0].url) {
-                    imageUrl = data.images[0].url;
-                } else if (data.output && data.output[0]) {
-                    imageUrl = data.output[0];
-                } else if (data.url) {
-                    imageUrl = data.url;
-                } else if (data.image_url) {
-                    imageUrl = data.image_url;
-                } else if (data.result && data.result[0]) {
-                    imageUrl = data.result[0];
-                } else if (typeof data === 'string') {
-                    imageUrl = data;
-                } else if (data.image) {
-                    imageUrl = data.image;
-                }
-                
-                if (!imageUrl) {
-                    console.error('Could not extract image URL from response:', data);
-                    throw new Error('Could not get image URL from response');
-                }
-                
+
                 loadingWrapper.remove();
-                addImageMessage(currentUsername, prompt, imageUrl, `${size}x${size}`, model);
-                
+                throw new Error('Image generation timed out');
+
                 socket.emit('chat message', {
                     username: 'System',
                     message: `🎨 Image by ${currentUsername}: ${prompt}`
                 });
-                
             } catch (error) {
                 console.error('❌ Image generation error:', error);
                 loadingWrapper.remove();
@@ -4616,8 +4585,8 @@
                 }
             }
             
-            // Default model
-            const model = 'Pollinations.ai';
+            // Default model: empty to let DeAPI choose provider default
+            const model = '';
             
             await generateImage(prompt, size, model);
         }
@@ -4654,7 +4623,7 @@
                 case '/video': toggleVideoChat(); break;
                 case '/ai': handleAICommand(args); break;
                 case '/image': handleImageCommand(args); break;
-                default: addSystemMessage(`❌ Unknown command: ${command}. Type /help for commands.`);
+                default: addSystemMessage(`❌ Barah!Unknown command: ${command}. Type /help for commands.`);
             }
         }
         
