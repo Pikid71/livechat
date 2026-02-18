@@ -5,7 +5,8 @@ yarn-debug.log*
 yarn-error.log*
 package-lock.json
 yarn.lock
-
+.env
+.env.example
 # Environment
 .env
 .env.*
