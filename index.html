@@ -1790,13 +1790,38 @@
             return levels[rank] || 5;
         }
         
+        // ========== URL LINK PARSING ==========
+        function parseLinksInText(text) {
+            // Escape HTML special chars first, but preserve the text for URL detection
+            const div = document.createElement('div');
+            div.textContent = text;
+            let escaped = div.innerHTML;
+            
+            // URL regex pattern - matches http, https, www, and common protocols
+            const urlRegex = /(https?:\/\/[^\s<>]+|www\.[^\s<>]+|ftp:\/\/[^\s<>]+)/gi;
+            
+            // Replace URLs with clickable links
+            escaped = escaped.replace(urlRegex, (url) => {
+                // Ensure URL has protocol
+                let fullUrl = url;
+                if (url.startsWith('www.')) {
+                    fullUrl = 'https://' + url;
+                }
+                // Truncate long URLs for display
+                const displayUrl = url.length > 40 ? url.substring(0, 37) + '...' : url;
+                return `<a href="${fullUrl}" target="_blank" rel="noopener noreferrer" style="color: #667eea; text-decoration: underline; cursor: pointer;">${displayUrl}</a>`;
+            });
+            
+            return escaped;
+        }
+        
         function addSystemMessage(message) {
             if (!msgContainer) return;
             const wrapper = document.createElement('div');
             wrapper.className = 'msg-wrapper';
             const item = document.createElement('div');
             item.className = 'msg system';
-            item.textContent = message;
+            item.innerHTML = parseLinksInText(message);
             wrapper.appendChild(item);
             msgContainer.appendChild(wrapper);
             msgContainer.scrollTop = msgContainer.scrollHeight;
@@ -1819,7 +1844,7 @@
             
             const item = document.createElement('div');
             item.className = 'msg ai';
-            item.textContent = response;
+            item.innerHTML = parseLinksInText(response);
             wrapper.appendChild(item);
             
             msgContainer.appendChild(wrapper);
@@ -2076,67 +2101,6 @@
             }
         }
 
-        // Update the command handler to include model selection
-        async function handleImageCommand(args) {
-            if (!isVip) {
-                addSystemMessage('❌ Image generation requires VIP+ rank');
-                return;
-            }
-            
-            if (isUserMuted) {
-                addSystemMessage('❌ You are muted and cannot generate images');
-                return;
-            }
-            
-            if (args.length < 1) {
-                addSystemMessage('Usage: /image <prompt> [size] [model]');
-                addSystemMessage('Sizes: 256, 512, 1024 (default: 512)');
-                addSystemMessage('Models: prodia/sdxl, stabilityai/stable-diffusion-3-5-large, black-forest-labs/flux-schnell');
-                return;
-            }
-            
-            let prompt = args.join(' ');
-            let size = '512';
-            let model = 'prodia/sdxl'; // Default model
-            
-            // Parse arguments (last two could be size and model)
-            const argsArray = [...args];
-            const possibleSize = argsArray[argsArray.length - 1];
-            const possibleModel = argsArray[argsArray.length - 2];
-            
-            // Check if last argument is a size
-            if (possibleSize && possibleSize.match(/^\d+$/)) {
-                const sizeNum = parseInt(possibleSize);
-                if ([256, 512, 1024].includes(sizeNum)) {
-                    size = sizeNum.toString();
-                    prompt = argsArray.slice(0, -1).join(' ');
-                    
-                    // Check if the new last argument is a model
-                    const newLastArg = argsArray[argsArray.length - 2];
-                    if (newLastArg && (newLastArg.includes('/') || ['sdxl', 'sd3', 'flux'].some(m => newLastArg.includes(m)))) {
-                        model = newLastArg;
-                        prompt = argsArray.slice(0, -2).join(' ');
-                    }
-                }
-            } else if (possibleModel && (possibleModel.includes('/') || ['sdxl', 'sd3', 'flux'].some(m => possibleModel.includes(m)))) {
-                // If second last is a model and last might be size
-                model = possibleModel;
-                if (possibleSize && possibleSize.match(/^\d+$/)) {
-                    const sizeNum = parseInt(possibleSize);
-                    if ([256, 512, 1024].includes(sizeNum)) {
-                        size = sizeNum.toString();
-                        prompt = argsArray.slice(0, -2).join(' ');
-                    } else {
-                        prompt = argsArray.slice(0, -1).join(' ');
-                    }
-                } else {
-                    prompt = argsArray.slice(0, -1).join(' ');
-                }
-            }
-            
-            await generateImage(prompt, size, model);
-        }
-
         // Update the modal function to include model selection
         function generateImageFromModal() {
             const prompt = document.getElementById('imagePromptInput').value.trim();
@@ -2302,7 +2266,7 @@
         }
         
         function sendNotification(title, body, icon = '🕳️') {
-            if (!notificationPermission) return;
+            if (!notificationPermission || !notificationsEnabled) return;
             
             try {
                 const notification = new Notification(title, {
@@ -3904,7 +3868,7 @@
             item.className = 'msg';
             if (username === currentUsername) item.classList.add('mine');
             if (username === 'System') item.classList.add('system');
-            item.textContent = message;
+            item.innerHTML = parseLinksInText(message);
             wrapper.appendChild(item);
             
             msgContainer.appendChild(wrapper);
@@ -3933,7 +3897,7 @@
             
             const item = document.createElement('div');
             item.className = 'msg private';
-            item.textContent = message;
+            item.innerHTML = parseLinksInText(message);
             wrapper.appendChild(item);
             
             msgContainer.appendChild(wrapper);
@@ -4078,12 +4042,6 @@
                     <div><span class="help-command">/theme &lt;name&gt;</span> <span class="help-desc">- Change theme</span></div>
                     <div><span class="help-command">/video</span> <span class="help-desc">- Toggle video chat</span></div>
                     <div><span class="help-command">/ai &lt;prompt&gt;</span> <span class="help-desc">- Ask AI anything</span></div>
-                    <div><span class="help-command">/image &lt;prompt&gt;</span> <span class="help-desc">- Generate an image</span></div>
-                    <div><span class="help-command">/image &lt;prompt&gt; &lt;size&gt;</span> <span class="help-desc">- Generate with size (256,512,1024)</span></div>
-                    <div><span class="help-command">/image &lt;prompt&gt; &lt;size&gt; &lt;model&gt;</span> <span class="help-desc">- Generate with model</span></div>
-                    <div style="margin-top: 8px; font-size: 11px; color: #888;">
-                        Models: prodia/sdxl, stabilityai/stable-diffusion-3-5-large, black-forest-labs/flux-schnell
-                    </div>
                 </div>
                 ` : ''}
                 
@@ -4553,44 +4511,6 @@
             await askAI(prompt);
         }
         
-        // ========== FIXED IMAGE GENERATION COMMAND HANDLER ==========
-        
-        async function handleImageCommand(args) {
-            if (!isVip) {
-                addSystemMessage('❌ Image generation requires VIP+ rank');
-                return;
-            }
-            
-            if (isUserMuted) {
-                addSystemMessage('❌ You are muted and cannot generate images');
-                return;
-            }
-            
-            if (args.length < 1) {
-                addSystemMessage('Usage: /image <prompt> [size]');
-                addSystemMessage('Sizes: 256, 512, 1024 (default: 512)');
-                return;
-            }
-            
-            // Check if last argument is a size
-            let prompt = args.join(' ');
-            let size = '512';
-            
-            const lastArg = args[args.length - 1];
-            if (lastArg.match(/^\d+$/)) {
-                const sizeNum = parseInt(lastArg);
-                if ([256, 512, 1024].includes(sizeNum)) {
-                    size = sizeNum.toString();
-                    prompt = args.slice(0, -1).join(' ');
-                }
-            }
-            
-            // Default model: empty to let DeAPI choose provider default
-            const model = '';
-            
-            await generateImage(prompt, size, model);
-        }
-        
         // ========== COMMAND HANDLER ==========
         
         function handleCommand(commandText) {
@@ -4622,7 +4542,6 @@
                 case '/ping': handlePingCommand(); break;
                 case '/video': toggleVideoChat(); break;
                 case '/ai': handleAICommand(args); break;
-                case '/image': handleImageCommand(args); break;
                 default: addSystemMessage(`❌ Barah!Unknown command: ${command}. Type /help for commands.`);
             }
         }

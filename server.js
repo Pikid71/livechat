@@ -517,15 +517,6 @@ async function pollStableHordeResult(requestId, key) {
 // ============================================
 // 🏥 HEALTH CHECK ENDPOINT
 // ============================================
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    mongodb: isMongoConnected ? 'connected' : 'disconnected',
-    uptime: process.uptime()
-  });
-});
-
 // ============================================
 // 📁 FILE UPLOAD ENDPOINT
 // ============================================
@@ -2047,6 +2038,7 @@ io.on('connection', (socket) => {
         return socket.emit('error', { message: '❌ Incorrect password' });
       }
       
+      // Update in memory store
       if (memoryStore.users.has(targetUser)) {
         const user = memoryStore.users.get(targetUser);
         user.rank = newRank;
@@ -2058,6 +2050,21 @@ io.on('connection', (socket) => {
             break;
           }
         }
+      }
+      
+      // Update in MongoDB
+      if (isMongoConnected && User) {
+        (async () => {
+          try {
+            await User.findOneAndUpdate(
+              { username: targetUser },
+              { rank: newRank },
+              { new: true }
+            );
+          } catch (err) {
+            console.error('Failed to update user rank in DB:', err.message);
+          }
+        })();
       }
       
       socket.emit('command_success', { message: `✅ ${targetUser} is now ${newRank}` });
@@ -2137,29 +2144,76 @@ io.on('connection', (socket) => {
 });
 
 // ============================================
-// 💾 MESSAGE BACKUP TO MONGODB (EVERY 10 SECONDS)
+// 💾 MESSAGE BACKUP TO MONGODB (EVERY 5 SECONDS)
 // ============================================
 setInterval(async () => {
-  if (!isMongoConnected || !PrivateMessage) {
+  if (!isMongoConnected) {
     return;
   }
   
   try {
-    if (memoryStore.privateMessages.length > 0) {
+    // Backup room messages from all rooms
+    if (Message && memoryStore.rooms.size > 0) {
+      for (const [roomName, room] of memoryStore.rooms.entries()) {
+        if (room.messages && room.messages.length > 0) {
+          for (const msg of room.messages) {
+            try {
+              // Check if message already exists (avoid duplicates)
+              const existing = await Message.findOne({
+                roomName: roomName,
+                username: msg.username,
+                message: msg.message,
+                timestamp: msg.timestamp
+              }).lean();
+              
+              if (!existing) {
+                const message = new Message({
+                  roomName: roomName,
+                  username: msg.username,
+                  message: msg.message,
+                  timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+                  isSystem: msg.username === 'System',
+                  senderRank: msg.rank || 'member',
+                  fileUrl: msg.fileUrl || null,
+                  fileName: msg.fileName || null,
+                  fileType: msg.fileType || null,
+                  fileSize: msg.fileSize || null
+                });
+                await message.save();
+              }
+            } catch (err) {
+              // Ignore individual message backup errors
+            }
+          }
+        }
+      }
+    }
+    
+    // Backup private messages
+    if (PrivateMessage && memoryStore.privateMessages.length > 0) {
       const messagesToBackup = memoryStore.privateMessages.slice();
       
       for (const msg of messagesToBackup) {
         try {
-          const pm = new PrivateMessage({
+          const existing = await PrivateMessage.findOne({
             from: msg.from,
-            fromRank: msg.fromRank,
             to: msg.to,
-            toRank: msg.toRank,
             message: msg.message,
-            timestamp: new Date(),
-            visibleTo: [msg.from, msg.to]
-          });
-          await pm.save();
+            timestamp: msg.timestamp
+          }).lean();
+          
+          if (!existing) {
+            const pm = new PrivateMessage({
+              from: msg.from,
+              fromRank: msg.fromRank,
+              to: msg.to,
+              toRank: msg.toRank,
+              message: msg.message,
+              timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+              visibleTo: [msg.from, msg.to]
+            });
+            await pm.save();
+          }
         } catch (err) {
           // Ignore individual message backup errors
         }
@@ -2174,7 +2228,7 @@ setInterval(async () => {
   } catch (err) {
     console.error('❌ Message backup error:', err.message);
   }
-}, 10000);
+}, 5000);
 
 // ============================================
 // 🚀 START SERVER

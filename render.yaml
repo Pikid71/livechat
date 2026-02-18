@@ -1,4 +1,7 @@
 # Black Hole Chat V2 - Render Deployment Configuration
+# Features: Private messaging, Voice/Video Chat, File Sharing
+# Message Backup, Web Notifications, Image Generation (Stable Horde)
+# Rank System, File Upload, Admin/Moderator Commands
 
 services:
   # Main Web Service
