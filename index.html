@@ -4196,32 +4196,40 @@
         function sendMessage() {
             // re-query the input each time in case reference was lost/updated
             const msgInput = document.getElementById('messageInput');
+            if (!msgInput || !msgInput.value.trim()) {
+                return;
+            }
+
+            let messageText = msgInput.value;
+
+            // commands should be processed even if muted so users can still
+            // open help, check latency, etc. the earlier global mute check
+            // was blocking everything.
+            if (messageText.startsWith('/')) {
+                if (checkIfUserMuted() || checkIfDeviceMuted()) {
+                    addSystemMessage('❌ You are muted and cannot use commands');
+                    msgInput.value = '';
+                    emojiPanel.classList.remove('show');
+                    return;
+                }
+                const handled = handleCommand(messageText);
+                msgInput.value = '';
+                emojiPanel.classList.remove('show');
+                if (handled) return; // command executed, do not send as chat
+                // not actually a command, fall through to normal messaging
+            }
+
             if (checkIfUserMuted() || checkIfDeviceMuted()) {
                 showToast('🔇 You are muted and cannot send messages');
                 return;
             }
-            if (msgInput && msgInput.value.trim()) {
-                let messageText = msgInput.value;
 
-                if (messageText.startsWith('/')) {
-                    if (checkIfUserMuted() || checkIfDeviceMuted()) {
-                        addSystemMessage('❌ You are muted and cannot use commands');
-                        return;
-                    }
-                    const handled = handleCommand(messageText);
-                    msgInput.value = '';
-                    emojiPanel.classList.remove('show');
-                    if (handled) return;
-                    // not a command, fall through and send as normal
-                }
-
-                const processedMessage = processMentions(messageText);
-                // send to server; server now echoes back to all clients including sender
-                socket.emit('chat message', { username: currentUsername, message: processedMessage });
-                // remove manual addMessage to avoid duplicates and to rely on server timestamp
-                msgInput.value = '';
-                emojiPanel.classList.remove('show');
-            }
+            const processedMessage = processMentions(messageText);
+            // send to server; server now echoes back to all clients including sender
+            socket.emit('chat message', { username: currentUsername, message: processedMessage });
+            // remove manual addMessage to avoid duplicates and to rely on server timestamp
+            msgInput.value = '';
+            emojiPanel.classList.remove('show');
         }
         
         // ========== HELP COMMAND ==========
@@ -4740,22 +4748,28 @@
         // ========== COMMAND HANDLER ==========
         
         function handleCommand(commandText) {
+            const parts = commandText.split(' ');
+            const command = parts[0].toLowerCase();
+            const args = parts.slice(1);
+
+            // commands that should work even for muted/device‑muted users
+            switch (command) {
+                case '/help': showHelp(); return true;
+                case '/users': handleUsersCommand(); return true;
+                case '/ping': handlePingCommand(); return true;
+                case '/flip': handleFlipCommand(); return true;
+                case '/roll': handleRollCommand(args); return true;
+            }
+
+            // after the lightweight commands we enforce mute/device restrictions
             if (checkIfUserMuted() || checkIfDeviceMuted()) {
                 addSystemMessage('❌ You are muted and cannot use commands');
                 return false;
             }
-            
-            const parts = commandText.split(' ');
-            const command = parts[0].toLowerCase();
-            const args = parts.slice(1);
-            
+
             switch(command) {
-                case '/help': showHelp(); break;
-                case '/users': handleUsersCommand(); break;
                 case '/msg': handleMsgCommand(args); break;
                 case '/clear': handleClearCommand(args); break;
-                case '/flip': handleFlipCommand(); break;
-                case '/roll': handleRollCommand(args); break;
                 case '/ban': handleBanCommand(args); break;
                 case '/mute': handleMuteCommand(args); break;
                 case '/unmute': handleUnmuteCommand(args); break;
@@ -4765,12 +4779,11 @@
                 case '/theme': handleThemeCommand(args); break;
                 case '/grant': handleGrantCommand(args); break;
                 case '/rank': handleRankCommand(); break;
-                case '/ping': handlePingCommand(); break;
                 case '/video': toggleVideoChat(); break;
                 case '/ai': handleAICommand(args); break;
                 case '/cloak': handleCloakCommand(args); break;
                 default:
-                    addSystemMessage(`❌ Barah!Unknown command: ${command}. Type /help for commands.`);
+                    addSystemMessage(`❌ Unknown command: ${command}. Type /help for commands.`);
                     return false;
             }
             return true;

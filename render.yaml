@@ -13,8 +13,17 @@ services:
     plan: free
     
     # Build and start commands
-    buildCommand: npm install
-    startCommand: node server.js
+    # Render runs buildCommand during deployment; here we install npm
+    # dependencies and exit with a message if something goes wrong.
+    # `npm ci` could be used for reproducible installs if package-lock.json
+    # is committed, but plain `npm install` is fine for this simple app.
+    buildCommand: |
+      echo "Installing Node modules..."
+      npm install || { echo "npm install error"; exit 1; }
+
+    # start the server using the npm script so packages installed via
+    # npm link/devDependencies are available
+    startCommand: npm start
     
     # Health check path
     healthCheckPath: /health
