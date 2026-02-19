@@ -1406,7 +1406,7 @@
                 <div class="input-row">
                     <input id="messageInput" placeholder="Type message... /help for commands" autocomplete="off">
                     <button class="action-btn" onclick="toggleEmojiPanel()" title="Emoji" id="emojiBtn">😊</button>
-                    <button onclick="sendMessage()" class="action-btn success" style="min-width: 80px;">
+                    <button id="sendBtn" onclick="sendMessage()" class="action-btn success" style="min-width: 80px;">
                         <span>📤</span> SEND
                     </button>
                 </div>
@@ -1471,11 +1471,9 @@
                 <div style="margin-bottom: 10px;">
                     <span style="color: #888; font-size: 12px;">🔒 Private messages are visible to:</span>
                     <ul style="color: #aaa; font-size: 11px; margin-top: 5px; list-style: none;">
-                        <li>👑 Owner - All messages</li>
-                        <li>👮 Admin - Messages from Admin and below</li>
-                        <li>🛡️ Moderator - Messages from Mod and below</li>
-                        <li>⭐ VIP - Only their own messages</li>
-                        <li>👤 Member - Only their own messages</li>
+                        <li>👑 Owner - All private messages</li>
+                        <li>👮 Admin - All private messages except those involving the Owner</li>
+                        <li>Anyone else only sees their own sent/received messages</li>
                     </ul>
                 </div>
                 <div id="privateMessagesList" style="max-height: 300px; overflow-y: auto; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 12px;">
@@ -1687,6 +1685,8 @@
         let isOwner = false;
         let isUserMuted = false;
         let muteExpiresAt = 0;
+        let scrollBtn = null;  // button shown when new messages arrive and user scrolled up
+
         
         // device tracking
         let deviceId = null;
@@ -1720,6 +1720,39 @@
         const msgContainer = document.getElementById('messages');
         const input = document.getElementById('messageInput');
         const emojiPanel = document.getElementById('emojiPanel');
+        
+        // simple global error handler so runtime errors don't silently
+        // kill the rest of the script and leave the UI unresponsive
+        window.addEventListener('error', (e) => {
+            console.error('Global JS error:', e.message, e.error);
+            showToast('⚠️ JavaScript error: ' + e.message);
+        });
+        
+        // allow enter key (without shift) to send a message like a chat app
+        if (input) {
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+        }
+
+        // if the user scrolls to bottom hide the button
+        if (msgContainer) {
+            msgContainer.addEventListener('scroll', () => {
+                if (msgContainer.scrollHeight - msgContainer.scrollTop - msgContainer.clientHeight <= 0) {
+                    if (scrollBtn) scrollBtn.style.display = 'none';
+                }
+            });
+        }
+        // attach send button listener just in case the inline onclick
+        // attribute isn't effective (some browsers reset it when rewriting)
+        const sendBtn = document.getElementById('sendBtn');
+        if (sendBtn) sendBtn.addEventListener('click', sendMessage);
+        // pre-create the scroll button (hidden) so it can be shown later
+        // without any race condition when new messages arrive.
+        createScrollButton();
         const authScreen = document.getElementById('auth-screen');
         const roomScreen = document.getElementById('room-screen');
         const chatScreen = document.getElementById('chat-screen');
@@ -1833,19 +1866,61 @@
             return escaped;
         }
         
-        function addSystemMessage(message) {
+        // ======= SCROLL MANAGEMENT =======
+        function createScrollButton() {
+            if (scrollBtn) return;
+            scrollBtn = document.createElement('button');
+            scrollBtn.id = 'scrollToBottomBtn';
+            scrollBtn.textContent = '🔽 Scroll to bottom';
+            scrollBtn.className = 'notification-btn';
+            scrollBtn.style.position = 'fixed';
+            // bring it a bit closer to input area so it isn't hidden on small
+            // screens (earlier 100px sometimes placed it offscreen)
+            scrollBtn.style.bottom = '60px';
+            scrollBtn.style.right = '20px';
+            scrollBtn.style.display = 'none';
+            scrollBtn.style.zIndex = '2000';
+            scrollBtn.onclick = () => {
+                if (msgContainer) msgContainer.scrollTop = msgContainer.scrollHeight;
+                scrollBtn.style.display = 'none';
+            };
+            document.body.appendChild(scrollBtn);
+        }
+        
+        function appendWithScrollLogic(wrapper, timestamp = null) {
+            // make sure we still have a reference; recover if necessary
+            const container = msgContainer || document.getElementById('messages');
+            if (!container) return;
+            const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 0;
+            container.appendChild(wrapper);
+            if (atBottom) {
+                container.scrollTop = container.scrollHeight;
+            } else {
+                createScrollButton();
+                if (scrollBtn) scrollBtn.style.display = 'block';
+            }
+        }
+        
+        function addSystemMessage(message, timestamp = null) {
             if (!msgContainer) return;
             const wrapper = document.createElement('div');
             wrapper.className = 'msg-wrapper';
+
+            // header with timestamp for consistency
+            const header = document.createElement('div');
+            header.className = 'msg-header';
+            const timeStr = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+            header.innerHTML = `<span class="msg-timestamp">${timeStr}</span>`;
+            wrapper.appendChild(header);
+
             const item = document.createElement('div');
             item.className = 'msg system';
             item.innerHTML = parseLinksInText(message);
             wrapper.appendChild(item);
-            msgContainer.appendChild(wrapper);
-            msgContainer.scrollTop = msgContainer.scrollHeight;
+            appendWithScrollLogic(wrapper, timestamp);
         }
         
-        function addAIMessage(username, prompt, response) {
+        function addAIMessage(username, prompt, response, timestamp = null) {
             if (!msgContainer) return;
             
             const wrapper = document.createElement('div');
@@ -1853,10 +1928,11 @@
             
             const header = document.createElement('div');
             header.className = 'msg-header';
+            const timeStr = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
             header.innerHTML = `
                 <span class="msg-username">🤖 AI by ${username}</span>
                 <span class="ai-prompt-badge">${prompt.substring(0, 30)}${prompt.length > 30 ? '...' : ''}</span>
-                <span class="msg-timestamp">${new Date().toLocaleTimeString()}</span>
+                <span class="msg-timestamp">${timeStr}</span>
             `;
             wrapper.appendChild(header);
             
@@ -1865,11 +1941,10 @@
             item.innerHTML = parseLinksInText(response);
             wrapper.appendChild(item);
             
-            msgContainer.appendChild(wrapper);
-            msgContainer.scrollTop = msgContainer.scrollHeight;
+            appendWithScrollLogic(wrapper, timestamp);
         }
         
-        function addImageMessage(username, prompt, imageUrl, size, model) {
+        function addImageMessage(username, prompt, imageUrl, size, model, timestamp = null) {
             if (!msgContainer) return;
             
             const wrapper = document.createElement('div');
@@ -1877,10 +1952,11 @@
             
             const header = document.createElement('div');
             header.className = 'msg-header';
+            const timeStr = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
             header.innerHTML = `
                 <span class="msg-username">🎨 Image by ${username}</span>
                 <span class="image-prompt-badge">${prompt.substring(0, 30)}${prompt.length > 30 ? '...' : ''}</span>
-                <span class="msg-timestamp">${new Date().toLocaleTimeString()}</span>
+                <span class="msg-timestamp">${timeStr}</span>
                 <span style="font-size: 10px; color: #888;">${size} • ${model}</span>
             `;
             wrapper.appendChild(header);
@@ -1897,8 +1973,7 @@
             item.appendChild(img);
             wrapper.appendChild(item);
             
-            msgContainer.appendChild(wrapper);
-            msgContainer.scrollTop = msgContainer.scrollHeight;
+            appendWithScrollLogic(wrapper, timestamp);
         }
         
         function parseDurationClient(duration) {
@@ -1915,15 +1990,21 @@
         }
         
         function checkIfUserMuted() {
+            // only clear out expired user-specific mutes here
             if (isUserMuted && muteExpiresAt && Date.now() >= muteExpiresAt) {
                 isUserMuted = false;
                 muteExpiresAt = 0;
             }
+            return isUserMuted;
+        }
+
+        // device mute helper separated for clarity (previous code merged both)
+        function checkIfDeviceMuted() {
             if (isDeviceMuted && deviceMuteExpiresAt && Date.now() >= deviceMuteExpiresAt) {
                 isDeviceMuted = false;
                 deviceMuteExpiresAt = 0;
             }
-            return isUserMuted || isDeviceMuted;
+            return isDeviceMuted;
         }
         
         function updateOnlineUsers() {
@@ -2159,10 +2240,27 @@
             'member': 5
         };
         
-        function canSeePrivateMessage(senderRank, viewerRank) {
-            const senderLevel = getRankLevel(senderRank);
-            const viewerLevel = getRankLevel(viewerRank);
-            return viewerLevel <= senderLevel;
+        // helper to determine if the current user should see a private message
+        // returns an object with {show, adminView}
+        function canViewerSeePrivate(msg) {
+            // msg contains from, to, fromRank, toRank
+            // participants always see their own messages
+            if (msg.from === currentUsername || msg.to === currentUsername) {
+                return { show: true, adminView: false };
+            }
+            // owners see everything
+            if (currentRank === 'owner') {
+                return { show: true, adminView: true };
+            }
+            // admins see everything except messages involving an owner
+            if (currentRank === 'admin') {
+                if (msg.fromRank === 'owner' || msg.toRank === 'owner') {
+                    return { show: false, adminView: false };
+                }
+                return { show: true, adminView: true };
+            }
+            // other ranks cannot see messages they are not part of
+            return { show: false, adminView: false };
         }
         
         // ========== 200+ EMOJIS ==========
@@ -2592,6 +2690,10 @@
                 showToast('❌ Join a room first');
                 return;
             }
+            if (checkIfUserMuted() || checkIfDeviceMuted()) {
+                showToast('❌ You are muted and cannot join voice chat');
+                return;
+            }
             
             if (!voiceChat || !isVoiceActive) {
                 voiceChat = new VoiceChatHandler(socket, currentRoom, currentUsername);
@@ -2688,6 +2790,39 @@
                     this.popup = null;
                 }
             }
+
+            // display own camera feed in grid
+            addLocalVideo() {
+                const root = this.getVideoRoot();
+                if (!root) return;
+                const doc = (root.ownerDocument) ? root.ownerDocument : document;
+                const userId = this.socket.id + '_self';
+                if (this.videoContainers.has(userId)) return;
+                const container = doc.createElement('div');
+                container.className = 'video-container';
+
+                const video = doc.createElement('video');
+                video.autoplay = true;
+                video.playsInline = true;
+                video.muted = true;
+                video.controls = false;
+                video.style.width = '100%';
+                video.style.height = '100%';
+                video.style.objectFit = 'cover';
+                video.setAttribute('data-user', userId);
+
+                const label = this.createVideoLabel(userId, this.username + ' (You)', this.userRank);
+                this.videoLabels.set(userId, label);
+
+                container.appendChild(video);
+                container.appendChild(label);
+                root.appendChild(container);
+
+                this.videoElements.set(userId, video);
+                this.videoContainers.set(userId, container);
+
+                if (this.localStream) video.srcObject = this.localStream;
+            }
             
             hasPermission() {
                 return this.isVip && !this.isMuted;
@@ -2761,6 +2896,14 @@
                     });
                     
                     this.isActive = true;
+                    // if using popup, close video chat when popup is closed
+                    if (this.popup && !this.popup.closed) {
+                        this.popup.onbeforeunload = () => {
+                            if (this.isActive) this.stop();
+                        };
+                    }
+                    // show local preview immediately
+                    this.addLocalVideo();
                     
                     this.socket.emit('join_video', { 
                         roomName: this.roomName,
@@ -3305,8 +3448,10 @@
                 const videoIndicator = document.getElementById('video-indicator');
                 const videoBtn = document.getElementById('videoBtn');
                 const videoBtnText = document.getElementById('videoBtnText');
-                const videoGrid = document.getElementById('video-grid');
                 const videoControls = document.getElementById('video-controls');
+                
+                const mainGrid = document.getElementById('video-grid');
+                const popupGrid = (this.popup && !this.popup.closed) ? this.popup.document.getElementById('video-grid') : null;
                 
                 if (videoIndicator) videoIndicator.style.display = active ? 'flex' : 'none';
                 
@@ -3320,7 +3465,8 @@
                     }
                 }
                 
-                if (videoGrid) videoGrid.style.display = active ? 'grid' : 'none';
+                if (mainGrid) mainGrid.style.display = active ? 'grid' : 'none';
+                if (popupGrid) popupGrid.style.display = active ? 'grid' : 'none';
                 if (videoControls) videoControls.style.display = active && this.hasPermission() ? 'flex' : 'none';
             }
             
@@ -3383,7 +3529,7 @@
                     return;
                 }
                 
-                if (isUserMuted) {
+                if (checkIfUserMuted() || checkIfDeviceMuted()) {
                     showToast('❌ You are muted and cannot use video chat');
                     return;
                 }
@@ -3874,14 +4020,14 @@
             if (data.messages && data.messages.length > 0) {
                 data.messages.forEach(msg => {
                     if (msg.isPrivate) {
-                        const shouldShow = canSeePrivateMessage(msg.senderRank || 'member', currentRank);
-                        if (shouldShow || msg.username === currentUsername || msg.recipient === currentUsername) {
-                            addPrivateMessage(msg.username, msg.message, msg.recipient, msg.username === currentUsername);
+                        const result = canViewerSeePrivate(msg);
+                        if (result.show) {
+                            addPrivateMessage(msg.username, msg.message, msg.recipient, msg.username === currentUsername, result.adminView);
                         }
                     } else if (msg.fileUrl) {
-                        addFileMessage(msg.username, msg.fileUrl, msg.fileName, msg.fileType, msg.fileSize);
+                        addFileMessage(msg.username, msg.fileUrl, msg.fileName, msg.fileType, msg.fileSize, msg.timestamp);
                     } else {
-                        addMessage(msg.username, msg.message, msg.rank);
+                        addMessage(msg.username, msg.message, msg.rank, msg.timestamp);
                     }
                 });
             }
@@ -3910,9 +4056,9 @@
         
         socket.on('chat message', (data) => {
             if (data.fileUrl) {
-                addFileMessage(data.username, data.fileUrl, data.fileName, data.fileType, data.fileSize);
+                addFileMessage(data.username, data.fileUrl, data.fileName, data.fileType, data.fileSize, data.timestamp);
             } else {
-                addMessage(data.username, data.message, data.rank);
+                addMessage(data.username, data.message, data.rank, data.timestamp);
             }
             
             if (data.username !== currentUsername && currentRoom) {
@@ -3920,7 +4066,7 @@
             }
         });
         
-        function addMessage(username, message, rank = 'member') {
+        function addMessage(username, message, rank = 'member', timestamp = null) {
             const wrapper = document.createElement('div');
             wrapper.className = 'msg-wrapper';
             if (username === currentUsername) {
@@ -3935,10 +4081,11 @@
                 rankBadge = getRankBadge(rank);
             }
             
+            const timeStr = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
             header.innerHTML = `
                 <span class="msg-username">${username}</span>
                 ${rankBadge}
-                <span class="msg-timestamp">${new Date().toLocaleTimeString()}</span>
+                <span class="msg-timestamp">${timeStr}</span>
             `;
             wrapper.appendChild(header);
             
@@ -3949,8 +4096,7 @@
             item.innerHTML = parseLinksInText(message);
             wrapper.appendChild(item);
             
-            msgContainer.appendChild(wrapper);
-            msgContainer.scrollTop = msgContainer.scrollHeight;
+            appendWithScrollLogic(wrapper, timestamp);
         }
         
         function addPrivateMessage(from, message, to, isFromSelf = false, isAdminView = false) {
@@ -3978,20 +4124,20 @@
             item.innerHTML = parseLinksInText(message);
             wrapper.appendChild(item);
             
-            msgContainer.appendChild(wrapper);
-            msgContainer.scrollTop = msgContainer.scrollHeight;
+            appendWithScrollLogic(wrapper);
         }
         
-        function addFileMessage(username, fileUrl, fileName, fileType, fileSize) {
+        function addFileMessage(username, fileUrl, fileName, fileType, fileSize, timestamp = null) {
             const wrapper = document.createElement('div');
             wrapper.className = 'msg-wrapper';
             if (username === currentUsername) wrapper.classList.add('mine');
             
             const header = document.createElement('div');
             header.className = 'msg-header';
+            const timeStr = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
             header.innerHTML = `
                 <span class="msg-username">${username}</span>
-                <span class="msg-timestamp">${new Date().toLocaleTimeString()}</span>
+                <span class="msg-timestamp">${timeStr}</span>
             `;
             wrapper.appendChild(header);
             
@@ -4023,8 +4169,7 @@
             `;
             wrapper.appendChild(item);
             
-            msgContainer.appendChild(wrapper);
-            msgContainer.scrollTop = msgContainer.scrollHeight;
+            appendWithScrollLogic(wrapper);
         }
         
         function processMentions(text) {
@@ -4049,24 +4194,32 @@
         }
         
         function sendMessage() {
-            if (input.value.trim()) {
-                const messageText = input.value;
-                
+            // re-query the input each time in case reference was lost/updated
+            const msgInput = document.getElementById('messageInput');
+            if (checkIfUserMuted() || checkIfDeviceMuted()) {
+                showToast('🔇 You are muted and cannot send messages');
+                return;
+            }
+            if (msgInput && msgInput.value.trim()) {
+                let messageText = msgInput.value;
+
                 if (messageText.startsWith('/')) {
                     if (checkIfUserMuted() || checkIfDeviceMuted()) {
                         addSystemMessage('❌ You are muted and cannot use commands');
                         return;
                     }
-                    handleCommand(messageText);
-                    input.value = '';
+                    const handled = handleCommand(messageText);
+                    msgInput.value = '';
                     emojiPanel.classList.remove('show');
-                    return;
+                    if (handled) return;
+                    // not a command, fall through and send as normal
                 }
-                
+
                 const processedMessage = processMentions(messageText);
+                // send to server; server now echoes back to all clients including sender
                 socket.emit('chat message', { username: currentUsername, message: processedMessage });
-                addMessage(currentUsername, processedMessage, currentRank);
-                input.value = '';
+                // remove manual addMessage to avoid duplicates and to rely on server timestamp
+                msgInput.value = '';
                 emojiPanel.classList.remove('show');
             }
         }
@@ -4120,6 +4273,7 @@
                     <div><span class="help-command">/theme &lt;name&gt;</span> <span class="help-desc">- Change theme</span></div>
                     <div><span class="help-command">/video</span> <span class="help-desc">- Toggle video chat</span></div>
                     <div><span class="help-command">/ai &lt;prompt&gt;</span> <span class="help-desc">- Ask AI anything</span></div>
+                    <div><span class="help-command">/cloak &lt;url&gt;</span> <span class="help-desc">- Cloak tab title to page title</span></div>
                     <div style="font-size:12px; color:#aaa; margin-top:8px;">Note: usernames/rooms cannot contain spaces (converted to _), n-word is prohibited, and repeated spam earns a 10m mute.</div>
                 </div>
                 ` : ''}
@@ -4146,7 +4300,7 @@
                 <div class="help-section">
                     <div class="help-title">👑 OWNER COMMANDS</div>
                     <div><span class="help-command">/grant &lt;user&gt; admin</span> <span class="help-desc">- Grant admin rank (owner only)</span></div>
-                    <div><span class="help-command">/clear</span> <span class="help-desc">- Clear all messages (Owner only)</span></div>
+                    <div><span class="help-command">/clear</span> <span class="help-desc">- Clear all messages including private (Admin/Owner only)</span></div>
                 </div>
                 ` : ''}
                 
@@ -4168,7 +4322,7 @@
                 ` : ''}
                 
                 <div style="text-align: center; margin-top: 15px; color: #888; font-size: 11px; border-top: 1px solid rgba(102,126,234,0.3); padding-top: 10px;">
-                    🤖 AI command available for VIP+ • 🎨 Image generation available for VIP+ • 🔔 Notifications work in background
+                    🤖 AI command available for VIP+ • 🔔 Notifications work in background
                 </div>
             `;
             
@@ -4338,8 +4492,8 @@
                 return;
             }
             
-            if (!isOwner) {
-                addSystemMessage('❌ Only the Owner can use /clear command');
+            if (!isOwner && !isAdmin) {
+                addSystemMessage('❌ Only an Admin or Owner can use /clear command');
                 return;
             }
             
@@ -4588,7 +4742,7 @@
         function handleCommand(commandText) {
             if (checkIfUserMuted() || checkIfDeviceMuted()) {
                 addSystemMessage('❌ You are muted and cannot use commands');
-                return;
+                return false;
             }
             
             const parts = commandText.split(' ');
@@ -4614,7 +4768,41 @@
                 case '/ping': handlePingCommand(); break;
                 case '/video': toggleVideoChat(); break;
                 case '/ai': handleAICommand(args); break;
-                default: addSystemMessage(`❌ Barah!Unknown command: ${command}. Type /help for commands.`);
+                case '/cloak': handleCloakCommand(args); break;
+                default:
+                    addSystemMessage(`❌ Barah!Unknown command: ${command}. Type /help for commands.`);
+                    return false;
+            }
+            return true;
+        }
+        
+        // ========== CLOAK COMMAND ==========
+        
+        async function handleCloakCommand(args) {
+            if (!isVip) {
+                addSystemMessage('❌ Cloak command requires VIP+ rank');
+                return;
+            }
+            if (!args || args.length === 0) {
+                addSystemMessage('❌ Usage: /cloak <url>');
+                return;
+            }
+            const url = args[0];
+            try {
+                const res = await fetch(url, { mode: 'cors' });
+                const text = await res.text();
+                const m = text.match(/<title>([^<]*)<\/title>/i);
+                if (m && m[1]) {
+                    document.title = m[1];
+                    showToast(`🪄 Cloaked title to: ${m[1]}`);
+                } else {
+                    showToast('⚠️ Title not found, using URL');
+                    document.title = url;
+                }
+            } catch (err) {
+                console.error('cloak error', err);
+                showToast('⚠️ Cloak failed, setting URL');
+                document.title = url;
             }
         }
         
@@ -4868,32 +5056,17 @@
         }
         
         socket.on('private_message', (data) => {
-            const { from, fromRank, message, to, adminView } = data;
-            
-            let shouldShow = false;
-            let isAdminView = false;
-            
-            if (from === currentUsername) shouldShow = true;
-            else if (to === currentUsername) shouldShow = true;
-            else {
-                const viewerLevel = getRankLevel(currentRank);
-                const senderLevel = getRankLevel(fromRank);
-                if (viewerLevel < senderLevel) {
-                    shouldShow = true;
-                    isAdminView = true;
-                }
-            }
-            
-            if (!shouldShow) return;
-            
-            addPrivateMessage(from, message, to, from === currentUsername, isAdminView);
-            addToPrivateMessagesList(from, message, to, from === currentUsername, isAdminView);
-            
+            const result = canViewerSeePrivate(data);
+            if (!result.show) return;
+
+            const { from, message, to } = data;
+            addPrivateMessage(from, message, to, from === currentUsername, result.adminView);
+            addToPrivateMessagesList(from, message, to, from === currentUsername, result.adminView);
+
             if (to === currentUsername) {
                 sendNotification('💌 Private Message', `${from}: ${message.substring(0, 50)}${message.length > 50 ? '...' : ''}`);
                 showToast(`💌 New message from ${from}`);
-            } else if (isAdminView) {
-                sendNotification('👀 Admin View', `${from} → ${to}: ${message.substring(0, 50)}${message.length > 50 ? '...' : ''}`);
+            } else if (result.adminView) {
             }
         });
         
@@ -4915,14 +5088,10 @@
             
             if (data.messages && data.messages.length > 0) {
                 data.messages.reverse().forEach(msg => {
-                    const isFromSelf = msg.from === currentUsername;
-                    const isToSelf = msg.to === currentUsername;
-                    const viewerLevel = getRankLevel(currentRank);
-                    const senderLevel = getRankLevel(msg.fromRank);
-                    const isAdminView = viewerLevel < senderLevel && !isFromSelf && !isToSelf;
-                    
-                    if (isFromSelf || isToSelf || isAdminView) {
-                        addToPrivateMessagesList(msg.from, msg.message, msg.to, isFromSelf, isAdminView);
+                    const result = canViewerSeePrivate(msg);
+                    if (result.show) {
+                        const isFromSelf = msg.from === currentUsername;
+                        addToPrivateMessagesList(msg.from, msg.message, msg.to, isFromSelf, result.adminView);
                     }
                 });
             } else {
@@ -4963,9 +5132,16 @@
             addSystemMessage('✅ ' + data.message);
         });
         
-        socket.on('messages_cleared', () => {
+        socket.on('messages_cleared', (data) => {
+            // only clear the chat if we are in the same room
+            if (data && data.roomName && data.roomName !== currentRoom) return;
             msgContainer.innerHTML = '';
-            addSystemMessage('🧹 All messages cleared by Owner');
+            // private messages are cleared separately
+        });
+        socket.on('private_messages_cleared', () => {
+            privateMessages = [];
+            const pmList = document.getElementById('privateMessagesList');
+            if (pmList) pmList.innerHTML = '<div style="text-align: center; color: #888; padding: 20px;">No messages yet</div>';
         });
         
         socket.on('user_banned', (data) => {
@@ -4981,14 +5157,18 @@
 
 
 
+        // device mute notification (merged into single handler)
         socket.on('device_muted', (data) => {
             isDeviceMuted = true;
-            const dur = data.duration || 'unknown';
-            showToast(`🔇 This device has been muted for ${dur}`);
-            if (data.duration) {
-                deviceMuteExpiresAt = Date.now() + parseDurationClient(data.duration);
-            }
+            const durationMs = parseDurationClient(data.duration || '10m');
+            deviceMuteExpiresAt = Date.now() + durationMs;
+            showToast(`🔇 This device has been muted for ${data.duration || '10m'}`);
             // we don't automatically leave but future commands/messages will fail
+            if (isVideoActive && videoChat) {
+                videoChat.setMutedStatus(true);
+                videoChat.stop();
+                isVideoActive = false;
+            }
         });
 
         socket.on('device_unmuted', () => {
@@ -5015,18 +5195,6 @@
                 }
             }
             addSystemMessage(`🔇 ${data.mutedUser} has been muted for ${data.duration || '10m'}`);
-        });
-
-        socket.on('device_muted', (data) => {
-            isDeviceMuted = true;
-            const durationMs = parseDurationClient(data.duration || '10m');
-            deviceMuteExpiresAt = Date.now() + durationMs;
-            showToast(`🔇 This device has been muted for ${data.duration || '10m'}`);
-            if (isVideoActive && videoChat) {
-                videoChat.setMutedStatus(true);
-                videoChat.stop();
-                isVideoActive = false;
-            }
         });
         
         socket.on('user_unmuted', (data) => {
@@ -5057,12 +5225,6 @@
             }, 1500);
         });
 
-        socket.on('device_muted', (data) => {
-            isDeviceMuted = true;
-            const durationMs = parseDurationClient(data.duration || '10m');
-            deviceMuteExpiresAt = Date.now() + durationMs;
-            showToast(`🔇 Your device has been muted for ${data.duration || '10m'}`);
-        });
         
         socket.on('room_deleted_by_owner', (data) => {
             showToast(`🗑️ Room "${data.roomName}" deleted`);
@@ -5080,7 +5242,7 @@
         });
         
         socket.on('system_notification', (data) => {
-            addSystemMessage(data.message);
+            addSystemMessage(data.message, data.timestamp);
             showToast(data.message);
             sendNotification('System', data.message);
         });
@@ -5197,7 +5359,7 @@
         });
         
         socket.on('disconnect', () => {
-            addSystemMessage('⚠️ Disconnected from server. Reconnecting...');
+            addSystemMessage('⚠️ Disconnected from server. Reconnecting...', new Date());
             showToast('⚠️ Disconnected - reconnecting...');
         });
         
@@ -5218,6 +5380,11 @@
                 btn.innerHTML = '<span>🔔</span> <span>Notifications Enabled</span>';
             }
         }
+
+        // handle server-sent system messages (e.g. mute/ban notices)
+        socket.on('system_message', (data) => {
+            addSystemMessage(data.message, data.timestamp);
+        });
     </script>
 </body>
 </html>

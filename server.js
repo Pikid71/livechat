@@ -40,7 +40,8 @@ console.log('='.repeat(70) + '\n');
 // ============================================
 // 📁 FILE UPLOAD CONFIGURATION
 // ============================================
-const uploadDir = path.join(__dirname, 'uploads');
+// allow override for platforms (Render) that mount a different uploads folder
+const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
 console.log(`📁 Upload directory: ${uploadDir}`);
 
 // Create uploads directory if it doesn't exist
@@ -327,7 +328,8 @@ async function loadInitialData() {
         roomObj.messages = msgs.reverse().map(m => ({
           username: m.username,
           message: m.message,
-          timestamp: m.timestamp ? m.timestamp.toLocaleTimeString() : new Date().toLocaleTimeString(),
+          // keep full Date object for consistency (client will format)
+          timestamp: m.timestamp || new Date(),
           rank: m.senderRank || 'member',
           fileUrl: m.fileUrl || null,
           fileName: m.fileName || null,
@@ -1349,7 +1351,10 @@ io.on('connection', (socket) => {
       socket.emit('joined_room', { roomName, username: currentUser, rank: userRank, theme: room.theme || 'default' });
       
       socket.emit('room_history', {
-        messages: room.messages || []
+        messages: (room.messages || []).map(m => ({
+          ...m,
+          timestamp: m.timestamp || new Date()
+        }))
       });
       
       const members = Array.from(memoryStore.sessions.values())
@@ -1392,7 +1397,7 @@ io.on('connection', (socket) => {
       const systemMsg = {
         username: 'System',
         message: `👋 ${currentUser} left the room`,
-        timestamp: new Date().toLocaleTimeString(),
+        timestamp: new Date(),
         rank: 'system'
       };
       
@@ -1427,43 +1432,47 @@ io.on('connection', (socket) => {
       
       const sidSession = memoryStore.sessions.get(socket.id);
       if (isDeviceBanned(sidSession?.deviceId)) {
-        socket.emit('system_message', { message: '⛔ Your device is banned' });
+        socket.emit('system_message', { message: '⛔ Your device is banned', timestamp: new Date() });
         socket.disconnect(true);
         return;
       }
 
       if (isUserMuted(currentUser, currentRoom) || isDeviceMuted(sidSession?.deviceId)) {
-        socket.emit('system_message', { message: '🔇 You are muted and cannot send messages' });
+        socket.emit('system_message', { message: '🔇 You are muted and cannot send messages', timestamp: new Date() });
         return;
       }
 
       const text = (msg.message || '').trim();
 
-      // n-word filter: automatic 10m ban
+      // n-word filter: automatic 10m ban (skip owner/admin)
       if (NWORD_REGEX.test(text)) {
-        const duration = '10m';
-        const expiresAt = Date.now() + 10 * 60 * 1000;
-        if (!memoryStore.bans.has(currentRoom)) memoryStore.bans.set(currentRoom, new Map());
-        memoryStore.bans.get(currentRoom).set(currentUser, { expiresAt, bannedBy: 'System' });
-        const devices = memoryStore.userDevices.get(currentUser);
-        if (devices) {
-          devices.forEach(did => {
-            memoryStore.deviceBans.set(did, { expiresAt, bannedBy: 'System' });
-          });
-        }
-        io.to(currentRoom).emit('user_banned', { bannedUser: currentUser, duration, bannerName: 'System' });
-        let bannedSid = null;
-        for (const [sid, session] of memoryStore.sessions) {
-          if (session.username === currentUser && session.roomName === currentRoom) {
-            bannedSid = sid;
-            break;
+        if (['owner','admin'].includes(userRank)) {
+          console.log(`🚫 n-word detected from ${currentUser} (${userRank}) but user exempt`);
+        } else {
+          const duration = '10m';
+          const expiresAt = Date.now() + 10 * 60 * 1000;
+          if (!memoryStore.bans.has(currentRoom)) memoryStore.bans.set(currentRoom, new Map());
+          memoryStore.bans.get(currentRoom).set(currentUser, { expiresAt, bannedBy: 'System' });
+          const devices = memoryStore.userDevices.get(currentUser);
+          if (devices) {
+            devices.forEach(did => {
+              memoryStore.deviceBans.set(did, { expiresAt, bannedBy: 'System' });
+            });
           }
+          io.to(currentRoom).emit('user_banned', { bannedUser: currentUser, duration, bannerName: 'System' });
+          let bannedSid = null;
+          for (const [sid, session] of memoryStore.sessions) {
+            if (session.username === currentUser && session.roomName === currentRoom) {
+              bannedSid = sid;
+              break;
+            }
+          }
+          if (bannedSid) {
+            io.to(bannedSid).emit('force_leave', { roomName: currentRoom, reason: 'banned' });
+          }
+          console.log(`🚫 ${currentUser} auto-banned for n-word in message`);
+          return;
         }
-        if (bannedSid) {
-          io.to(bannedSid).emit('force_leave', { roomName: currentRoom, reason: 'banned' });
-        }
-        console.log(`🚫 ${currentUser} auto-banned for n-word in message`);
-        return;
       }
 
       // spam detection (non-moderator ranks)
@@ -1489,7 +1498,7 @@ io.on('connection', (socket) => {
           const systemMsg = {
             username: 'System',
             message: `🔇 ${currentUser} muted for spam (repeated messages)`,
-            timestamp: new Date().toLocaleTimeString(),
+            timestamp: new Date(),
             rank: 'system'
           };
           io.to(currentRoom).emit('chat message', systemMsg);
@@ -1501,7 +1510,7 @@ io.on('connection', (socket) => {
       const messageData = {
         username: currentUser,
         message: text,
-        timestamp: new Date().toLocaleTimeString(),
+        timestamp: new Date(),
         rank: userRank
       };
       
@@ -1512,7 +1521,10 @@ io.on('connection', (socket) => {
         if (room.messages.length > 100) room.messages.shift();
       }
       
-      socket.broadcast.to(currentRoom).emit('chat message', messageData);
+      // send message to everyone in room (including sender) so that
+      // the client can rely on the server-provided timestamp and avoid
+      // having to manually echo its own message immediately.
+      io.to(currentRoom).emit('chat message', messageData);
       
     } catch (err) {
       console.error('message error:', err);
@@ -1541,7 +1553,7 @@ io.on('connection', (socket) => {
         to: recipient,
         toRank: recipientRank,
         message,
-        timestamp: new Date().toLocaleTimeString(),
+        timestamp: new Date(),
         id: Date.now() + '-' + Math.random().toString(36).substr(2, 9)
       };
       
@@ -1550,6 +1562,7 @@ io.on('connection', (socket) => {
         memoryStore.privateMessages.shift();
       }
       
+      // send message to recipient if connected
       let recipientSocketId = null;
       for (const [sid, session] of memoryStore.sessions) {
         if (session.username === recipient) {
@@ -1563,25 +1576,18 @@ io.on('connection', (socket) => {
         console.log(`💌 PM sent to recipient: ${recipient}`);
       }
       
-      // Send to admins/owner based on rank
-      const senderLevel = getRankLevel(userRank);
+      // deliver copies to owners and admins according to new rules
       for (const [sid, session] of memoryStore.sessions) {
-        if (session.username !== currentUser && session.username !== recipient) {
-          const viewerLevel = getRankLevel(session.rank);
-          if (viewerLevel < senderLevel) {
-            io.to(sid).emit('private_message', {
-              ...messageData,
-              adminView: true,
-              viewedBy: session.username
-            });
-          }
-        }
-      }
-      
-      // Owner always sees all private messages
-      if (userRank !== 'owner') {
-        for (const [sid, session] of memoryStore.sessions) {
-          if (session.rank === 'owner' && session.username !== currentUser && session.username !== recipient) {
+        if (session.username === currentUser || session.username === recipient) continue;
+        if (session.rank === 'owner') {
+          io.to(sid).emit('private_message', {
+            ...messageData,
+            adminView: true,
+            viewedBy: session.username
+          });
+        } else if (session.rank === 'admin') {
+          // admins should not see any message involving an owner
+          if (messageData.fromRank !== 'owner' && messageData.toRank !== 'owner') {
             io.to(sid).emit('private_message', {
               ...messageData,
               adminView: true,
@@ -1608,13 +1614,21 @@ io.on('connection', (socket) => {
     try {
       if (!currentUser) return;
       
-      const userLevel = getRankLevel(userRank);
       const history = memoryStore.privateMessages.filter(msg => {
         if (msg.from === currentUser || msg.to === currentUser) {
           return true;
         }
-        const senderLevel = getRankLevel(msg.fromRank);
-        return userLevel < senderLevel;
+        if (userRank === 'owner') {
+          return true;
+        }
+        if (userRank === 'admin') {
+          // admin should not see any history entries involving owner
+          if (msg.fromRank === 'owner' || msg.toRank === 'owner') {
+            return false;
+          }
+          return true;
+        }
+        return false;
       });
       
       socket.emit('private_history', { messages: history });
@@ -1639,7 +1653,7 @@ io.on('connection', (socket) => {
         fileName: fileName,
         fileType: fileType,
         fileSize: fileSize,
-        timestamp: new Date().toLocaleTimeString(),
+        timestamp: new Date(),
         rank: userRank
       };
       
@@ -1663,9 +1677,14 @@ io.on('connection', (socket) => {
   socket.on('join_voice', (data) => {
     try {
       const { roomName, username } = data;
-      
+      const deviceId = memoryStore.sessions.get(socket.id)?.deviceId;
+      // Check if device is banned first
+      if (isDeviceBanned(deviceId)) {
+        socket.emit('voice_error', { message: '⛔ This device is banned' });
+        return;
+      }
       // Check if user or device is muted
-      if (isUserMuted(username, roomName) || isDeviceMuted(memoryStore.sessions.get(socket.id)?.deviceId)) {
+      if (isUserMuted(username, roomName) || isDeviceMuted(deviceId)) {
         socket.emit('voice_error', { message: 'You are muted and cannot join voice chat' });
         return;
       }
@@ -1676,7 +1695,7 @@ io.on('connection', (socket) => {
       const systemMsg = {
         username: 'System',
         message: `🎤 ${username} joined voice chat`,
-        timestamp: new Date().toLocaleTimeString(),
+        timestamp: new Date(),
         rank: 'system'
       };
       
@@ -1701,7 +1720,7 @@ io.on('connection', (socket) => {
       const systemMsg = {
         username: 'System',
         message: `🎤 ${username} left voice chat`,
-        timestamp: new Date().toLocaleTimeString(),
+        timestamp: new Date(),
         rank: 'system'
       };
       
@@ -1758,6 +1777,13 @@ io.on('connection', (socket) => {
   socket.on('join_video', (data) => {
     try {
       const { roomName, username, rank } = data;
+      const deviceId = memoryStore.sessions.get(socket.id)?.deviceId;
+      
+      // Check if device is banned
+      if (isDeviceBanned(deviceId)) {
+        socket.emit('video_error', { message: '⛔ This device is banned' });
+        return;
+      }
       
       // Check if user has permission (VIP+)
       const permissions = PERMISSIONS[rank] || PERMISSIONS.member;
@@ -1766,8 +1792,8 @@ io.on('connection', (socket) => {
         return;
       }
       
-      // Check if user is muted
-      if (isUserMuted(username, roomName)) {
+      // Check if user or device is muted
+      if (isUserMuted(username, roomName) || isDeviceMuted(deviceId)) {
         socket.emit('video_error', { message: 'You are muted and cannot join video chat' });
         return;
       }
@@ -1778,7 +1804,7 @@ io.on('connection', (socket) => {
       const systemMsg = {
         username: 'System',
         message: `🎥 ${username} joined video chat`,
-        timestamp: new Date().toLocaleTimeString(),
+        timestamp: new Date(),
         rank: 'system'
       };
       
@@ -1804,7 +1830,7 @@ io.on('connection', (socket) => {
       const systemMsg = {
         username: 'System',
         message: `🎥 ${username} left video chat`,
-        timestamp: new Date().toLocaleTimeString(),
+        timestamp: new Date(),
         rank: 'system'
       };
       
@@ -1884,13 +1910,18 @@ io.on('connection', (socket) => {
       if (room) {
         room.messages = [];
       }
+      // also clear all private messages globally
+      memoryStore.privateMessages = [];
       
-      io.to(currentRoom).emit('messages_cleared');
+      // notify clients in the room to wipe chat history
+      io.to(currentRoom).emit('messages_cleared', { roomName: currentRoom });
+      // also notify everyone that private messages should be cleared
+      io.emit('private_messages_cleared');
       
       const systemMsg = {
         username: 'System',
         message: `🧹 Messages cleared by ${currentUser}`,
-        timestamp: new Date().toLocaleTimeString(),
+        timestamp: new Date(),
         rank: 'system'
       };
       
@@ -1923,6 +1954,10 @@ io.on('connection', (socket) => {
       const { bannedUser, duration = '10m', password } = data;
       
       if (!bannedUser) return;
+      // protect owner account
+      if (bannedUser === OWNER_USERNAME) {
+        return socket.emit('error', { message: '❌ Cannot ban owner' });
+      }
       
       const bannedUserRank = memoryStore.users.get(bannedUser)?.rank || 'member';
       const bannedLevel = getRankLevel(bannedUserRank);
@@ -1956,7 +1991,7 @@ io.on('connection', (socket) => {
       const systemMsg = {
         username: 'System',
         message: `⛔ ${bannedUser} banned by ${currentUser} for ${duration}`,
-        timestamp: new Date().toLocaleTimeString(),
+        timestamp: new Date(),
         rank: 'system'
       };
       
@@ -1970,10 +2005,13 @@ io.on('connection', (socket) => {
         }
       }
       
-      // also ban any devices associated with the user
+      // also ban any devices associated with the user (skip owner devices)
       const userDeviceSet = memoryStore.userDevices.get(bannedUser);
       if (userDeviceSet && userDeviceSet.size > 0) {
         userDeviceSet.forEach(did => {
+          // don't ban owner device
+          const ownerSession = [...memoryStore.sessions.values()].find(s => s.deviceId === did && s.username === OWNER_USERNAME);
+          if (ownerSession) return;
           memoryStore.deviceBans.set(did, { expiresAt, bannedBy: currentUser });
           // disconnect all sessions on that device
           for (const [sid, session] of memoryStore.sessions) {
@@ -2041,7 +2079,7 @@ io.on('connection', (socket) => {
       const systemMsg = {
         username: 'System',
         message: `✅ ${unbannedUser} unbanned by ${currentUser}`,
-        timestamp: new Date().toLocaleTimeString(),
+        timestamp: new Date(),
         rank: 'system'
       };
       
@@ -2104,7 +2142,7 @@ io.on('connection', (socket) => {
       const systemMsg = {
         username: 'System',
         message: `🔇 ${mutedUser} muted by ${currentUser} for ${duration}`,
-        timestamp: new Date().toLocaleTimeString(),
+        timestamp: new Date(),
         rank: 'system'
       };
       
@@ -2164,7 +2202,7 @@ io.on('connection', (socket) => {
       const systemMsg = {
         username: 'System',
         message: `🔓 ${unmutedUser} unmuted by ${currentUser}`,
-        timestamp: new Date().toLocaleTimeString(),
+        timestamp: new Date(),
         rank: 'system'
       };
       
@@ -2362,7 +2400,7 @@ io.on('connection', (socket) => {
         io.to(roomName).emit('chat message', {
           username: 'System',
           message: `👋 ${currentUser} disconnected`,
-          timestamp: new Date().toLocaleTimeString(),
+          timestamp: new Date(),
           rank: 'system'
         });
       }

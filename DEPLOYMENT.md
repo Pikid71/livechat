@@ -158,6 +158,10 @@ curl https://your-app.onrender.com/health
 2. Check disk has available space
 3. Verify `uploadDir` path in code matches mount path
 
+4. **UPLOAD_DIR**
+   - The server now supports overriding the upload directory via `UPLOAD_DIR` environment variable. Render services should set `UPLOAD_DIR` to `/opt/render/project/uploads` (as configured in `render.yaml`) so that uploaded files persist across deploys.
+   - The code falls back to `./uploads` if the variable is not provided.
+
 ### Performance Issues
 **Problem**: Slow message delivery or high latency
 **Solution**:

@@ -8,8 +8,11 @@ A full-featured real-time chat application with private messaging, voice/video c
 - **📁 File Sharing** - Upload and share files with automatic optimization
 - **🎥 Video & Voice** - WebRTC-based peer-to-peer communication (VIP+ only)
 - **🔒 Private Messages** - Direct messaging with encryption support
+  - Owner can view all private messages
+  - Admins can view all except any involving the Owner
+  - Other users only see their own sent/received messages
 - **👑 Rank System** - 5-level hierarchy (Owner, Admin, Moderator, VIP, Member)
-- **🛡️ Admin Commands** - Ban, mute, clear messages, grant ranks
+- **🛡️ Admin Commands** - Ban, mute, clear messages (clears both public and private), grant ranks
 - **🎨 Effects** - Room-wide visual effects (glitch, matrix, neon, firework, etc.)
 - **🤖 AI Integration** - OpenRouter powered AI assistant for chat
 - **🖼️ Image Generation** - Stable Horde integration for async image generation
@@ -170,6 +173,17 @@ PORT=10000 (Render assigns dynamically)
 ### Collections
 - `users` - User accounts with ranks and themes
 - `messages` - Chat messages (backed up every 5s)
+
+### Render deployment notes
+
+- The service is already configured with a `render.yaml` in the repository.
+- **UPLOAD_DIR** environment variable is honoured by the server. Render mounts
+  a disk to `/opt/render/project/uploads` and `render.yaml` sets
+  `UPLOAD_DIR=/opt/render/project/uploads` so that user uploads persist across
+  deploys. If you run locally, the code falls back to `./uploads`.
+- The server respects `process.env.PORT` (default 3000) and exposes `/health`
+  for the Render health check path.
+
 - `private_messages` - Direct messages between users
 - `rooms` - Chat rooms
 - `bans` - Active/expired bans

@@ -12,6 +12,8 @@ class VideoChatHandler {
         this.userRank = userRank;
         this.isVip = ['vip', 'moderator', 'admin', 'owner'].includes(userRank);
         this.isMuted = false;
+        // optional popup window reference
+        this.popup = options.popupWindow || null;
         this.options = {
             echoCancellation: true,
             noiseSuppression: true,
@@ -65,6 +67,48 @@ class VideoChatHandler {
         this.handleVideoError = this.handleVideoError.bind(this);
         this.handleUserMuted = this.handleUserMuted.bind(this);
         this.handleUserBanned = this.handleUserBanned.bind(this);
+    }
+
+    // helper to choose proper document root for video elements
+    getVideoRoot() {
+        if (this.popup && !this.popup.closed) {
+            return this.popup.document.getElementById('video-grid') || this.popup.document.body;
+        }
+        return document.getElementById('video-grid');
+    }
+
+    closePopup() {
+        if (this.popup && !this.popup.closed) {
+            this.popup.close();
+            this.popup = null;
+        }
+    }
+
+    addLocalVideo() {
+        const root = this.getVideoRoot();
+        if (!root) return;
+        const doc = root.ownerDocument || document;
+        const userId = this.socket.id + '_self';
+        if (this.videoContainers.has(userId)) return;
+        const container = doc.createElement('div');
+        container.className = 'video-container';
+        const video = doc.createElement('video');
+        video.autoplay = true;
+        video.playsInline = true;
+        video.muted = true;
+        video.controls = false;
+        video.style.width = '100%';
+        video.style.height = '100%';
+        video.style.objectFit = 'cover';
+        video.setAttribute('data-user', userId);
+        const label = this.createVideoLabel(userId, this.username + ' (You)', this.userRank);
+        this.videoLabels.set(userId, label);
+        container.appendChild(video);
+        container.appendChild(label);
+        root.appendChild(container);
+        this.videoElements.set(userId, video);
+        this.videoContainers.set(userId, container);
+        if (this.localStream) video.srcObject = this.localStream;
     }
     
     hasPermission() {
@@ -139,6 +183,12 @@ class VideoChatHandler {
             });
             
             this.isActive = true;
+            if (this.popup && !this.popup.closed) {
+                this.popup.onbeforeunload = () => {
+                    if (this.isActive) this.stop();
+                };
+            }
+            this.addLocalVideo();
             
             this.socket.emit('join_video', { 
                 roomName: this.roomName,
@@ -179,6 +229,8 @@ class VideoChatHandler {
         this.videoContainers.forEach(container => container.remove());
         this.videoContainers.clear();
         this.videoLabels.clear();
+        
+        this.closePopup();
         
         this.socket.emit('leave_video', { 
             roomName: this.roomName,
