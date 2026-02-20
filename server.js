@@ -7,6 +7,9 @@ const mongoose = require('mongoose');
 const multer = require('multer');
 const sharp = require('sharp');
 const fs = require('fs').promises;
+const nodemailer = require('nodemailer');
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 const app = express();
 const server = http.createServer(app);
@@ -25,14 +28,21 @@ const io = new Server(server, {
 let MONGODB_URI = process.env.MONGODB_URI;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const PORT = process.env.PORT || 3000;
-const OWNER_USERNAME = 'Pi_Kid71';
+const OWNER_USERNAME = process.env.OWNER_USERNAME;
+const OWNER_EMAIL = process.env.OWNER_EMAIL;
+const OWNER_FULLNAME = process.env.OWNER_FULLNAME;
 const NODE_ENV = process.env.NODE_ENV || 'development';
+
+// Email configuration
+const EMAIL_USER = process.env.EMAIL_USER;
+const EMAIL_PASS = process.env.EMAIL_PASS;
 
 console.log('\n' + '='.repeat(70));
 console.log('🚀 BLACK HOLE CHAT V2 - SERVER STARTING');
 console.log('='.repeat(70));
 console.log(`📡 Port: ${PORT}`);
-console.log(`👑 Owner: ${OWNER_USERNAME}`);
+console.log(`👑 Owner: ${OWNER_USERNAME} (${OWNER_FULLNAME})`);
+console.log(`📧 Owner Email: ${OWNER_EMAIL}`);
 console.log(`🔑 Admin Password: ${ADMIN_PASSWORD ? '****' : 'default'}`);
 console.log(`🌍 Environment: ${NODE_ENV}`);
 console.log('='.repeat(70) + '\n');
@@ -40,8 +50,7 @@ console.log('='.repeat(70) + '\n');
 // ============================================
 // 📁 FILE UPLOAD CONFIGURATION
 // ============================================
-// allow override for platforms (Render) that mount a different uploads folder
-const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
+const uploadDir = process.env.UPLOAD_PATH || path.join(__dirname, 'uploads');
 console.log(`📁 Upload directory: ${uploadDir}`);
 
 // Create uploads directory if it doesn't exist
@@ -81,11 +90,16 @@ const fileFilter = (req, file, cb) => {
 
 const upload = multer({
   storage: storage,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
+  limits: { fileSize: parseInt(process.env.MAX_FILE_SIZE) || 50 * 1024 * 1024 },
   fileFilter: fileFilter
 });
 
-// Serve uploaded files with proper headers
+// Serve static files
+app.use(express.static(path.join(__dirname)));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Serve uploaded files
 app.use('/uploads', express.static(uploadDir, {
   setHeaders: (res, filePath) => {
     res.setHeader('Content-Disposition', 'inline');
@@ -108,7 +122,7 @@ const mongooseOptions = {
 };
 
 // Define schemas
-let User, Room, Message, Ban, Session, PrivateMessage, FileModel;
+let User, Room, Message, Ban, Session, PrivateMessage, FileModel, VerificationCode, MessageCount;
 
 async function connectToMongoDB() {
   if (!MONGODB_URI) {
@@ -126,7 +140,6 @@ async function connectToMongoDB() {
     
     initializeModels();
     setTimeout(() => initializeDefaultData(), 2000);
-    // Load recent data into memory store after defaults are ensured
     setTimeout(() => {
       try {
         loadInitialData();
@@ -138,8 +151,6 @@ async function connectToMongoDB() {
     return true;
   } catch (err) {
     console.error('❌❌❌ MONGODB CONNECTION FAILED:', err.message);
-    console.error('   Make sure your IP is whitelisted in MongoDB Atlas');
-    console.error('   Network Access → Add IP Address → Add Current IP');
     console.log('⚠️ Server will run in MEMORY-ONLY mode');
     return false;
   }
@@ -151,6 +162,8 @@ function initializeModels() {
   try {
     const UserSchema = new mongoose.Schema({
       username: { type: String, required: true, unique: true },
+      fullName: { type: String, required: true },
+      email: { type: String, required: true, unique: true },
       password: { type: String, required: true },
       rank: { 
         type: String, 
@@ -159,9 +172,11 @@ function initializeModels() {
       },
       createdAt: { type: Date, default: Date.now },
       lastLogin: { type: Date },
+      isVerified: { type: Boolean, default: false },
       isBanned: { type: Boolean, default: false },
       avatar: { type: String, default: null },
-      theme: { type: String, default: 'default' }
+      theme: { type: String, default: 'default' },
+      deviceIds: [{ type: String }]
     });
 
     const RoomSchema = new mongoose.Schema({
@@ -170,7 +185,8 @@ function initializeModels() {
       isDefault: { type: Boolean, default: false },
       createdBy: { type: String },
       createdAt: { type: Date, default: Date.now },
-      theme: { type: String, default: 'default' }
+      theme: { type: String, default: 'default' },
+      messages: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Message' }]
     });
 
     const MessageSchema = new mongoose.Schema({
@@ -204,7 +220,8 @@ function initializeModels() {
       userRank: { type: String, default: 'member' },
       roomName: { type: String },
       connectedAt: { type: Date, default: Date.now },
-      lastActivity: { type: Date, default: Date.now }
+      lastActivity: { type: Date, default: Date.now },
+      deviceId: { type: String }
     });
 
     const PrivateMessageSchema = new mongoose.Schema({
@@ -226,7 +243,23 @@ function initializeModels() {
       fileSize: { type: Number, required: true },
       fileType: { type: String, required: true },
       roomName: { type: String, default: null },
-      recipient: { type: String, default: null }
+      recipient: { type: String, default: null },
+      fileUrl: { type: String, required: true }
+    });
+
+    const VerificationCodeSchema = new mongoose.Schema({
+      email: { type: String, required: true, index: true },
+      code: { type: String, required: true },
+      fullName: { type: String, required: true },
+      username: { type: String, required: true },
+      password: { type: String, required: true },
+      createdAt: { type: Date, default: Date.now, expires: 600 } // 10 minutes expiry
+    });
+
+    const MessageCountSchema = new mongoose.Schema({
+      username: { type: String, required: true, unique: true },
+      count: { type: Number, default: 0 },
+      resetTime: { type: Date, default: Date.now }
     });
 
     User = mongoose.model('User', UserSchema);
@@ -236,6 +269,8 @@ function initializeModels() {
     Session = mongoose.model('Session', SessionSchema);
     PrivateMessage = mongoose.model('PrivateMessage', PrivateMessageSchema);
     FileModel = mongoose.model('File', FileModelSchema);
+    VerificationCode = mongoose.model('VerificationCode', VerificationCodeSchema);
+    MessageCount = mongoose.model('MessageCount', MessageCountSchema);
 
     console.log('✅ MongoDB models initialized');
     
@@ -260,24 +295,33 @@ async function initializeDefaultData() {
       console.log('✅ Default "Main" room created');
     }
 
+    // Create owner account with verification
     const owner = await User.findOne({ username: OWNER_USERNAME });
     if (!owner) {
+      const hashedPassword = await bcrypt.hash(ADMIN_PASSWORD, 10);
       await User.create({
         username: OWNER_USERNAME,
-        password: ADMIN_PASSWORD,
+        fullName: OWNER_FULLNAME,
+        email: OWNER_EMAIL,
+        password: hashedPassword,
         rank: 'owner',
+        isVerified: true,
         lastLogin: new Date(),
         theme: 'dark'
       });
-      console.log(`✅ Owner account created: ${OWNER_USERNAME}`);
+      console.log(`✅ Owner account created: ${OWNER_USERNAME} (${OWNER_EMAIL})`);
     }
 
     const admin = await User.findOne({ username: 'admin' });
     if (!admin) {
+      const hashedPassword = await bcrypt.hash(ADMIN_PASSWORD, 10);
       await User.create({
         username: 'admin',
-        password: ADMIN_PASSWORD,
+        fullName: 'Administrator',
+        email: 'admin@hsd.k12.or.us',
+        password: hashedPassword,
         rank: 'admin',
+        isVerified: true,
         lastLogin: new Date()
       });
       console.log('✅ Default admin account created');
@@ -288,64 +332,83 @@ async function initializeDefaultData() {
   }
 }
 
-// Load users, rooms, recent messages and bans from MongoDB into in-memory store
 async function loadInitialData() {
   if (!isMongoConnected) return;
   try {
     console.log('🔁 Loading initial data from MongoDB into memory store...');
 
+    // Load users
     const users = await User.find({}).lean();
     users.forEach(u => {
       memoryStore.users.set(u.username, {
         username: u.username,
+        fullName: u.fullName,
+        email: u.email,
         password: u.password,
         rank: u.rank || 'member',
-        theme: u.theme || 'default'
+        theme: u.theme || 'default',
+        isVerified: u.isVerified || false,
+        deviceIds: u.deviceIds || []
       });
     });
 
+    // Load rooms
     const rooms = await Room.find({}).lean();
-    rooms.forEach(r => {
-      if (!memoryStore.rooms.has(r.name)) {
-        memoryStore.rooms.set(r.name, {
-          name: r.name,
-          password: r.password || '',
-          isDefault: !!r.isDefault,
-          members: new Map(),
-          messages: [],
-          theme: r.theme || 'default'
-        });
-      } else {
-        const existing = memoryStore.rooms.get(r.name);
-        existing.theme = r.theme || existing.theme;
-      }
-    });
-
-    // Load recent messages per room (limit 200)
-    for (const [roomName, roomObj] of memoryStore.rooms.entries()) {
-      try {
-        const msgs = await Message.find({ roomName }).sort({ timestamp: -1 }).limit(200).lean();
-        roomObj.messages = msgs.reverse().map(m => ({
+    for (const r of rooms) {
+      const roomObj = {
+        name: r.name,
+        password: r.password || '',
+        isDefault: !!r.isDefault,
+        members: new Map(),
+        messages: [],
+        theme: r.theme || 'default'
+      };
+      
+      // Load messages for this room
+      if (r.messages && r.messages.length > 0) {
+        const msgs = await Message.find({ _id: { $in: r.messages } }).sort({ timestamp: 1 }).lean();
+        roomObj.messages = msgs.map(m => ({
           username: m.username,
           message: m.message,
-          // keep full Date object for consistency (client will format)
-          timestamp: m.timestamp || new Date(),
+          timestamp: m.timestamp,
           rank: m.senderRank || 'member',
           fileUrl: m.fileUrl || null,
           fileName: m.fileName || null,
           fileType: m.fileType || null,
           fileSize: m.fileSize || null
         }));
-      } catch (err) {
-        console.error(`Failed to load messages for room ${roomName}:`, err.message);
       }
+      
+      memoryStore.rooms.set(r.name, roomObj);
     }
 
+    // Load files
+    const files = await FileModel.find({}).lean();
+    files.forEach(f => {
+      if (!memoryStore.files.has(f.filename)) {
+        memoryStore.files.set(f.filename, {
+          filename: f.filename,
+          originalName: f.originalName,
+          uploadedBy: f.uploadedBy,
+          uploadedAt: f.uploadedAt,
+          fileSize: f.fileSize,
+          fileType: f.fileType,
+          roomName: f.roomName,
+          recipient: f.recipient,
+          fileUrl: f.fileUrl
+        });
+      }
+    });
+
     // Load active bans
-    const bans = await Ban.find({ isActive: true }).lean();
+    const bans = await Ban.find({ isActive: true, expiresAt: { $gt: new Date() } }).lean();
     bans.forEach(b => {
       const roomBans = memoryStore.bans.get(b.roomName) || [];
-      roomBans.push({ username: b.username, bannedBy: b.bannedBy, expiresAt: b.expiresAt });
+      roomBans.push({ 
+        username: b.username, 
+        bannedBy: b.bannedBy, 
+        expiresAt: b.expiresAt.getTime() 
+      });
       memoryStore.bans.set(b.roomName, roomBans);
     });
 
@@ -358,7 +421,19 @@ async function loadInitialData() {
       timestamp: pm.timestamp
     }));
 
+    // Load message counts
+    const msgCounts = await MessageCount.find({}).lean();
+    msgCounts.forEach(mc => {
+      memoryStore.messageCounts.set(mc.username, {
+        count: mc.count,
+        resetTime: mc.resetTime.getTime()
+      });
+    });
+
     console.log('✅ Initial data loaded into memory store');
+    console.log(`   Users: ${memoryStore.users.size}`);
+    console.log(`   Rooms: ${memoryStore.rooms.size}`);
+    console.log(`   Files: ${memoryStore.files.size}`);
   } catch (err) {
     console.error('❌ loadInitialData error:', err.message);
   }
@@ -367,77 +442,160 @@ async function loadInitialData() {
 connectToMongoDB();
 
 // ============================================
-// 🚀 EXPRESS MIDDLEWARE
+// 📧 EMAIL VERIFICATION SETUP
 // ============================================
-app.use(express.static(path.join(__dirname)));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: EMAIL_USER,
+    pass: EMAIL_PASS
+  }
+});
+
+// Email validation function
+function validateSchoolEmail(email) {
+  // Must end with hsd.k12.or.us
+  if (!email.endsWith('@hsd.k12.or.us')) {
+    return { valid: false, reason: 'Email must be from hsd.k12.or.us domain' };
+  }
+
+  const localPart = email.split('@')[0];
+  
+  // Check length: 21-22 characters total (including @hsd.k12.or.us)
+  // @hsd.k12.or.us is 15 characters
+  const localPartLength = localPart.length;
+  if (localPartLength < 6 || localPartLength > 7) { // 6-7 chars local + 15 domain = 21-22 total
+    return { valid: false, reason: 'Email must be 21-22 characters total' };
+  }
+
+  // Check first 4-5 characters are alphabetic
+  const alphaPart = localPart.match(/^[a-zA-Z]+/);
+  if (!alphaPart || alphaPart[0].length < 4 || alphaPart[0].length > 5) {
+    return { valid: false, reason: 'Email must start with 4-5 alphabetic characters' };
+  }
+
+  // Check for 3 numbers in the remaining part
+  const remainingPart = localPart.substring(alphaPart[0].length);
+  const numbers = remainingPart.match(/\d/g);
+  if (!numbers || numbers.length !== 3) {
+    return { valid: false, reason: 'Email must contain exactly 3 numbers after the alphabetic part' };
+  }
+
+  // Check remaining part after numbers is empty (should be just numbers)
+  if (remainingPart.length !== 3) {
+    return { valid: false, reason: 'Email format invalid - should be letters then exactly 3 numbers' };
+  }
+
+  return { valid: true };
+}
+
+// Generate 6-digit verification code
+function generateVerificationCode() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+// Send verification email
+async function sendVerificationEmail(email, code, fullName) {
+  const mailOptions = {
+    from: EMAIL_USER,
+    to: email,
+    subject: 'Black Hole Chat V2 - Email Verification',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px;">
+        <h1 style="color: white; text-align: center;">🕳️ Black Hole Chat V2</h1>
+        <div style="background: white; padding: 30px; border-radius: 8px; margin-top: 20px;">
+          <h2 style="color: #333; margin-top: 0;">Hello ${fullName}!</h2>
+          <p style="color: #666; font-size: 16px;">Your verification code is:</p>
+          <div style="background: #f0f0f0; padding: 20px; text-align: center; border-radius: 8px; margin: 20px 0;">
+            <span style="font-size: 36px; font-weight: bold; letter-spacing: 5px; color: #667eea;">${code}</span>
+          </div>
+          <p style="color: #666; font-size: 14px;">This code will expire in 10 minutes.</p>
+          <p style="color: #999; font-size: 12px; margin-top: 30px;">If you didn't request this, please ignore this email.</p>
+        </div>
+      </div>
+    `
+  };
+
+  await transporter.sendMail(mailOptions);
+}
 
 // ============================================
-// 🖼️ IMAGE GENERATION (Stable Horde fallback)
+// 🖼️ IMAGE GENERATION
 // ============================================
-const imageJobs = new Map(); // requestId -> { status, url, prompt, createdAt }
+const imageJobs = new Map();
 
 app.post('/api/generate-image', async (req, res) => {
   try {
     const { prompt, size = '512', model = '' } = req.body || {};
     if (!prompt) return res.status(400).json({ error: 'Missing prompt' });
 
-    const key = process.env.STABLE_HORDE_API_KEY;
-    if (!key) return res.status(500).json({ error: 'Stable Horde API key not configured (STABLE_HORDE_API_KEY)' });
+    const DEAPI_API_KEY = process.env.DEAPI_API_KEY;
+    if (!DEAPI_API_KEY) {
+      return res.status(500).json({ error: 'Image API key not configured' });
+    }
 
-    // Build request payload for Stable Horde
-    const width = parseInt(size, 10) || 512;
+    const width = parseInt(size) || 512;
     const height = width;
-    const steps = 20;
 
-    const body = {
-      prompt: prompt,
-      params: {
-        steps: steps,
-        width: width,
-        height: height,
-        cfg_scale: 7
-      }
+    const bodyObj = {
+      prompt,
+      seed: Math.floor(Math.random() * 1000000),
+      width,
+      height,
+      steps: 20
     };
+    if (model) bodyObj.model = model;
 
-    const createResp = await fetch('https://stablehorde.net/api/v2/generate/text2img', {
-      method: 'POST',
-      headers: {
-        'apikey': key,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(body)
-    });
+    const candidateModels = [];
+    if (model) candidateModels.push(model);
+    candidateModels.push('Flux1schnell', 'prodia/sdxl', 'sdxl', 'stabilityai/sdxl', 'stabilityai/stable-diffusion-3-5-large', 'black-forest-labs/flux-schnell');
 
-    const createJson = await createResp.json().catch(() => null);
-    if (!createResp.ok || !createJson) {
-      const details = createJson || { status: createResp.status, statusText: createResp.statusText };
-      return res.status(502).json({ error: 'Image provider error', details });
-    }
+    let data = null;
+    let lastErr = null;
 
-    const requestId = createJson?.id || createJson?.generations?.[0]?.id || createJson?.request_id || createJson?.task_id;
-    if (!requestId) {
-      // If provider returned an image immediately
-      const maybeImage = extractImageFromProvider(createJson);
-      if (maybeImage) {
-        const fileName = `gen-${Date.now()}.png`;
-        const filePath = path.join(uploadDir, fileName);
-        await fs.writeFile(filePath, Buffer.from(maybeImage, 'base64'));
-        const url = `/uploads/${fileName}`;
-        return res.json({ imageUrl: url });
+    for (const candidate of candidateModels) {
+      try {
+        const tryBody = { ...bodyObj, model: candidate };
+        const resp = await fetch('https://api.deapi.ai/api/v1/client/txt2img', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${DEAPI_API_KEY}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify(tryBody)
+        });
+
+        if (!resp.ok) {
+          const errData = await resp.json().catch(() => ({}));
+          lastErr = errData;
+          continue;
+        }
+
+        data = await resp.json();
+        break;
+      } catch (err) {
+        lastErr = { message: err.message };
       }
-      return res.status(502).json({ error: 'Image provider did not return request id' , details: createJson});
     }
 
-    // store job as pending and start background poller
-    imageJobs.set(requestId, { status: 'pending', url: null, prompt, createdAt: Date.now() });
-    pollStableHordeResult(requestId, key);
+    if (!data) {
+      return res.status(502).json({ error: 'Image provider error', details: lastErr || {} });
+    }
 
-    return res.json({ requestId, status: 'pending' });
+    let imageUrl = null;
+    if (data.data && data.data[0] && data.data[0].url) imageUrl = data.data[0].url;
+    else if (data.images && data.images[0] && data.images[0].url) imageUrl = data.images[0].url;
+    else if (data.output && data.output[0]) imageUrl = data.output[0];
+    else if (data.url) imageUrl = data.url;
+    else if (data.image) imageUrl = data.image;
+
+    if (!imageUrl) return res.status(500).json({ error: 'Could not extract image from provider response', details: data });
+
+    return res.json({ imageUrl });
   } catch (err) {
     console.error('generate-image error:', err);
-    return res.status(500).json({ error: 'Internal server error', message: err.message });
+    return res.status(500).json({ error: err.message });
   }
 });
 
@@ -447,78 +605,48 @@ app.get('/api/image-result/:id', async (req, res) => {
   return res.json(imageJobs.get(id));
 });
 
-function extractImageFromProvider(json) {
-  try {
-    if (!json) return null;
-    // common patterns
-    if (json.images && Array.isArray(json.images) && json.images[0]) return json.images[0];
-    if (json.data && Array.isArray(json.data) && json.data[0]?.b64_json) return json.data[0].b64_json;
-    if (json.result && json.result[0]?.b64) return json.result[0].b64;
-    if (json.image && typeof json.image === 'string') return json.image;
-    return null;
-  } catch (e) {
-    return null;
-  }
-}
-
-async function pollStableHordeResult(requestId, key) {
-  const endpoints = [
-    `https://stablehorde.net/api/v2/generate/status/${requestId}`,
-    `https://stablehorde.net/api/v2/generate/${requestId}/status`,
-    `https://stablehorde.net/api/v2/generate/${requestId}`,
-    `https://stablehorde.net/api/v2/generate/${requestId}/result`,
-    `https://stablehorde.net/api/v2/generate/status/${requestId}/result`
-  ];
-
-  const maxAttempts = 30;
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    for (const ep of endpoints) {
-      try {
-        const r = await fetch(ep, { headers: { 'apikey': key } });
-        const j = await r.json().catch(() => null);
-        if (!j) continue;
-
-        // check for ready images
-        const imgB64 = extractImageFromProvider(j) || (Array.isArray(j.generations) && j.generations[0]?.img) || (j.generations && j.generations[0]?.b64);
-        if (imgB64) {
-          const fileName = `gen-${Date.now()}.png`;
-          const filePath = path.join(uploadDir, fileName);
-          await fs.writeFile(filePath, Buffer.from(imgB64, 'base64'));
-          const url = `/uploads/${fileName}`;
-          imageJobs.set(requestId, { status: 'done', url, prompt: imageJobs.get(requestId)?.prompt, createdAt: Date.now() });
-          return;
-        }
-
-        // some responses include 'done' flag or 'status'
-        if (j.status && (j.status === 'done' || j.status === 'completed')) {
-          // try to find images field
-          const img = extractImageFromProvider(j);
-          if (img) {
-            const fileName = `gen-${Date.now()}.png`;
-            const filePath = path.join(uploadDir, fileName);
-            await fs.writeFile(filePath, Buffer.from(img, 'base64'));
-            const url = `/uploads/${fileName}`;
-            imageJobs.set(requestId, { status: 'done', url, prompt: imageJobs.get(requestId)?.prompt, createdAt: Date.now() });
-            return;
-          }
-        }
-      } catch (err) {
-        // ignore individual endpoint errors and continue
-      }
-    }
-
-    // wait before next attempt
-    await new Promise(r => setTimeout(r, 2000));
-  }
-
-  // mark as failed after attempts
-  imageJobs.set(requestId, { status: 'failed', url: null, prompt: imageJobs.get(requestId)?.prompt, createdAt: Date.now() });
-}
-
-
 // ============================================
 // 🏥 HEALTH CHECK ENDPOINT
 // ============================================
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    mongodb: isMongoConnected ? 'connected' : 'disconnected',
+    version: '2.0.0'
+  });
+});
+
+app.get('/stats', async (req, res) => {
+  const stats = {
+    mongodb: isMongoConnected ? 'connected' : 'disconnected',
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    timestamp: new Date().toISOString()
+  };
+
+  if (isMongoConnected && User && Room) {
+    try {
+      stats.users = await User.countDocuments();
+      stats.verifiedUsers = await User.countDocuments({ isVerified: true });
+      stats.admins = await User.countDocuments({ rank: 'admin' });
+      stats.owners = await User.countDocuments({ rank: 'owner' });
+      stats.rooms = await Room.countDocuments();
+      stats.messages = await Message.countDocuments();
+      stats.files = await FileModel.countDocuments();
+    } catch (err) {
+      stats.error = err.message;
+    }
+  }
+
+  res.json(stats);
+});
+
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
 // ============================================
 // 📁 FILE UPLOAD ENDPOINT
 // ============================================
@@ -542,7 +670,6 @@ app.post('/upload', upload.single('file'), async (req, res) => {
       try {
         const optimizedPath = path.join(uploadDir, 'opt-' + req.file.filename);
         
-        // Moderate compression for regular users
         await sharp(req.file.path)
           .resize(1920, 1080, { fit: 'inside', withoutEnlargement: true })
           .jpeg({ quality: 75, progressive: true })
@@ -553,26 +680,39 @@ app.post('/upload', upload.single('file'), async (req, res) => {
         const stats = await fs.stat(optimizedPath);
         fileSize = stats.size;
         fileType = 'image/jpeg';
-        console.log(`🖼️ Image optimized for regular user: ${fileSize} bytes (${Math.round((1 - fileSize/req.file.size)*100)}% smaller)`);
+        console.log(`🖼️ Image optimized for regular user: ${fileSize} bytes`);
       } catch (imgErr) {
         console.error('Image optimization error:', imgErr.message);
       }
-    } else if (req.file.mimetype.startsWith('image/') && isOwner) {
-      console.log(`👑 Owner uploaded image - keeping original quality`);
     }
 
     const fileUrl = `/uploads/${path.basename(finalPath)}`;
     
+    // Save to MongoDB
     if (isMongoConnected && FileModel) {
       try {
-        await FileModel.create({
+        const fileDoc = await FileModel.create({
           filename: path.basename(finalPath),
           originalName: req.file.originalname,
           uploadedBy: uploadedBy,
           fileSize: fileSize,
           fileType: fileType,
           roomName: req.body.roomName || null,
-          recipient: req.body.recipient || null
+          recipient: req.body.recipient || null,
+          fileUrl: fileUrl
+        });
+        
+        // Also save to memory store
+        memoryStore.files.set(path.basename(finalPath), {
+          filename: path.basename(finalPath),
+          originalName: req.file.originalname,
+          uploadedBy: uploadedBy,
+          uploadedAt: fileDoc.uploadedAt,
+          fileSize: fileSize,
+          fileType: fileType,
+          roomName: req.body.roomName || null,
+          recipient: req.body.recipient || null,
+          fileUrl: fileUrl
         });
       } catch (dbErr) {
         console.error('Failed to save file metadata to DB:', dbErr.message);
@@ -611,143 +751,10 @@ app.get('/download/:filename', async (req, res) => {
 });
 
 // ============================================
-// 📊 API ENDPOINTS
-// ============================================
-
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    mongodb: isMongoConnected ? 'connected' : 'disconnected',
-    version: '2.0.0'
-  });
-});
-
-app.get('/stats', async (req, res) => {
-  const stats = {
-    mongodb: isMongoConnected ? 'connected' : 'disconnected',
-    uptime: process.uptime(),
-    memory: process.memoryUsage(),
-    timestamp: new Date().toISOString()
-  };
-
-  if (isMongoConnected && User && Room) {
-    try {
-      stats.users = await User.countDocuments();
-      stats.admins = await User.countDocuments({ rank: 'admin' });
-      stats.owners = await User.countDocuments({ rank: 'owner' });
-      stats.rooms = await Room.countDocuments();
-      stats.messages = await Message.countDocuments();
-    } catch (err) {
-      stats.error = err.message;
-    }
-  }
-
-  res.json(stats);
-});
-
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-// ========== IMAGE GENERATION PROXY (server-side) ==========
-app.post('/api/generate-image', express.json(), async (req, res) => {
-  if (!isMongoConnected && !process.env.DEAPI_API_KEY) {
-    // still allow if env key present
-  }
-
-  try {
-    const { prompt, size = '512', model } = req.body;
-    if (!prompt || prompt.trim() === '') return res.status(400).json({ error: 'Missing prompt' });
-
-    const DEAPI_API_KEY = process.env.DEAPI_API_KEY || process.env.DEAPI_API_KEY || '';
-    if (!DEAPI_API_KEY) return res.status(500).json({ error: 'Image API key not configured' });
-
-    const width = parseInt(size) || 512;
-    const height = width;
-
-    const bodyObj = {
-      prompt,
-      seed: Math.floor(Math.random() * 1000000),
-      width,
-      height,
-      steps: 20
-    };
-    if (model) bodyObj.model = model;
-
-    // Try requested model first; if it fails due to non-existent model, try fallbacks
-    const candidateModels = [];
-    if (model) candidateModels.push(model);
-    // Add known DeAPI client model slugs as fallbacks (from provider listing)
-    candidateModels.push('Flux1schnell', 'prodia/sdxl', 'sdxl', 'stabilityai/sdxl', 'stabilityai/stable-diffusion-3-5-large', 'black-forest-labs/flux-schnell');
-
-    let data = null;
-    let lastErr = null;
-
-    for (const candidate of candidateModels) {
-      try {
-        const tryBody = { ...bodyObj, model: candidate };
-        const resp = await fetch('https://api.deapi.ai/api/v1/client/txt2img', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${DEAPI_API_KEY}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify(tryBody)
-        });
-
-        if (!resp.ok) {
-          const errData = await resp.json().catch(() => ({}));
-          lastErr = errData;
-
-          // If the model specifically doesn't exist, try next candidate
-          if (errData && errData.errors && errData.errors.model && Array.isArray(errData.errors.model) && errData.errors.model.some(e => /does not exist|required/i.test(e))) {
-            continue;
-          }
-
-          // Otherwise stop and return provider error
-          return res.status(502).json({ error: 'Image provider error', details: errData });
-        }
-
-        data = await resp.json();
-        // success
-        break;
-      } catch (err) {
-        lastErr = { message: err.message };
-      }
-    }
-
-    if (!data) {
-      return res.status(502).json({ error: 'Image provider error', details: lastErr || {} });
-    }
-
-    // try to extract image url/base64
-    let imageUrl = null;
-    if (data.data && data.data[0] && data.data[0].url) imageUrl = data.data[0].url;
-    else if (data.images && data.images[0] && data.images[0].url) imageUrl = data.images[0].url;
-    else if (data.output && data.output[0]) imageUrl = data.output[0];
-    else if (data.url) imageUrl = data.url;
-    else if (data.image) imageUrl = data.image;
-
-    if (!imageUrl) return res.status(500).json({ error: 'Could not extract image from provider response', details: data });
-
-    return res.json({ imageUrl });
-  } catch (err) {
-    console.error('generate-image error:', err);
-    return res.status(500).json({ error: err.message });
-  }
-});
-
-// ============================================
 // 🔧 IN-MEMORY STORAGE
 // ============================================
 const memoryStore = {
-  users: new Map([
-    [OWNER_USERNAME, { username: OWNER_USERNAME, password: ADMIN_PASSWORD, rank: 'owner', theme: 'dark' }],
-    ['admin', { username: 'admin', password: ADMIN_PASSWORD, rank: 'admin', theme: 'default' }]
-  ]),
+  users: new Map(),
   rooms: new Map([['Main', { 
     name: 'Main', 
     password: '', 
@@ -757,13 +764,15 @@ const memoryStore = {
     theme: 'default'
   }]]),
   sessions: new Map(),
-  bans: new Map(),            // room-specific bans by username
-  mutes: new Map(),           // room-specific mutes by username
-  deviceBans: new Map(),      // global bans keyed by deviceId
-  deviceMutes: new Map(),     // global mutes keyed by deviceId
-  userDevices: new Map(),     // map username -> Set of deviceIds seen
-  spam: new Map(),              // track recent messages per user for spam detection
-  privateMessages: []
+  bans: new Map(),
+  mutes: new Map(),
+  deviceBans: new Map(),
+  deviceMutes: new Map(),
+  userDevices: new Map(),
+  spam: new Map(),
+  privateMessages: [],
+  files: new Map(),
+  messageCounts: new Map()
 };
 
 // ============================================
@@ -796,7 +805,6 @@ function isUserMuted(username, roomName) {
   return false;
 }
 
-// device helpers
 function isDeviceBanned(deviceId) {
   if (!deviceId) return false;
   if (memoryStore.deviceBans.has(deviceId)) {
@@ -825,14 +833,12 @@ function isDeviceMuted(deviceId) {
   return false;
 }
 
-// spam utility
 function recordMessage(username, text) {
   if (!memoryStore.spam.has(username)) {
     memoryStore.spam.set(username, []);
   }
   const now = Date.now();
   const arr = memoryStore.spam.get(username);
-  // remove stale entries older than 2 minutes
   while (arr.length && now - arr[0].time > 2 * 60 * 1000) {
     arr.shift();
   }
@@ -841,9 +847,82 @@ function recordMessage(username, text) {
   return count;
 }
 
-// simple n-word regex (covers nigga and nigger)
-const NWORD_REGEX = /(nigga|nigger)/i;
+// Check if unverified user can send message (5 per 10 minutes)
+async function checkMessageLimit(username) {
+  if (!isMongoConnected) return true; // Allow if no DB
+  
+  try {
+    const user = await User.findOne({ username });
+    if (user && user.isVerified) return true; // Verified users have no limit
+    
+    const now = Date.now();
+    let msgCount = memoryStore.messageCounts.get(username);
+    
+    if (!msgCount) {
+      // Check DB
+      const dbCount = await MessageCount.findOne({ username });
+      if (dbCount) {
+        msgCount = {
+          count: dbCount.count,
+          resetTime: dbCount.resetTime.getTime()
+        };
+        memoryStore.messageCounts.set(username, msgCount);
+      } else {
+        msgCount = { count: 0, resetTime: now };
+        memoryStore.messageCounts.set(username, msgCount);
+        await MessageCount.create({ username, count: 0, resetTime: new Date(now) });
+      }
+    }
+    
+    // Reset if 10 minutes have passed
+    if (now - msgCount.resetTime > 10 * 60 * 1000) {
+      msgCount.count = 0;
+      msgCount.resetTime = now;
+      await MessageCount.updateOne(
+        { username },
+        { count: 0, resetTime: new Date(now) },
+        { upsert: true }
+      );
+    }
+    
+    return msgCount.count < 5;
+  } catch (err) {
+    console.error('Error checking message limit:', err);
+    return true; // Allow on error
+  }
+}
 
+async function incrementMessageCount(username) {
+  if (!isMongoConnected) return;
+  
+  try {
+    let msgCount = memoryStore.messageCounts.get(username);
+    const now = Date.now();
+    
+    if (!msgCount) {
+      msgCount = { count: 0, resetTime: now };
+      memoryStore.messageCounts.set(username, msgCount);
+    }
+    
+    // Reset if 10 minutes have passed
+    if (now - msgCount.resetTime > 10 * 60 * 1000) {
+      msgCount.count = 0;
+      msgCount.resetTime = now;
+    }
+    
+    msgCount.count++;
+    
+    await MessageCount.updateOne(
+      { username },
+      { count: msgCount.count, resetTime: new Date(msgCount.resetTime) },
+      { upsert: true }
+    );
+  } catch (err) {
+    console.error('Error incrementing message count:', err);
+  }
+}
+
+const NWORD_REGEX = /(nigga|nigger)/i;
 
 function parseDuration(durationStr) {
   const match = durationStr.match(/^(\d+)([mhd])$/);
@@ -881,7 +960,7 @@ const PERMISSIONS = {
     canUnban: true, 
     canMute: true,
     canDeleteRoom: true, 
-    canClear: true, 
+    canClear: false, // Only owner can clear
     canGrant: ['moderator', 'vip', 'member'], 
     canUseEffects: true, 
     canUpload: true, 
@@ -895,9 +974,9 @@ const PERMISSIONS = {
     canUnban: false, 
     canMute: true,
     canDeleteRoom: false, 
-    canClear: true, 
+    canClear: false, 
     canGrant: [], 
-    canUseEffects: true,    // moderators also get vip commands
+    canUseEffects: true,
     canUpload: true, 
     canVoice: true, 
     canVideo: true,
@@ -911,7 +990,7 @@ const PERMISSIONS = {
     canDeleteRoom: false, 
     canClear: false, 
     canGrant: [], 
-    canUseEffects: true,   // vip allowed to trigger effects
+    canUseEffects: true,
     canUpload: true, 
     canVoice: true, 
     canVideo: true,
@@ -938,44 +1017,39 @@ const PERMISSIONS = {
 // ============================================
 
 io.on('connection', (socket) => {
-    // Simple ping handler for latency checks from clients (acknowledgement)
-    socket.on('ping', (cb) => {
-      try {
-        if (typeof cb === 'function') cb();
-      } catch (err) {
-        // ignore
-      }
-    });
+  socket.on('ping', (cb) => {
+    try {
+      if (typeof cb === 'function') cb();
+    } catch (err) {}
+  });
+  
   console.log(`👤 New connection: ${socket.id} (Total: ${io.engine.clientsCount})`);
   
   let currentUser = null;
   let currentRoom = null;
   let userRank = 'member';
+  let isVerified = false;
   
   // ========== AUTHENTICATION ==========
   
   socket.on('login', async (data) => {
     try {
       let { username, password, rememberMe, deviceId: providedDevice } = data;
-      // sanitize username: spaces -> underscores
       if (username) {
         const sanitized = username.replace(/\s+/g, '_');
         if (sanitized !== username) {
           username = sanitized;
         }
       }
-      // disallow n-word in username
       if (username && NWORD_REGEX.test(username)) {
         return socket.emit('auth_error', { message: 'Invalid username' });
       }
 
       console.log(`🔑 Login attempt: ${username} (device=${providedDevice || 'unknown'})`);
 
-      // attach device id for this session
       let deviceId = providedDevice || null;
       if (deviceId && typeof deviceId !== 'string') deviceId = String(deviceId);
 
-      // check device bans/mutes before doing anything else
       if (isDeviceBanned(deviceId)) {
         return socket.emit('auth_error', { message: '⛔ This device is banned' });
       }
@@ -987,12 +1061,12 @@ io.on('connection', (socket) => {
         return socket.emit('auth_error', { message: 'Username and password required' });
       }
 
-      const createSession = (name, rank, theme) => {
+      const createSession = (name, rank, theme, verified) => {
         currentUser = name;
         userRank = rank;
+        isVerified = verified;
         memoryStore.sessions.set(socket.id, { username: name, rank, roomName: null, deviceId });
 
-        // remember which devices the user has used
         if (deviceId) {
           if (!memoryStore.userDevices.has(name)) {
             memoryStore.userDevices.set(name, new Set());
@@ -1000,35 +1074,49 @@ io.on('connection', (socket) => {
           memoryStore.userDevices.get(name).add(deviceId);
         }
 
-        socket.emit('auth_success', { username: name, rank, theme, message: `Login successful!` });
+        socket.emit('auth_success', { 
+          username: name, 
+          rank, 
+          theme, 
+          isVerified: verified,
+          message: `Login successful!` 
+        });
       };
 
-      if (username === OWNER_USERNAME && password === ADMIN_PASSWORD) {
-        createSession(username, 'owner', 'dark');
-        console.log(`✅ Owner logged in: ${username}`);
-        return;
-      }
-
-      if (username === 'admin' && password === ADMIN_PASSWORD) {
-        createSession(username, 'admin', 'default');
-        console.log(`✅ Admin logged in: ${username}`);
-        return;
-      }
-
+      // Check in-memory store first
       if (memoryStore.users.has(username)) {
         const user = memoryStore.users.get(username);
-        if (user.password === password) {
-          createSession(username, user.rank || 'member', user.theme || 'default');
-          console.log(`✅ User logged in: ${username} (${user.rank})`);
+        const isValid = await bcrypt.compare(password, user.password);
+        if (isValid) {
+          createSession(username, user.rank || 'member', user.theme || 'default', user.isVerified || false);
+          console.log(`✅ User logged in: ${username} (${user.rank}) ${user.isVerified ? '✓' : '✗'}`);
           return;
         }
       }
 
-      if (!memoryStore.users.has(username)) {
-        memoryStore.users.set(username, { username, password, rank: 'member', theme: 'default' });
-        createSession(username, 'member', 'default');
-        console.log(`✅ New user created: ${username}`);
-        return;
+      // Check MongoDB
+      if (isMongoConnected && User) {
+        const user = await User.findOne({ username });
+        if (user) {
+          const isValid = await bcrypt.compare(password, user.password);
+          if (isValid) {
+            // Update memory store
+            memoryStore.users.set(username, {
+              username: user.username,
+              fullName: user.fullName,
+              email: user.email,
+              password: user.password,
+              rank: user.rank,
+              theme: user.theme,
+              isVerified: user.isVerified,
+              deviceIds: user.deviceIds || []
+            });
+            
+            createSession(username, user.rank, user.theme, user.isVerified);
+            console.log(`✅ User logged in from DB: ${username} (${user.rank}) ${user.isVerified ? '✓' : '✗'}`);
+            return;
+          }
+        }
       }
 
       socket.emit('auth_error', { message: 'Invalid credentials' });
@@ -1039,69 +1127,129 @@ io.on('connection', (socket) => {
     }
   });
   
-  socket.on('register', async (data) => {
+  socket.on('request_verification', async (data) => {
     try {
-      let { username, password, deviceId: providedDevice } = data;
-      // sanitize username spaces
-      if (username) {
-        username = username.replace(/\s+/g, '_');
-      }
-      if (username && NWORD_REGEX.test(username)) {
-        return socket.emit('auth_error', { message: 'Invalid username' });
-      }
-      let deviceId = providedDevice || null;
-      if (deviceId && typeof deviceId !== 'string') deviceId = String(deviceId);
-
-      // device ban/mute checks
-      if (isDeviceBanned(deviceId)) {
-        return socket.emit('auth_error', { message: '⛔ This device is banned' });
-      }
-      if (isDeviceMuted(deviceId)) {
-        return socket.emit('auth_error', { message: '🔇 This device is muted' });
-      }
-
-      if (!username || !password) {
-        return socket.emit('auth_error', { message: 'Username and password required' });
+      const { fullName, email, username, password } = data;
+      
+      // Validate email
+      const emailValidation = validateSchoolEmail(email);
+      if (!emailValidation.valid) {
+        return socket.emit('auth_error', { message: emailValidation.reason });
       }
       
-      if (username.length < 3) {
-        return socket.emit('auth_error', { message: 'Username must be at least 3 characters' });
+      // Check if email already exists (except owner's email which allows up to 10 accounts)
+      if (email !== OWNER_EMAIL) {
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
+          return socket.emit('auth_error', { message: 'Email already registered' });
+        }
+      } else {
+        // Owner's email - check if less than 10 accounts
+        const ownerAccounts = await User.countDocuments({ email: OWNER_EMAIL });
+        if (ownerAccounts >= 10) {
+          return socket.emit('auth_error', { message: 'Maximum accounts for this email reached' });
+        }
       }
       
-      if (password.length < 4) {
-        return socket.emit('auth_error', { message: 'Password must be at least 4 characters' });
+      // Check if username exists
+      const existingUsername = await User.findOne({ username });
+      if (existingUsername) {
+        return socket.emit('auth_error', { message: 'Username already taken' });
       }
       
-      if (username === OWNER_USERNAME || username === 'admin') {
-        return socket.emit('auth_error', { message: 'Username reserved' });
+      // Generate verification code
+      const code = generateVerificationCode();
+      const hashedPassword = await bcrypt.hash(password, 10);
+      
+      // Save verification data
+      await VerificationCode.create({
+        email,
+        code,
+        fullName,
+        username,
+        password: hashedPassword
+      });
+      
+      // Send email
+      await sendVerificationEmail(email, code, fullName);
+      
+      socket.emit('verification_sent', { 
+        message: 'Verification code sent to your email',
+        email 
+      });
+      
+      console.log(`📧 Verification code sent to ${email} for user ${username}`);
+      
+    } catch (err) {
+      console.error('Verification request error:', err);
+      socket.emit('auth_error', { message: 'Failed to send verification code' });
+    }
+  });
+  
+  socket.on('verify_code', async (data) => {
+    try {
+      const { email, code } = data;
+      
+      const verification = await VerificationCode.findOne({ 
+        email, 
+        code,
+        createdAt: { $gt: new Date(Date.now() - 10 * 60 * 1000) } // Within 10 minutes
+      });
+      
+      if (!verification) {
+        return socket.emit('auth_error', { message: 'Invalid or expired verification code' });
       }
       
-      if (memoryStore.users.has(username)) {
-        return socket.emit('auth_error', { message: 'Username already exists' });
-      }
+      // Create user
+      const user = await User.create({
+        username: verification.username,
+        fullName: verification.fullName,
+        email: verification.email,
+        password: verification.password,
+        isVerified: true,
+        lastLogin: new Date()
+      });
       
-      memoryStore.users.set(username, { username, password, rank: 'member', theme: 'default' });
-      memoryStore.sessions.set(socket.id, { username, rank: 'member', roomName: null, deviceId });
-      
-      if (deviceId) {
-        if (!memoryStore.userDevices.has(username)) memoryStore.userDevices.set(username, new Set());
-        memoryStore.userDevices.get(username).add(deviceId);
-      }
-      
-      currentUser = username;
-      userRank = 'member';
-      
-      socket.emit('auth_success', { 
-        username, 
+      // Add to memory store
+      memoryStore.users.set(verification.username, {
+        username: verification.username,
+        fullName: verification.fullName,
+        email: verification.email,
+        password: verification.password,
         rank: 'member',
+        theme: 'default',
+        isVerified: true,
+        deviceIds: []
+      });
+      
+      // Delete verification code
+      await VerificationCode.deleteOne({ _id: verification._id });
+      
+      // Auto login
+      currentUser = verification.username;
+      userRank = 'member';
+      isVerified = true;
+      
+      memoryStore.sessions.set(socket.id, { 
+        username: verification.username, 
+        rank: 'member', 
+        roomName: null,
+        deviceId: null 
+      });
+      
+      socket.emit('auth_success', {
+        username: verification.username,
+        rank: 'member',
+        theme: 'default',
+        isVerified: true,
         message: 'Registration successful!'
       });
       
-      console.log(`✅ User registered: ${username}`);
+      console.log(`✅ User registered and verified: ${verification.username} (${verification.email})`);
       
     } catch (err) {
-      console.error('Registration error:', err);
-      socket.emit('auth_error', { message: 'Server error' });
+      console.error('Verification error:', err);
+      socket.emit('auth_error', { message: 'Failed to verify code' });
     }
   });
   
@@ -1121,10 +1269,12 @@ io.on('connection', (socket) => {
   socket.on('check_auth', () => {
     const session = memoryStore.sessions.get(socket.id);
     if (session) {
+      const user = memoryStore.users.get(session.username);
       socket.emit('auth_status', { 
         authenticated: true, 
         username: session.username,
-        rank: session.rank
+        rank: session.rank,
+        isVerified: user?.isVerified || false
       });
     } else {
       socket.emit('auth_status', { authenticated: false });
@@ -1175,8 +1325,6 @@ io.on('connection', (socket) => {
     }
   });
   
-  // ========== ENHANCED USER LIST COMMAND ==========
-  
   socket.on('get_user_list', (data) => {
     try {
       if (!currentUser || !currentRoom) {
@@ -1185,7 +1333,6 @@ io.on('connection', (socket) => {
       
       const { roomName } = data;
       
-      // Get all users in current room
       const roomUsers = [];
       for (const [sid, session] of memoryStore.sessions) {
         if (session.roomName === roomName && session.username !== currentUser) {
@@ -1196,20 +1343,16 @@ io.on('connection', (socket) => {
         }
       }
       
-      // Get all registered users
       const allUsers = Array.from(memoryStore.users.keys()).filter(u => u !== currentUser);
       
-      // Get users in other rooms
       const otherRoomUsers = [];
       const notOnlineUsers = [];
       
       allUsers.forEach(username => {
-        // Skip if already in current room
         if (roomUsers.some(u => u.username === username)) {
           return;
         }
         
-        // Check if user is online
         let isOnline = false;
         let userRoom = null;
         let userRank = memoryStore.users.get(username)?.rank || 'member';
@@ -1236,14 +1379,12 @@ io.on('connection', (socket) => {
         }
       });
       
-      // Sort by rank
       const rankOrder = { 'owner': 1, 'admin': 2, 'moderator': 3, 'vip': 4, 'member': 5 };
       
       roomUsers.sort((a, b) => (rankOrder[a.rank] || 5) - (rankOrder[b.rank] || 5));
       otherRoomUsers.sort((a, b) => (rankOrder[a.rank] || 5) - (rankOrder[b.rank] || 5));
       notOnlineUsers.sort((a, b) => (rankOrder[a.rank] || 5) - (rankOrder[b.rank] || 5));
       
-      // Send back to client
       socket.emit('user_list', {
         currentRoom: roomName,
         roomUsers,
@@ -1264,9 +1405,7 @@ io.on('connection', (socket) => {
       }
       
       let { roomName, password, theme = 'default' } = data;
-      // sanitize spaces to underscores
       if (roomName) roomName = roomName.replace(/\s+/g, '_');
-      // disallow n-word in name or password
       if (NWORD_REGEX.test(roomName) || (password && NWORD_REGEX.test(password))) {
         return socket.emit('error', { message: 'Invalid room name or password' });
       }
@@ -1320,7 +1459,6 @@ io.on('connection', (socket) => {
       if (!currentUser) {
         return socket.emit('error', { message: 'Not authenticated' });
       }
-      // ensure device isn't banned
       if (isDeviceBanned(memoryStore.sessions.get(socket.id)?.deviceId)) {
         return socket.emit('error', { message: '⛔ This device is banned' });
       }
@@ -1426,7 +1564,7 @@ io.on('connection', (socket) => {
   
   // ========== MESSAGES ==========
   
-  socket.on('chat message', (msg) => {
+  socket.on('chat message', async (msg) => {
     try {
       if (!currentUser || !currentRoom) return;
       
@@ -1442,9 +1580,18 @@ io.on('connection', (socket) => {
         return;
       }
 
+      // Check message limit for unverified users
+      const canSend = await checkMessageLimit(currentUser);
+      if (!canSend) {
+        socket.emit('system_message', { 
+          message: '⏱️ Unverified users can only send 5 messages per 10 minutes. Please verify your email.', 
+          timestamp: new Date() 
+        });
+        return;
+      }
+
       const text = (msg.message || '').trim();
 
-      // n-word filter: automatic 10m ban (skip owner/admin)
       if (NWORD_REGEX.test(text)) {
         if (['owner','admin'].includes(userRank)) {
           console.log(`🚫 n-word detected from ${currentUser} (${userRank}) but user exempt`);
@@ -1475,7 +1622,6 @@ io.on('connection', (socket) => {
         }
       }
 
-      // spam detection (non-moderator ranks)
       if (!['moderator', 'admin', 'owner'].includes(userRank)) {
         const spamCount = recordMessage(currentUser, text);
         if (spamCount >= 3) {
@@ -1521,9 +1667,11 @@ io.on('connection', (socket) => {
         if (room.messages.length > 100) room.messages.shift();
       }
       
-      // send message to everyone in room (including sender) so that
-      // the client can rely on the server-provided timestamp and avoid
-      // having to manually echo its own message immediately.
+      // Increment message count for unverified users
+      if (!isVerified) {
+        await incrementMessageCount(currentUser);
+      }
+      
       io.to(currentRoom).emit('chat message', messageData);
       
     } catch (err) {
@@ -1562,7 +1710,6 @@ io.on('connection', (socket) => {
         memoryStore.privateMessages.shift();
       }
       
-      // send message to recipient if connected
       let recipientSocketId = null;
       for (const [sid, session] of memoryStore.sessions) {
         if (session.username === recipient) {
@@ -1576,7 +1723,6 @@ io.on('connection', (socket) => {
         console.log(`💌 PM sent to recipient: ${recipient}`);
       }
       
-      // deliver copies to owners and admins according to new rules
       for (const [sid, session] of memoryStore.sessions) {
         if (session.username === currentUser || session.username === recipient) continue;
         if (session.rank === 'owner') {
@@ -1586,7 +1732,6 @@ io.on('connection', (socket) => {
             viewedBy: session.username
           });
         } else if (session.rank === 'admin') {
-          // admins should not see any message involving an owner
           if (messageData.fromRank !== 'owner' && messageData.toRank !== 'owner') {
             io.to(sid).emit('private_message', {
               ...messageData,
@@ -1622,7 +1767,6 @@ io.on('connection', (socket) => {
           return true;
         }
         if (userRank === 'admin') {
-          // admin should not see any history entries involving owner
           if (msg.fromRank === 'owner' || msg.toRank === 'owner') {
             return false;
           }
@@ -1678,12 +1822,10 @@ io.on('connection', (socket) => {
     try {
       const { roomName, username } = data;
       const deviceId = memoryStore.sessions.get(socket.id)?.deviceId;
-      // Check if device is banned first
       if (isDeviceBanned(deviceId)) {
         socket.emit('voice_error', { message: '⛔ This device is banned' });
         return;
       }
-      // Check if user or device is muted
       if (isUserMuted(username, roomName) || isDeviceMuted(deviceId)) {
         socket.emit('voice_error', { message: 'You are muted and cannot join voice chat' });
         return;
@@ -1691,7 +1833,6 @@ io.on('connection', (socket) => {
       
       socket.join(`voice:${roomName}`);
       
-      // Send system message that user joined voice
       const systemMsg = {
         username: 'System',
         message: `🎤 ${username} joined voice chat`,
@@ -1716,7 +1857,6 @@ io.on('connection', (socket) => {
       const { roomName, username } = data;
       socket.leave(`voice:${roomName}`);
       
-      // Send system message that user left voice
       const systemMsg = {
         username: 'System',
         message: `🎤 ${username} left voice chat`,
@@ -1779,20 +1919,17 @@ io.on('connection', (socket) => {
       const { roomName, username, rank } = data;
       const deviceId = memoryStore.sessions.get(socket.id)?.deviceId;
       
-      // Check if device is banned
       if (isDeviceBanned(deviceId)) {
         socket.emit('video_error', { message: '⛔ This device is banned' });
         return;
       }
       
-      // Check if user has permission (VIP+)
       const permissions = PERMISSIONS[rank] || PERMISSIONS.member;
       if (!permissions.canVideo) {
         socket.emit('video_error', { message: 'Video chat requires VIP+ rank' });
         return;
       }
       
-      // Check if user or device is muted
       if (isUserMuted(username, roomName) || isDeviceMuted(deviceId)) {
         socket.emit('video_error', { message: 'You are muted and cannot join video chat' });
         return;
@@ -1800,7 +1937,6 @@ io.on('connection', (socket) => {
       
       socket.join(`video:${roomName}`);
       
-      // Send system message that user joined video
       const systemMsg = {
         username: 'System',
         message: `🎥 ${username} joined video chat`,
@@ -1810,6 +1946,13 @@ io.on('connection', (socket) => {
       
       io.to(roomName).emit('chat message', systemMsg);
       socket.to(`video:${roomName}`).emit('user_joined_video', {
+        userId: socket.id,
+        username: username,
+        rank: rank
+      });
+      
+      // Send own stream info back to client
+      socket.emit('video_self_joined', {
         userId: socket.id,
         username: username,
         rank: rank
@@ -1826,7 +1969,6 @@ io.on('connection', (socket) => {
       const { roomName, username } = data;
       socket.leave(`video:${roomName}`);
       
-      // Send system message that user left video
       const systemMsg = {
         username: 'System',
         message: `🎥 ${username} left video chat`,
@@ -1897,25 +2039,16 @@ io.on('connection', (socket) => {
       
       const permissions = PERMISSIONS[userRank] || PERMISSIONS.member;
       if (!permissions.canClear) {
-        return socket.emit('error', { message: '❌ You do not have permission' });
-      }
-      
-      const { password } = data;
-      
-      if (userRank !== 'admin' && userRank !== 'owner' && password !== ADMIN_PASSWORD) {
-        return socket.emit('error', { message: '❌ Incorrect password' });
+        return socket.emit('error', { message: '❌ Only the owner can clear messages' });
       }
       
       const room = memoryStore.rooms.get(currentRoom);
       if (room) {
         room.messages = [];
       }
-      // also clear all private messages globally
       memoryStore.privateMessages = [];
       
-      // notify clients in the room to wipe chat history
       io.to(currentRoom).emit('messages_cleared', { roomName: currentRoom });
-      // also notify everyone that private messages should be cleared
       io.emit('private_messages_cleared');
       
       const systemMsg = {
@@ -1948,27 +2081,32 @@ io.on('connection', (socket) => {
       
       const permissions = PERMISSIONS[userRank] || PERMISSIONS.member;
       if (!permissions.canBan) {
-        return socket.emit('error', { message: '❌ You do not have permission' });
+        return socket.emit('error', { message: '❌ You do not have permission to ban users' });
       }
       
-      const { bannedUser, duration = '10m', password } = data;
+      const { bannedUser, duration = '10m' } = data;
       
       if (!bannedUser) return;
-      // protect owner account
       if (bannedUser === OWNER_USERNAME) {
         return socket.emit('error', { message: '❌ Cannot ban owner' });
       }
+      if (bannedUser === currentUser) {
+        return socket.emit('error', { message: '❌ Cannot ban yourself' });
+      }
       
+      // Get ranks and levels
       const bannedUserRank = memoryStore.users.get(bannedUser)?.rank || 'member';
       const bannedLevel = getRankLevel(bannedUserRank);
       const bannerLevel = getRankLevel(userRank);
       
+      console.log(`🔨 Ban attempt: ${currentUser} (${userRank}, level ${bannerLevel}) trying to ban ${bannedUser} (${bannedUserRank}, level ${bannedLevel})`);
+      
+      // Check if banner has higher rank (lower level number) than banned user
       if (bannerLevel >= bannedLevel && userRank !== 'owner') {
-        return socket.emit('error', { message: '❌ Cannot ban users of equal or higher rank' });
+        return socket.emit('error', { message: `❌ Cannot ban users of equal or higher rank. Your rank: ${userRank} (${bannerLevel}), Target rank: ${bannedUserRank} (${bannedLevel})` });
       }
       
-      // moderators no longer need admin password to ban
-      
+      // Parse duration
       let durationMs = 10 * 60 * 1000;
       const match = duration.match(/^(\d+)([hmd])$/);
       if (match) {
@@ -1976,6 +2114,7 @@ io.on('connection', (socket) => {
         const unit = match[2];
         if (unit === 'h') durationMs = val * 60 * 60 * 1000;
         else if (unit === 'd') durationMs = val * 24 * 60 * 60 * 1000;
+        else durationMs = val * 60 * 1000;
       }
       
       const expiresAt = Date.now() + durationMs;
@@ -1984,9 +2123,14 @@ io.on('connection', (socket) => {
         memoryStore.bans.set(currentRoom, new Map());
       }
       const roomBans = memoryStore.bans.get(currentRoom);
-      roomBans.set(bannedUser, { expiresAt, bannedBy: currentUser });
+      roomBans.set(bannedUser, { expiresAt, bannedBy: currentUser, bannedAt: new Date() });
       
-      io.to(currentRoom).emit('user_banned', { bannedUser, duration, bannerName: currentUser });
+      io.to(currentRoom).emit('user_banned', { 
+        bannedUser, 
+        duration, 
+        bannerName: currentUser,
+        bannerRank: userRank 
+      });
       
       const systemMsg = {
         username: 'System',
@@ -2005,20 +2149,19 @@ io.on('connection', (socket) => {
         }
       }
       
-      // also ban any devices associated with the user (skip owner devices)
       const userDeviceSet = memoryStore.userDevices.get(bannedUser);
       if (userDeviceSet && userDeviceSet.size > 0) {
         userDeviceSet.forEach(did => {
-          // don't ban owner device
           const ownerSession = [...memoryStore.sessions.values()].find(s => s.deviceId === did && s.username === OWNER_USERNAME);
           if (ownerSession) return;
           memoryStore.deviceBans.set(did, { expiresAt, bannedBy: currentUser });
-          // disconnect all sessions on that device
           for (const [sid, session] of memoryStore.sessions) {
             if (session.deviceId === did) {
               io.to(sid).emit('device_banned', { by: currentUser, duration });
-              // force disconnect to prevent further activity
-              try { io.sockets.sockets.get(sid)?.disconnect(true); } catch(e){}
+              try { 
+                const socketToDisconnect = io.sockets.sockets.get(sid);
+                if (socketToDisconnect) socketToDisconnect.disconnect(true); 
+              } catch(e){}
             }
           }
         });
@@ -2028,10 +2171,28 @@ io.on('connection', (socket) => {
         io.to(bannedSocketId).emit('force_leave', { roomName: currentRoom, reason: 'banned' });
       }
       
-      console.log(`🔨 ${bannedUser} banned from ${currentRoom} by ${currentUser}`);
+      if (isMongoConnected && Ban) {
+        (async () => {
+          try {
+            await Ban.create({
+              roomName: currentRoom,
+              username: bannedUser,
+              bannedBy: currentUser,
+              bannedByRank: userRank,
+              expiresAt: new Date(expiresAt),
+              isActive: true
+            });
+          } catch (err) {
+            console.error('Failed to save ban to DB:', err.message);
+          }
+        })();
+      }
+      
+      console.log(`🔨 ${bannedUser} banned from ${currentRoom} by ${currentUser} (${userRank}) for ${duration}`);
       
     } catch (err) {
       console.error('ban_user error:', err);
+      socket.emit('error', { message: 'Failed to ban user: ' + err.message });
     }
   });
   
@@ -2052,16 +2213,11 @@ io.on('connection', (socket) => {
       
       if (!unbannedUser) return;
       
-      if (userRank !== 'admin' && userRank !== 'owner' && password !== ADMIN_PASSWORD) {
-        return socket.emit('error', { message: '❌ Incorrect password' });
-      }
-      
       const roomBans = memoryStore.bans.get(currentRoom);
       if (roomBans) {
         roomBans.delete(unbannedUser);
       }
 
-      // clear any device bans for the user's known devices
       const userDeviceSet = memoryStore.userDevices.get(unbannedUser);
       if (userDeviceSet && userDeviceSet.size > 0) {
         userDeviceSet.forEach(did => {
@@ -2102,19 +2258,25 @@ io.on('connection', (socket) => {
       
       const permissions = PERMISSIONS[userRank] || PERMISSIONS.member;
       if (!permissions.canMute) {
-        return socket.emit('error', { message: '❌ You do not have permission' });
+        return socket.emit('error', { message: '❌ You do not have permission to mute users' });
       }
       
       const { mutedUser, duration = '10m' } = data;
       
       if (!mutedUser) return;
+      if (mutedUser === OWNER_USERNAME) {
+        return socket.emit('error', { message: '❌ Cannot mute owner' });
+      }
+      if (mutedUser === currentUser) {
+        return socket.emit('error', { message: '❌ Cannot mute yourself' });
+      }
       
       const mutedUserRank = memoryStore.users.get(mutedUser)?.rank || 'member';
       const mutedLevel = getRankLevel(mutedUserRank);
       const muterLevel = getRankLevel(userRank);
       
       if (muterLevel >= mutedLevel && userRank !== 'owner') {
-        return socket.emit('error', { message: '❌ Cannot mute users of equal or higher rank' });
+        return socket.emit('error', { message: `❌ Cannot mute users of equal or higher rank. Your rank: ${userRank} (${muterLevel}), Target rank: ${mutedUserRank} (${mutedLevel})` });
       }
       
       const durationMs = parseDuration(duration);
@@ -2123,12 +2285,10 @@ io.on('connection', (socket) => {
       
       memoryStore.mutes.set(muteKey, { roomName: currentRoom, expiresAt, mutedBy: currentUser });
       
-      // apply device mutes as well
       const userDeviceSet = memoryStore.userDevices.get(mutedUser);
       if (userDeviceSet && userDeviceSet.size > 0) {
         userDeviceSet.forEach(did => {
           memoryStore.deviceMutes.set(did, { expiresAt, mutedBy: currentUser });
-          // notify sessions on that device
           for (const [sid, session] of memoryStore.sessions) {
             if (session.deviceId === did) {
               io.to(sid).emit('device_muted', { duration, mutedBy: currentUser });
@@ -2148,10 +2308,11 @@ io.on('connection', (socket) => {
       
       io.to(currentRoom).emit('chat message', systemMsg);
       
-      console.log(`🔇 ${mutedUser} muted in ${currentRoom} by ${currentUser} for ${duration}`);
+      console.log(`🔇 ${mutedUser} muted in ${currentRoom} by ${currentUser} (${userRank}) for ${duration}`);
       
     } catch (err) {
       console.error('mute_user error:', err);
+      socket.emit('error', { message: 'Failed to mute user: ' + err.message });
     }
   });
   
@@ -2183,12 +2344,10 @@ io.on('connection', (socket) => {
       const muteKey = `${unmutedUser}-${currentRoom}`;
       memoryStore.mutes.delete(muteKey);
 
-      // also clear any device mutes for this user
       const userDeviceSet = memoryStore.userDevices.get(unmutedUser);
       if (userDeviceSet && userDeviceSet.size > 0) {
         userDeviceSet.forEach(did => {
           memoryStore.deviceMutes.delete(did);
-          // inform any connected sessions on that device
           for (const [sid, session] of memoryStore.sessions) {
             if (session.deviceId === did) {
               io.to(sid).emit('device_unmuted');
@@ -2297,10 +2456,10 @@ io.on('connection', (socket) => {
       
       const permissions = PERMISSIONS[userRank] || PERMISSIONS.member;
       if (!permissions.canGrant || permissions.canGrant.length === 0) {
-        return socket.emit('error', { message: '❌ You do not have permission' });
+        return socket.emit('error', { message: '❌ You do not have permission to grant ranks' });
       }
       
-      const { targetUser, newRank, password } = data;
+      const { targetUser, newRank } = data;
       
       if (!targetUser || !newRank) return;
       
@@ -2308,20 +2467,14 @@ io.on('connection', (socket) => {
         return socket.emit('error', { message: `❌ Cannot grant ${newRank} rank` });
       }
       
-      // no password required for admins/owner to grant ranks
-      // Update in memory store
-      if (memoryStore.users.has(targetUser)) {
-        const user = memoryStore.users.get(targetUser);
-        user.rank = newRank;
-        
-        for (const [sid, session] of memoryStore.sessions) {
-          if (session.username === targetUser) {
-            session.rank = newRank;
-            io.to(sid).emit('rank_changed', { newRank, grantedBy: currentUser });
-            break;
-          }
-        }
+      // Check if target user exists
+      const targetUserData = memoryStore.users.get(targetUser);
+      if (!targetUserData) {
+        return socket.emit('error', { message: `❌ User ${targetUser} not found` });
       }
+      
+      // Update in memory store
+      targetUserData.rank = newRank;
       
       // Update in MongoDB
       if (isMongoConnected && User) {
@@ -2338,11 +2491,21 @@ io.on('connection', (socket) => {
         })();
       }
       
+      // Update any active sessions for this user
+      for (const [sid, session] of memoryStore.sessions) {
+        if (session.username === targetUser) {
+          session.rank = newRank;
+          io.to(sid).emit('rank_changed', { newRank, grantedBy: currentUser });
+          break;
+        }
+      }
+      
       socket.emit('command_success', { message: `✅ ${targetUser} is now ${newRank}` });
       console.log(`👑 ${currentUser} granted ${targetUser} rank ${newRank}`);
       
     } catch (err) {
       console.error('grant_rank error:', err);
+      socket.emit('error', { message: 'Failed to grant rank: ' + err.message });
     }
   });
   
@@ -2423,13 +2586,12 @@ setInterval(async () => {
   }
   
   try {
-    // Backup room messages from all rooms
+    // Backup room messages
     if (Message && memoryStore.rooms.size > 0) {
       for (const [roomName, room] of memoryStore.rooms.entries()) {
         if (room.messages && room.messages.length > 0) {
           for (const msg of room.messages) {
             try {
-              // Check if message already exists (avoid duplicates)
               const existing = await Message.findOne({
                 roomName: roomName,
                 username: msg.username,
@@ -2451,10 +2613,14 @@ setInterval(async () => {
                   fileSize: msg.fileSize || null
                 });
                 await message.save();
+                
+                // Add message reference to room
+                await Room.updateOne(
+                  { name: roomName },
+                  { $push: { messages: message._id } }
+                );
               }
-            } catch (err) {
-              // Ignore individual message backup errors
-            }
+            } catch (err) {}
           }
         }
       }
@@ -2485,13 +2651,10 @@ setInterval(async () => {
             });
             await pm.save();
           }
-        } catch (err) {
-          // Ignore individual message backup errors
-        }
+        } catch (err) {}
       }
     }
     
-    // Clear backed up messages to avoid duplicates
     if (memoryStore.privateMessages.length > 100) {
       memoryStore.privateMessages = memoryStore.privateMessages.slice(-100);
     }
@@ -2509,17 +2672,20 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('🚀🚀🚀 BLACK HOLE CHAT V2 - SERVER RUNNING 🚀🚀🚀');
   console.log('='.repeat(70));
   console.log(`\n📡 Port: ${PORT}`);
-  console.log(`👑 Owner: ${OWNER_USERNAME}`);
+  console.log(`👑 Owner: ${OWNER_USERNAME} (${OWNER_FULLNAME})`);
+  console.log(`📧 Owner Email: ${OWNER_EMAIL}`);
   console.log(`📊 Rank System:`);
-  console.log(`   1. 👑 Owner - Can see ALL private messages, Video enabled`);
-  console.log(`   2. 👮 Admin - Can see messages from rank 2-5, Video enabled`);
-  console.log(`   3. 🛡️ Moderator - Can see messages from rank 3-5, Video enabled`);
-  console.log(`   4. ⭐ VIP - Can see only their own messages, Video enabled`);
-  console.log(`   5. 👤 Member - Can see only their own messages, Video disabled`);
-  console.log(`🎥 Video Chat: VIP+ only (Owner, Admin, Moderator, VIP)`);
-  console.log(`👥 /users Command: Shows 🟢 in room, 🟡 online elsewhere, 🔴 offline`);
+  console.log(`   1. 👑 Owner - Can see ALL private messages, Video enabled, Can grant any rank, Can clear chat`);
+  console.log(`   2. 👮 Admin - Can grant moderator/vip/member, Cannot clear chat`);
+  console.log(`   3. 🛡️ Moderator - Can ban/mute users with lower rank, Cannot grant ranks`);
+  console.log(`   4. ⭐ VIP - Video enabled, AI access, Image generation`);
+  console.log(`   5. 👤 Member - Basic access, Video disabled, AI disabled`);
+  console.log(`   6. 👤 New member - Must verify email to get member rank`);
+  console.log(`📧 Email Verification: Required for new accounts`);
+  console.log(`⏱️ Unverified users: Limited to 5 messages per 10 minutes`);
+  console.log(`🎥 Video Chat: Now shows your own camera`);
   console.log(`💾 MongoDB: ${isMongoConnected ? 'CONNECTED' : 'DISCONNECTED'}`);
-  console.log(`📁 Uploads: ${uploadDir}`);
+  console.log(`📁 Uploads: ${uploadDir} (${memoryStore.files.size} files in memory)`);
   console.log(`🌍 URL: http://localhost:${PORT}`);
   console.log('\n' + '='.repeat(70) + '\n');
 });

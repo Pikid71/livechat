@@ -325,6 +325,19 @@
             display: inline-block;
         }
 
+        /* ========== WARNING MESSAGE STYLES ========== */
+        .msg.warning {
+            background: rgba(255, 68, 68, 0.3);
+            border-left: 4px solid #ff4444;
+            color: #ff9999;
+            font-weight: bold;
+            animation: warning-pulse 2s infinite;
+        }
+        @keyframes warning-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
         /* ========== AI MESSAGE STYLES ========== */
         .msg.ai {
             background: linear-gradient(135deg, #667eea 0%, #9b59b6 100%);
@@ -670,6 +683,13 @@
             text-align: center;
         }
 
+        .msg.warning {
+            background: rgba(255, 68, 68, 0.3);
+            border-left: 4px solid #ff4444;
+            color: #ff9999;
+            font-weight: bold;
+        }
+
         .msg.ai {
             background: linear-gradient(135deg, #667eea 0%, #9b59b6 100%);
             border-left: 4px solid #00ff88;
@@ -787,6 +807,15 @@
 
         .action-btn.danger:hover {
             background: #c0392b;
+        }
+
+        .action-btn.warning {
+            background: rgba(255, 68, 68, 0.2);
+            border-color: #ff4444;
+        }
+
+        .action-btn.warning:hover {
+            background: #ff4444;
         }
 
         .action-btn.success {
@@ -1235,6 +1264,42 @@
             0%, 60%, 100% { transform: translateY(0); opacity: 0.6; }
             30% { transform: translateY(-6px); opacity: 1; }
         }
+
+        /* ========== VERIFICATION BADGE ========== */
+        .verified-badge {
+            background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 12px;
+            font-size: 9px;
+            margin-left: 5px;
+            display: inline-block;
+        }
+
+        .unverified-badge {
+            background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 12px;
+            font-size: 9px;
+            margin-left: 5px;
+            display: inline-block;
+        }
+
+        .limit-indicator {
+            font-size: 10px;
+            color: #888;
+            margin-left: 8px;
+        }
+
+        .email-format-hint {
+            font-size: 11px;
+            color: #888;
+            margin-top: 4px;
+            padding: 4px 8px;
+            background: rgba(102, 126, 234, 0.1);
+            border-radius: 12px;
+        }
     </style>
 </head>
 <body data-theme="default">
@@ -1271,11 +1336,25 @@
                     <div id="registerForm" style="display: none; background: rgba(34,34,34,0.8); backdrop-filter: blur(10px); padding: 30px; border-radius: 20px; border: 1px solid #667eea;">
                         <div style="font-weight: bold; margin-bottom: 20px; font-size: 18px; color: #fff; text-align: center;">📝 REGISTER</div>
                         <div style="display: flex; flex-direction: column; gap: 15px;">
+                            <input id="regFullName" placeholder="Full Name..." maxlength="50" style="background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 14px 18px; color: white; border-radius: 30px; outline: none; font-size: 15px;" />
+                            <input id="regEmail" placeholder="Email (any valid email)" type="email" maxlength="50" style="background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 14px 18px; color: white; border-radius: 30px; outline: none; font-size: 15px;" />
                             <input id="regUsername" placeholder="Choose username..." maxlength="30" style="background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 14px 18px; color: white; border-radius: 30px; outline: none; font-size: 15px;" />
                             <input id="regPassword" placeholder="Choose password..." maxlength="30" type="password" style="background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 14px 18px; color: white; border-radius: 30px; outline: none; font-size: 15px;" />
                             <input id="regConfirmPassword" placeholder="Confirm password..." maxlength="30" type="password" style="background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 14px 18px; color: white; border-radius: 30px; outline: none; font-size: 15px;" />
-                            <button onclick="handleRegister()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; padding: 14px; color: white; border-radius: 30px; font-weight: bold; cursor: pointer; margin-top: 5px; font-size: 16px;">✨ REGISTER</button>
-                            <div style="text-align: center; color: #aaa; font-size: 14px;">Already have an account? <span onclick="switchToLogin()" style="cursor: pointer; color: #667eea; text-decoration: underline;">Login</span></div>
+                            
+                            <!-- Verification Code Section (initially hidden) -->
+                            <div id="verificationSection" style="display: none;">
+                                <div style="text-align: center; color: #4ade80; margin: 10px 0;">📧 Verification code sent to your email</div>
+                                <input id="verificationCode" placeholder="Enter 6-digit code..." maxlength="6" style="background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 14px 18px; color: white; border-radius: 30px; outline: none; font-size: 15px; text-align: center; letter-spacing: 4px;" />
+                                <button onclick="verifyCode()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; padding: 14px; color: white; border-radius: 30px; font-weight: bold; cursor: pointer; margin-top: 10px; font-size: 16px; width: 100%;">✅ VERIFY & REGISTER</button>
+                            </div>
+                            
+                            <!-- Register Button (shown initially) -->
+                            <button id="registerBtn" onclick="handleRegister()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; padding: 14px; color: white; border-radius: 30px; font-weight: bold; cursor: pointer; margin-top: 5px; font-size: 16px;">✨ SEND VERIFICATION</button>
+                            
+                            <div style="text-align: center; color: #aaa; font-size: 14px;">
+                                Already have an account? <span onclick="switchToLogin()" style="cursor: pointer; color: #667eea; text-decoration: underline;">Login</span>
+                            </div>
                         </div>
                     </div>
                     
@@ -1293,6 +1372,7 @@
                         <span class="status-dot"></span>
                         <span id="loggedInUsername">User</span>
                         <span id="rank-badge-header" style="display: none;"></span>
+                        <span id="verification-badge-header" style="display: none;"></span>
                     </div>
                     <button onclick="handleLogout()" class="action-btn danger" style="padding: 8px 16px;">
                         <span>🚪</span> LOGOUT
@@ -1355,12 +1435,14 @@
                     <div style="font-size: 13px; opacity: 0.8; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                         <span><span id="members-count">0</span> members</span>
                         <span id="room-theme-indicator" style="background: rgba(255,255,255,0.1); padding: 4px 8px; border-radius: 12px;">🎨 default</span>
+                        <span id="message-limit-indicator" class="limit-indicator" style="display: none;">⏱️ 5/5 msgs</span>
                     </div>
                 </div>
                 <div class="user-info">
                     <span class="status-dot"></span>
                     <span id="username-display">User</span>
                     <span id="rank-badge-chat" style="display: none;"></span>
+                    <span id="verification-badge-chat" style="display: none;"></span>
                 </div>
             </div>
             
@@ -1526,8 +1608,48 @@
                         <option value="vip">⭐ VIP</option>
                         <option value="member">👤 Member</option>
                     </select>
-                    <!-- password not required for admins/owner -->
                     <button onclick="grantRank()" class="action-btn success" style="width: 100%;">GRANT RANK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Warn User Modal (Moderator+ only) -->
+    <div id="warnModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">⚠️ Warn User</div>
+                <button class="modal-close" onclick="closeModal('warnModal')">×</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 20px;">
+                    <input type="text" id="warnUsername" placeholder="Username..." style="width: 100%; background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 12px; color: white; border-radius: 30px; margin-bottom: 15px;">
+                    <button onclick="warnUser()" class="action-btn warning" style="width: 100%;">SEND WARNING</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Options Modal -->
+    <div id="deleteModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">🗑️ Delete Options</div>
+                <button class="modal-close" onclick="closeModal('deleteModal')">×</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 20px;">
+                    <div style="margin-bottom: 15px;">
+                        <h3 style="color: #ff4444;">Delete User</h3>
+                        <input type="text" id="deleteUserUsername" placeholder="Username to delete..." style="width: 100%; background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 12px; color: white; border-radius: 30px; margin-bottom: 10px;">
+                        <button onclick="deleteUser()" class="action-btn danger" style="width: 100%;">DELETE USER</button>
+                    </div>
+                    <hr style="border-color: #444; margin: 20px 0;">
+                    <div>
+                        <h3 style="color: #ff4444;">Delete Room</h3>
+                        <input type="text" id="deleteRoomName" placeholder="Room name to delete..." style="width: 100%; background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 12px; color: white; border-radius: 30px; margin-bottom: 10px;">
+                        <button onclick="deleteRoomFromModal()" class="action-btn danger" style="width: 100%;">DELETE ROOM</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1563,11 +1685,11 @@
         </div>
     </div>
 
-    <!-- Effects Modal (Admin only) -->
+    <!-- Effects Modal (VIP+ only) -->
     <div id="effectsModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <div class="modal-title">✨ Effects Panel (Admin)</div>
+                <div class="modal-title">✨ Effects Panel (VIP+)</div>
                 <button class="modal-close" onclick="closeModal('effectsModal')">×</button>
             </div>
             <div class="modal-body">
@@ -1669,7 +1791,7 @@
 
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
-        // ========== BLACK HOLE CHAT V2 - COMPLETE CLIENT WITH FIXED IMAGE GENERATION ==========
+        // ========== BLACK HOLE CHAT V2 - COMPLETE CLIENT ==========
         
         // Socket.IO connection
         const socket = io();
@@ -1685,9 +1807,11 @@
         let isOwner = false;
         let isUserMuted = false;
         let muteExpiresAt = 0;
-        let scrollBtn = null;  // button shown when new messages arrive and user scrolled up
+        let scrollBtn = null;
+        let isVerified = false;
+        let messageCount = 0;
+        let messageResetTime = null;
 
-        
         // device tracking
         let deviceId = null;
         let isDeviceMuted = false;
@@ -1721,14 +1845,13 @@
         const input = document.getElementById('messageInput');
         const emojiPanel = document.getElementById('emojiPanel');
         
-        // simple global error handler so runtime errors don't silently
-        // kill the rest of the script and leave the UI unresponsive
+        // simple global error handler
         window.addEventListener('error', (e) => {
             console.error('Global JS error:', e.message, e.error);
             showToast('⚠️ JavaScript error: ' + e.message);
         });
         
-        // allow enter key (without shift) to send a message like a chat app
+        // allow enter key (without shift) to send a message
         if (input) {
             input.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
@@ -1746,13 +1869,12 @@
                 }
             });
         }
-        // attach send button listener just in case the inline onclick
-        // attribute isn't effective (some browsers reset it when rewriting)
+        
         const sendBtn = document.getElementById('sendBtn');
         if (sendBtn) sendBtn.addEventListener('click', sendMessage);
-        // pre-create the scroll button (hidden) so it can be shown later
-        // without any race condition when new messages arrive.
+        
         createScrollButton();
+        
         const authScreen = document.getElementById('auth-screen');
         const roomScreen = document.getElementById('room-screen');
         const chatScreen = document.getElementById('chat-screen');
@@ -1761,6 +1883,9 @@
         const loggedInUsernameDisplay = document.getElementById('loggedInUsername');
         const authMessage = document.getElementById('authMessage');
         const toast = document.getElementById('toast');
+        
+        // ========== VERIFICATION STATE ==========
+        let pendingVerification = null;
         
         // ========== COOKIE FUNCTIONS ==========
         
@@ -1799,7 +1924,6 @@
         
         function showModal(modalId) {
             if (modalId === 'grantRankModal') {
-                // rebuild rank options depending on who is opening
                 const sel = document.getElementById('grantRankSelect');
                 if (sel) {
                     sel.innerHTML = '';
@@ -1830,6 +1954,14 @@
             return `<span class="${rankInfo.class}">${rankInfo.text}</span>`;
         }
         
+        function getVerificationBadge(verified) {
+            if (verified) {
+                return `<span class="verified-badge">✓ VERIFIED</span>`;
+            } else {
+                return `<span class="unverified-badge">⚠️ UNVERIFIED</span>`;
+            }
+        }
+        
         function getRankLevel(rank) {
             const levels = {
                 'owner': 1,
@@ -1843,22 +1975,17 @@
         
         // ========== URL LINK PARSING ==========
         function parseLinksInText(text) {
-            // Escape HTML special chars first, but preserve the text for URL detection
             const div = document.createElement('div');
             div.textContent = text;
             let escaped = div.innerHTML;
             
-            // URL regex pattern - matches http, https, www, and common protocols
             const urlRegex = /(https?:\/\/[^\s<>]+|www\.[^\s<>]+|ftp:\/\/[^\s<>]+)/gi;
             
-            // Replace URLs with clickable links
             escaped = escaped.replace(urlRegex, (url) => {
-                // Ensure URL has protocol
                 let fullUrl = url;
                 if (url.startsWith('www.')) {
                     fullUrl = 'https://' + url;
                 }
-                // Truncate long URLs for display
                 const displayUrl = url.length > 40 ? url.substring(0, 37) + '...' : url;
                 return `<a href="${fullUrl}" target="_blank" rel="noopener noreferrer" style="color: #667eea; text-decoration: underline; cursor: pointer;">${displayUrl}</a>`;
             });
@@ -1874,8 +2001,6 @@
             scrollBtn.textContent = '🔽 Scroll to bottom';
             scrollBtn.className = 'notification-btn';
             scrollBtn.style.position = 'fixed';
-            // bring it a bit closer to input area so it isn't hidden on small
-            // screens (earlier 100px sometimes placed it offscreen)
             scrollBtn.style.bottom = '60px';
             scrollBtn.style.right = '20px';
             scrollBtn.style.display = 'none';
@@ -1888,7 +2013,6 @@
         }
         
         function appendWithScrollLogic(wrapper, timestamp = null) {
-            // make sure we still have a reference; recover if necessary
             const container = msgContainer || document.getElementById('messages');
             if (!container) return;
             const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 0;
@@ -1906,7 +2030,6 @@
             const wrapper = document.createElement('div');
             wrapper.className = 'msg-wrapper';
 
-            // header with timestamp for consistency
             const header = document.createElement('div');
             header.className = 'msg-header';
             const timeStr = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
@@ -1915,6 +2038,24 @@
 
             const item = document.createElement('div');
             item.className = 'msg system';
+            item.innerHTML = parseLinksInText(message);
+            wrapper.appendChild(item);
+            appendWithScrollLogic(wrapper, timestamp);
+        }
+        
+        function addWarningMessage(username, message, timestamp = null) {
+            if (!msgContainer) return;
+            const wrapper = document.createElement('div');
+            wrapper.className = 'msg-wrapper';
+
+            const header = document.createElement('div');
+            header.className = 'msg-header';
+            const timeStr = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+            header.innerHTML = `<span class="msg-timestamp">${timeStr}</span>`;
+            wrapper.appendChild(header);
+
+            const item = document.createElement('div');
+            item.className = 'msg warning';
             item.innerHTML = parseLinksInText(message);
             wrapper.appendChild(item);
             appendWithScrollLogic(wrapper, timestamp);
@@ -1990,7 +2131,6 @@
         }
         
         function checkIfUserMuted() {
-            // only clear out expired user-specific mutes here
             if (isUserMuted && muteExpiresAt && Date.now() >= muteExpiresAt) {
                 isUserMuted = false;
                 muteExpiresAt = 0;
@@ -1998,7 +2138,6 @@
             return isUserMuted;
         }
 
-        // device mute helper separated for clarity (previous code merged both)
         function checkIfDeviceMuted() {
             if (isDeviceMuted && deviceMuteExpiresAt && Date.now() >= deviceMuteExpiresAt) {
                 isDeviceMuted = false;
@@ -2011,6 +2150,13 @@
             if (currentRoom) {
                 socket.emit('get_room_users', { roomName: currentRoom });
             }
+        }
+        
+        // ========== EMAIL VALIDATION ==========
+        function validateEmail(email) {
+            // Simple email validation - just check if it's a valid format
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return emailRegex.test(email);
         }
         
         // ========== AI FUNCTIONS ==========
@@ -2108,7 +2254,7 @@
             }
         }
         
-        // ========== FIXED IMAGE GENERATION WITH DEAPI.AI CORRECT PARAMETERS ==========
+        // ========== FIXED IMAGE GENERATION ==========
 
         async function generateImage(prompt, size = '512', model = '') {
             if (!prompt || prompt.trim() === '') {
@@ -2143,7 +2289,6 @@
             msgContainer.scrollTop = msgContainer.scrollHeight;
             
             try {
-                // Forward request to server-side image-generation proxy
                 const resp = await fetch('/api/generate-image', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -2157,18 +2302,15 @@
 
                 const result = await resp.json();
 
-                // If server returned immediate image
                 if (result.imageUrl) {
                     loadingWrapper.remove();
                     addImageMessage(currentUsername, prompt, result.imageUrl, `${size}x${size}`, model || 'stable-horde');
                     return;
                 }
 
-                // Otherwise server provided a requestId to poll
                 const requestId = result.requestId || result.id;
                 if (!requestId) throw new Error('No image returned and no request id');
 
-                // Poll for result
                 const pollMax = 30;
                 let attempts = 0;
                 while (attempts < pollMax) {
@@ -2204,20 +2346,6 @@
             }
         }
 
-        // Update the modal function to include model selection
-        function generateImageFromModal() {
-            const prompt = document.getElementById('imagePromptInput').value.trim();
-            const size = document.getElementById('imageSizeSelect').value;
-            const model = document.getElementById('imageModelSelect').value;
-            if (prompt) {
-                generateImage(prompt, size, model);
-                closeModal('imageModal');
-                document.getElementById('imagePromptInput').value = '';
-            } else {
-                showToast('❌ Please enter a prompt');
-            }
-        }
-        
         function generateImageFromModal() {
             const prompt = document.getElementById('imagePromptInput').value.trim();
             const size = document.getElementById('imageSizeSelect').value;
@@ -2240,26 +2368,19 @@
             'member': 5
         };
         
-        // helper to determine if the current user should see a private message
-        // returns an object with {show, adminView}
         function canViewerSeePrivate(msg) {
-            // msg contains from, to, fromRank, toRank
-            // participants always see their own messages
             if (msg.from === currentUsername || msg.to === currentUsername) {
                 return { show: true, adminView: false };
             }
-            // owners see everything
             if (currentRank === 'owner') {
                 return { show: true, adminView: true };
             }
-            // admins see everything except messages involving an owner
             if (currentRank === 'admin') {
                 if (msg.fromRank === 'owner' || msg.toRank === 'owner') {
                     return { show: false, adminView: false };
                 }
                 return { show: true, adminView: true };
             }
-            // other ranks cannot see messages they are not part of
             return { show: false, adminView: false };
         }
         
@@ -2279,7 +2400,6 @@
             '🌕', '🌖', '🌗', '🌘', '🌑', '🌒', '🌓', '🌔', '☀️', '🌝', '🌛', '🌜', '🌚', '☁️', '⛅', '🌤️', '🌥️', '🌦️', '🌧️', '🌨️'
         ];
         
-        // Load emojis
         function loadEmojis() {
             if (!emojiPanel) return;
             emojiPanel.innerHTML = '';
@@ -2431,31 +2551,85 @@
                 fileUploadBtn.style.display = isVip ? 'flex' : 'none';
             }
             
-            // Remove existing buttons first
             const existingGrantBtn = document.getElementById('grantRankBtn');
             if (existingGrantBtn) existingGrantBtn.remove();
             const existingEffectsBtn = document.getElementById('effectsBtn');
             if (existingEffectsBtn) existingEffectsBtn.remove();
+            const existingWarnBtn = document.getElementById('warnBtn');
+            if (existingWarnBtn) existingWarnBtn.remove();
+            const existingDeleteBtn = document.getElementById('deleteBtn');
+            if (existingDeleteBtn) existingDeleteBtn.remove();
             
             // Add buttons based on rank
-            if (isAdmin || isOwner) {
-                const grantBtn = document.createElement('button');
-                grantBtn.id = 'grantRankBtn';
-                grantBtn.className = 'action-btn success';
-                grantBtn.style.padding = '8px 16px';
-                grantBtn.innerHTML = '<span>👑</span> GRANT';
-                grantBtn.onclick = () => showModal('grantRankModal');
-                document.querySelector('.header .user-info')?.after(grantBtn);
+            const headerActions = document.querySelector('.header .user-info');
+            if (headerActions) {
+                if (isModerator) {
+                    const warnBtn = document.createElement('button');
+                    warnBtn.id = 'warnBtn';
+                    warnBtn.className = 'action-btn warning';
+                    warnBtn.style.padding = '8px 16px';
+                    warnBtn.innerHTML = '<span>⚠️</span> WARN';
+                    warnBtn.onclick = () => showModal('warnModal');
+                    headerActions.after(warnBtn);
+                }
+                
+                if (isAdmin || isOwner) {
+                    const grantBtn = document.createElement('button');
+                    grantBtn.id = 'grantRankBtn';
+                    grantBtn.className = 'action-btn success';
+                    grantBtn.style.padding = '8px 16px';
+                    grantBtn.innerHTML = '<span>👑</span> GRANT';
+                    grantBtn.onclick = () => showModal('grantRankModal');
+                    headerActions.after(grantBtn);
+                    
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.id = 'deleteBtn';
+                    deleteBtn.className = 'action-btn danger';
+                    deleteBtn.style.padding = '8px 16px';
+                    deleteBtn.innerHTML = '<span>🗑️</span> DELETE';
+                    deleteBtn.onclick = () => showModal('deleteModal');
+                    headerActions.after(deleteBtn);
+                }
+                
+                if (isAdmin || isOwner || isModerator || isVip) {
+                    const effectsBtn = document.createElement('button');
+                    effectsBtn.id = 'effectsBtn';
+                    effectsBtn.className = 'action-btn';
+                    effectsBtn.style.padding = '8px 16px';
+                    effectsBtn.innerHTML = '<span>✨</span> EFFECTS';
+                    effectsBtn.onclick = () => showModal('effectsModal');
+                    headerActions.after(effectsBtn);
+                }
             }
+        }
+        
+        function updateVerificationUI(verified) {
+            isVerified = verified;
             
-            if (isAdmin || isOwner || isModerator || isVip) {
-                const effectsBtn = document.createElement('button');
-                effectsBtn.id = 'effectsBtn';
-                effectsBtn.className = 'action-btn';
-                effectsBtn.style.padding = '8px 16px';
-                effectsBtn.innerHTML = '<span>✨</span> EFFECTS';
-                effectsBtn.onclick = () => showModal('effectsModal');
-                document.querySelector('.header .user-info')?.after(effectsBtn);
+            const badgeHeader = document.getElementById('verification-badge-header');
+            const badgeChat = document.getElementById('verification-badge-chat');
+            const limitIndicator = document.getElementById('message-limit-indicator');
+            
+            if (badgeHeader) badgeHeader.innerHTML = getVerificationBadge(verified);
+            if (badgeChat) badgeChat.innerHTML = getVerificationBadge(verified);
+            
+            if (!verified && limitIndicator) {
+                limitIndicator.style.display = 'inline-block';
+                updateMessageLimitDisplay();
+            } else if (limitIndicator) {
+                limitIndicator.style.display = 'none';
+            }
+        }
+        
+        function updateMessageLimitDisplay() {
+            const limitIndicator = document.getElementById('message-limit-indicator');
+            if (!limitIndicator) return;
+            
+            if (!isVerified) {
+                limitIndicator.style.display = 'inline-block';
+                limitIndicator.innerHTML = `⏱️ ${messageCount}/5 msgs`;
+            } else {
+                limitIndicator.style.display = 'none';
             }
         }
         
@@ -2718,8 +2892,6 @@
                 this.userRank = userRank;
                 this.isVip = ['vip', 'moderator', 'admin', 'owner'].includes(userRank);
                 this.isMuted = false;
-                // optional popup window reference
-                this.popup = options.popupWindow || null;
                 this.options = {
                     echoCancellation: true,
                     noiseSuppression: true,
@@ -2773,31 +2945,20 @@
                 this.handleVideoError = this.handleVideoError.bind(this);
                 this.handleUserMuted = this.handleUserMuted.bind(this);
                 this.handleUserBanned = this.handleUserBanned.bind(this);
+                this.handleVideoSelfJoined = this.handleVideoSelfJoined.bind(this);
             }
 
-            // helper to get current video container root (popup if exists)
             getVideoRoot() {
-                if (this.popup && !this.popup.closed) {
-                    return this.popup.document.getElementById('video-grid') || this.popup.document.body;
-                }
                 return document.getElementById('video-grid');
             }
 
-            // close popup window when stopping
-            closePopup() {
-                if (this.popup && !this.popup.closed) {
-                    this.popup.close();
-                    this.popup = null;
-                }
-            }
-
-            // display own camera feed in grid
             addLocalVideo() {
                 const root = this.getVideoRoot();
                 if (!root) return;
-                const doc = (root.ownerDocument) ? root.ownerDocument : document;
+                const doc = document;
                 const userId = this.socket.id + '_self';
                 if (this.videoContainers.has(userId)) return;
+                
                 const container = doc.createElement('div');
                 container.className = 'video-container';
 
@@ -2821,7 +2982,13 @@
                 this.videoElements.set(userId, video);
                 this.videoContainers.set(userId, container);
 
-                if (this.localStream) video.srcObject = this.localStream;
+                if (this.localStream) {
+                    video.srcObject = this.localStream;
+                }
+            }
+            
+            handleVideoSelfJoined(data) {
+                this.addLocalVideo();
             }
             
             hasPermission() {
@@ -2896,14 +3063,8 @@
                     });
                     
                     this.isActive = true;
-                    // if using popup, close video chat when popup is closed
-                    if (this.popup && !this.popup.closed) {
-                        this.popup.onbeforeunload = () => {
-                            if (this.isActive) this.stop();
-                        };
-                    }
-                    // show local preview immediately
-                    this.addLocalVideo();
+                    
+                    this.setupSocketListeners();
                     
                     this.socket.emit('join_video', { 
                         roomName: this.roomName,
@@ -2911,7 +3072,8 @@
                         rank: this.userRank
                     });
                     
-                    this.setupSocketListeners();
+                    this.addLocalVideo();
+                    
                     this.updateUIVideoStatus(true);
                     this.startConnectionMonitoring();
                     showToast('🎥 Joined video chat');
@@ -2949,8 +3111,6 @@
                     roomName: this.roomName,
                     username: this.username 
                 });
-                // close any popup
-                this.closePopup();
                 
                 this.removeSocketListeners();
                 this.isActive = false;
@@ -2967,6 +3127,7 @@
                 this.socket.on('video_error', this.handleVideoError);
                 this.socket.on('user_muted', this.handleUserMuted);
                 this.socket.on('user_banned', this.handleUserBanned);
+                this.socket.on('video_self_joined', this.handleVideoSelfJoined);
             }
             
             removeSocketListeners() {
@@ -2978,6 +3139,7 @@
                 this.socket.off('video_error', this.handleVideoError);
                 this.socket.off('user_muted', this.handleUserMuted);
                 this.socket.off('user_banned', this.handleUserBanned);
+                this.socket.off('video_self_joined', this.handleVideoSelfJoined);
             }
             
             createVideoLabel(userId, username, rank = 'member') {
@@ -3433,25 +3595,12 @@
                 showToast(`❌ ${message}`);
             }
             
-            showNotification(message, type = 'info') {
-                const event = new CustomEvent('videoNotification', {
-                    detail: { message, type }
-                });
-                window.dispatchEvent(event);
-                
-                if (window.showToast) {
-                    window.showToast(message);
-                }
-            }
-            
             updateUIVideoStatus(active) {
                 const videoIndicator = document.getElementById('video-indicator');
                 const videoBtn = document.getElementById('videoBtn');
                 const videoBtnText = document.getElementById('videoBtnText');
                 const videoControls = document.getElementById('video-controls');
-                
-                const mainGrid = document.getElementById('video-grid');
-                const popupGrid = (this.popup && !this.popup.closed) ? this.popup.document.getElementById('video-grid') : null;
+                const videoGrid = document.getElementById('video-grid');
                 
                 if (videoIndicator) videoIndicator.style.display = active ? 'flex' : 'none';
                 
@@ -3465,8 +3614,7 @@
                     }
                 }
                 
-                if (mainGrid) mainGrid.style.display = active ? 'grid' : 'none';
-                if (popupGrid) popupGrid.style.display = active ? 'grid' : 'none';
+                if (videoGrid) videoGrid.style.display = active ? 'grid' : 'none';
                 if (videoControls) videoControls.style.display = active && this.hasPermission() ? 'flex' : 'none';
             }
             
@@ -3534,12 +3682,7 @@
                     return;
                 }
                 
-                // open popup window to host video
-                const popup = window.open('', 'videoChat', 'width=800,height=600');
-                if (popup) {
-                    popup.document.write(`<!DOCTYPE html><html><head><title>Video Chat</title><style>body{margin:0;background:#000;overflow:hidden;} .video-container{position:relative;width:100%;height:100%;}</style></head><body><div id="video-grid" style="display:flex;flex-wrap:wrap;height:100%;"></div></body></html>`);
-                }
-                videoChat = new VideoChatHandler(socket, currentRoom, currentUsername, currentRank, { popupWindow: popup });
+                videoChat = new VideoChatHandler(socket, currentRoom, currentUsername, currentRank);
                 const success = await videoChat.start();
                 if (success) {
                     isVideoActive = true;
@@ -3703,7 +3846,10 @@
         function switchToLogin() {
             document.getElementById('registerForm').style.display = 'none';
             document.getElementById('loginForm').style.display = 'block';
+            document.getElementById('verificationSection').style.display = 'none';
+            document.getElementById('registerBtn').style.display = 'block';
             authMessage.style.display = 'none';
+            pendingVerification = null;
         }
         
         function showAuthMessage(msg, isError = true) {
@@ -3722,7 +3868,6 @@
             const password = document.getElementById('loginPassword').value;
             const rememberMe = document.getElementById('rememberMe')?.checked || false;
 
-            // sanitize and validate
             username = username.replace(/\s+/g,'_');
             const nwordRegex = /(nigga|nigger)/i;
             if (nwordRegex.test(username)) {
@@ -3745,20 +3890,28 @@
         }
         
         function handleRegister() {
+            const fullName = document.getElementById('regFullName').value.trim();
+            const email = document.getElementById('regEmail').value.trim();
             let username = document.getElementById('regUsername').value.trim();
             const password = document.getElementById('regPassword').value;
             const confirmPassword = document.getElementById('regConfirmPassword').value;
 
-            // sanitize
-            username = username.replace(/\s+/g,'_');
+            username = username.replace(/\s+/g, '_');
+            
             const nwordRegex = /(nigga|nigger)/i;
             if (nwordRegex.test(username)) {
                 showAuthMessage('Invalid username');
                 return;
             }
             
-            if (!username || !password || !confirmPassword) {
+            if (!fullName || !email || !username || !password || !confirmPassword) {
                 showAuthMessage('Please fill in all fields');
+                return;
+            }
+            
+            // Validate email format
+            if (!validateEmail(email)) {
+                showAuthMessage('Please enter a valid email address');
                 return;
             }
             
@@ -3772,7 +3925,36 @@
                 return;
             }
             
-            socket.emit('register', { username, password, deviceId });
+            const registerBtn = document.getElementById('registerBtn');
+            registerBtn.disabled = true;
+            registerBtn.innerHTML = '<span>⏳</span> SENDING...';
+            
+            socket.emit('request_verification', { fullName, email, username, password });
+        }
+        
+        socket.on('verification_sent', (data) => {
+            showAuthMessage(`✅ Verification code sent to ${data.email}`, false);
+            
+            document.getElementById('verificationSection').style.display = 'block';
+            document.getElementById('registerBtn').style.display = 'none';
+            
+            pendingVerification = data.email;
+        });
+        
+        function verifyCode() {
+            const code = document.getElementById('verificationCode').value.trim();
+            
+            if (!code || code.length !== 6) {
+                showAuthMessage('Please enter a valid 6-digit code');
+                return;
+            }
+            
+            if (!pendingVerification) {
+                showAuthMessage('No pending verification');
+                return;
+            }
+            
+            socket.emit('verify_code', { email: pendingVerification, code });
         }
         
         function handleLogout() {
@@ -3803,6 +3985,7 @@
             isModerator = false;
             isVip = false;
             isOwner = false;
+            isVerified = false;
             
             authScreen.style.display = 'flex';
             roomScreen.style.display = 'none';
@@ -3814,6 +3997,12 @@
             
             const effectsBtn = document.getElementById('effectsBtn');
             if (effectsBtn) effectsBtn.remove();
+            
+            const warnBtn = document.getElementById('warnBtn');
+            if (warnBtn) warnBtn.remove();
+            
+            const deleteBtn = document.getElementById('deleteBtn');
+            if (deleteBtn) deleteBtn.remove();
         }
         
         // ========== GRANT RANK ==========
@@ -3829,12 +4018,80 @@
             
             socket.emit('grant_rank', {
                 targetUser,
-                newRank,
-                password: ''
+                newRank
             });
             
             closeModal('grantRankModal');
             showToast(`👑 Granting ${newRank} to ${targetUser}...`);
+        }
+        
+        // ========== WARN USER ==========
+        
+        function warnUser() {
+            const targetUser = document.getElementById('warnUsername').value.trim();
+            
+            if (!targetUser) {
+                showToast('❌ Please enter username');
+                return;
+            }
+            
+            if (targetUser === currentUsername) {
+                showToast('❌ Cannot warn yourself');
+                return;
+            }
+            
+            socket.emit('warn_user', {
+                targetUser,
+                roomName: currentRoom
+            });
+            
+            closeModal('warnModal');
+            document.getElementById('warnUsername').value = '';
+            showToast(`⚠️ Warning ${targetUser}...`);
+        }
+        
+        // ========== DELETE COMMANDS ==========
+        
+        function deleteUser() {
+            const targetUser = document.getElementById('deleteUserUsername').value.trim();
+            
+            if (!targetUser) {
+                showToast('❌ Please enter username');
+                return;
+            }
+            
+            if (targetUser === OWNER_USERNAME) {
+                showToast('❌ Cannot delete owner');
+                return;
+            }
+            
+            if (confirm(`Are you sure you want to delete user ${targetUser}?`)) {
+                socket.emit('delete_user', {
+                    targetUser
+                });
+                closeModal('deleteModal');
+                document.getElementById('deleteUserUsername').value = '';
+            }
+        }
+        
+        function deleteRoomFromModal() {
+            const roomName = document.getElementById('deleteRoomName').value.trim();
+            
+            if (!roomName) {
+                showToast('❌ Please enter room name');
+                return;
+            }
+            
+            if (roomName === 'Main') {
+                showToast('❌ Cannot delete Main room');
+                return;
+            }
+            
+            if (confirm(`Are you sure you want to delete room ${roomName}?`)) {
+                socket.emit('delete_room', { roomName, password: '' });
+                closeModal('deleteModal');
+                document.getElementById('deleteRoomName').value = '';
+            }
         }
         
         // ========== SOCKET AUTH EVENTS ==========
@@ -3842,12 +4099,17 @@
         socket.on('auth_success', (data) => {
             currentUsername = data.username;
             updateRankUI(data.rank);
+            updateVerificationUI(data.isVerified);
             
             loggedInUsernameDisplay.textContent = data.username;
             usernameDisplay.textContent = data.username;
             
             if (data.theme) {
                 changeTheme(data.theme, 'personal');
+            }
+            
+            if (!data.isVerified) {
+                showToast('⚠️ Your account is not verified. You can only send 5 messages per 10 minutes.', 5000);
             }
             
             showAuthMessage(data.message, false);
@@ -3862,6 +4124,12 @@
         
         socket.on('auth_error', (data) => {
             showAuthMessage(data.message);
+            
+            const registerBtn = document.getElementById('registerBtn');
+            if (registerBtn) {
+                registerBtn.disabled = false;
+                registerBtn.innerHTML = '✨ SEND VERIFICATION';
+            }
         });
         
         socket.on('logged_out', () => {
@@ -3872,6 +4140,36 @@
         socket.on('rank_changed', (data) => {
             updateRankUI(data.newRank);
             showToast(`👑 Your rank is now ${data.newRank.toUpperCase()}`);
+        });
+        
+        socket.on('message_limit_update', (data) => {
+            messageCount = data.count;
+            updateMessageLimitDisplay();
+        });
+        
+        // ========== WARNING EVENT ==========
+        
+        socket.on('user_warned', (data) => {
+            addWarningMessage('⚠️ WARNING', `${data.targetUser} was warned by ${data.warnerName}`, data.timestamp);
+            
+            if (data.targetUser === currentUsername) {
+                showToast(`⚠️ You have been warned by ${data.warnerName}`);
+                sendNotification('⚠️ Warning', `You were warned by ${data.warnerName}`);
+            }
+        });
+        
+        // ========== DELETE EVENTS ==========
+        
+        socket.on('user_deleted', (data) => {
+            addSystemMessage(`🗑️ User ${data.deletedUser} was deleted by ${data.deletedBy}`);
+            
+            if (data.deletedUser === currentUsername) {
+                showToast('🗑️ Your account has been deleted');
+                setTimeout(() => {
+                    socket.disconnect();
+                    location.reload();
+                }, 2000);
+            }
         });
         
         // ========== ROOMS ==========
@@ -3934,7 +4232,6 @@
             const password = document.getElementById('newRoomPassword').value;
             const theme = document.getElementById('roomTheme').value;
 
-            // sanitize spaces -> underscores
             roomName = roomName.replace(/\s+/g,'_');
 
             const nwordRegex = /(nigga|nigger)/i;
@@ -4194,7 +4491,6 @@
         }
         
         function sendMessage() {
-            // re-query the input each time in case reference was lost/updated
             const msgInput = document.getElementById('messageInput');
             if (!msgInput || !msgInput.value.trim()) {
                 return;
@@ -4202,9 +4498,6 @@
 
             let messageText = msgInput.value;
 
-            // commands should be processed even if muted so users can still
-            // open help, check latency, etc. the earlier global mute check
-            // was blocking everything.
             if (messageText.startsWith('/')) {
                 if (checkIfUserMuted() || checkIfDeviceMuted()) {
                     addSystemMessage('❌ You are muted and cannot use commands');
@@ -4215,8 +4508,7 @@
                 const handled = handleCommand(messageText);
                 msgInput.value = '';
                 emojiPanel.classList.remove('show');
-                if (handled) return; // command executed, do not send as chat
-                // not actually a command, fall through to normal messaging
+                if (handled) return;
             }
 
             if (checkIfUserMuted() || checkIfDeviceMuted()) {
@@ -4225,9 +4517,7 @@
             }
 
             const processedMessage = processMentions(messageText);
-            // send to server; server now echoes back to all clients including sender
             socket.emit('chat message', { username: currentUsername, message: processedMessage });
-            // remove manual addMessage to avoid duplicates and to rely on server timestamp
             msgInput.value = '';
             emojiPanel.classList.remove('show');
         }
@@ -4251,7 +4541,8 @@
                     <div class="help-title">📋 YOUR RANK</div>
                     <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
                         ${getRankBadge(currentRank)}
-                        <span style="color: #4ade80;">Rank ${rankLevel}/5</span>
+                        ${getVerificationBadge(isVerified)}
+                        <span style="color: #4ade80;">Rank ${rankLevel}/5 (lower number = higher rank)</span>
                     </div>
                 </div>
                 
@@ -4266,32 +4557,41 @@
                 </div>
                 
                 <div class="help-section">
-                    <div class="help-title">📊 RANK SYSTEM</div>
-                    <div><span class="help-rank owner">OWNER</span> <span class="help-desc">- Can see ALL private messages, Video enabled, /clear</span></div>
-                    <div><span class="help-rank admin">ADMIN</span> <span class="help-desc">- Can see messages from rank 2-5, Video enabled</span></div>
-                    <div><span class="help-rank mod">MOD</span> <span class="help-desc">- Can see messages from rank 3-5, Video enabled</span></div>
-                    <div><span class="help-rank vip">VIP</span> <span class="help-desc">- Can see only their own messages, Video enabled, AI access, Image generation</span></div>
-                    <div><span class="help-rank member">MEMBER</span> <span class="help-desc">- Can see only their own messages, Video disabled, AI disabled, Image disabled</span></div>
+                    <div class="help-title">📊 RANK SYSTEM (Lower number = Higher rank)</div>
+                    <div><span class="help-rank owner">OWNER (1)</span> <span class="help-desc">- Can see ALL private messages, Video enabled, Can ban anyone, Can grant any rank, Can clear chat, Can delete users</span></div>
+                    <div><span class="help-rank admin">ADMIN (2)</span> <span class="help-desc">- Can see messages from rank 3-5, Video enabled, Can ban rank 3-5, Can grant mod/vip/member, Can delete rooms</span></div>
+                    <div><span class="help-rank mod">MOD (3)</span> <span class="help-desc">- Can see messages from rank 4-5, Video enabled, Can ban rank 4-5, Can warn users</span></div>
+                    <div><span class="help-rank vip">VIP (4)</span> <span class="help-desc">- Can see only their own messages, Video enabled, AI access, Image generation</span></div>
+                    <div><span class="help-rank member">MEMBER (5)</span> <span class="help-desc">- Can see only their own messages, Video disabled, AI disabled, Image disabled</span></div>
                 </div>
                 
+                ${!isVerified ? `
+                <div class="help-section">
+                    <div class="help-title">⚠️ UNVERIFIED ACCOUNT</div>
+                    <div style="color: #f97316; font-size: 12px;">
+                        • You can only send 5 messages per 10 minutes<br>
+                        • Verify your email to remove this limit
+                    </div>
+                </div>
+                ` : ''}
+                
                 ${isVip ? `
-                // In the showHelp() function, update the VIP+ section:
                 <div class="help-section">
                     <div class="help-title">⭐ VIP+ COMMANDS</div>
                     <div><span class="help-command">/theme &lt;name&gt;</span> <span class="help-desc">- Change theme</span></div>
                     <div><span class="help-command">/video</span> <span class="help-desc">- Toggle video chat</span></div>
                     <div><span class="help-command">/ai &lt;prompt&gt;</span> <span class="help-desc">- Ask AI anything</span></div>
                     <div><span class="help-command">/cloak &lt;url&gt;</span> <span class="help-desc">- Cloak tab title to page title</span></div>
-                    <div style="font-size:12px; color:#aaa; margin-top:8px;">Note: usernames/rooms cannot contain spaces (converted to _), n-word is prohibited, and repeated spam earns a 10m mute.</div>
                 </div>
                 ` : ''}
                 
                 ${isModerator ? `
                 <div class="help-section">
                     <div class="help-title">🛡️ MODERATOR+ COMMANDS</div>
-                    <div><span class="help-command">/ban &lt;user&gt; [duration]</span> <span class="help-desc">- Ban user (10m, 1h, 1d)</span></div>
-                    <div><span class="help-command">/mute &lt;user&gt; [duration]</span> <span class="help-desc">- Mute user (default 10m)</span></div>
+                    <div><span class="help-command">/ban &lt;user&gt; [duration]</span> <span class="help-desc">- Ban user (10m, 1h, 1d) - Can ban users with lower rank (VIP, Member)</span></div>
+                    <div><span class="help-command">/mute &lt;user&gt; [duration]</span> <span class="help-desc">- Mute user - Can mute users with lower rank</span></div>
                     <div><span class="help-command">/unmute &lt;user&gt;</span> <span class="help-desc">- Unmute user</span></div>
+                    <div><span class="help-command">/warn &lt;user&gt;</span> <span class="help-desc">- Warn a user (sends red system message)</span></div>
                 </div>
                 ` : ''}
                 
@@ -4299,8 +4599,10 @@
                 <div class="help-section">
                     <div class="help-title">👮 ADMIN+ COMMANDS</div>
                     <div><span class="help-command">/unban &lt;user&gt;</span> <span class="help-desc">- Unban user</span></div>
-                    <div><span class="help-command">/delete &lt;room&gt;</span> <span class="help-desc">- Delete any room</span></div>
+                    <div><span class="help-command">/delete room &lt;room&gt;</span> <span class="help-desc">- Delete any room</span></div>
+                    <div><span class="help-command">/delete user &lt;user&gt;</span> <span class="help-desc">- Delete a user account</span></div>
                     <div><span class="help-command">/grant &lt;user&gt; &lt;rank&gt;</span> <span class="help-desc">- Grant mod/vip/member (admin+)</span></div>
+                    <div><span class="help-command">/ban &lt;user&gt; [duration]</span> <span class="help-desc">- Can ban rank 3-5 (Mod, VIP, Member)</span></div>
                 </div>
                 ` : ''}
                 
@@ -4308,7 +4610,9 @@
                 <div class="help-section">
                     <div class="help-title">👑 OWNER COMMANDS</div>
                     <div><span class="help-command">/grant &lt;user&gt; admin</span> <span class="help-desc">- Grant admin rank (owner only)</span></div>
-                    <div><span class="help-command">/clear</span> <span class="help-desc">- Clear all messages including private (Admin/Owner only)</span></div>
+                    <div><span class="help-command">/clear</span> <span class="help-desc">- Clear all messages including private (Owner only)</span></div>
+                    <div><span class="help-command">/ban &lt;user&gt; [duration]</span> <span class="help-desc">- Can ban anyone (including admins)</span></div>
+                    <div><span class="help-command">/delete user &lt;user&gt;</span> <span class="help-desc">- Delete any user (including admins)</span></div>
                 </div>
                 ` : ''}
                 
@@ -4330,7 +4634,9 @@
                 ` : ''}
                 
                 <div style="text-align: center; margin-top: 15px; color: #888; font-size: 11px; border-top: 1px solid rgba(102,126,234,0.3); padding-top: 10px;">
-                    🤖 AI command available for VIP+ • 🔔 Notifications work in background
+                    🤖 AI command available for VIP+ • 🔔 Notifications work in background<br>
+                    ⚡ Rank levels: Owner(1) > Admin(2) > Moderator(3) > VIP(4) > Member(5)<br>
+                    📧 Email verification required for new accounts
                 </div>
             `;
             
@@ -4500,8 +4806,8 @@
                 return;
             }
             
-            if (!isOwner && !isAdmin) {
-                addSystemMessage('❌ Only an Admin or Owner can use /clear command');
+            if (!isOwner) {
+                addSystemMessage('❌ Only the Owner can use /clear command');
                 return;
             }
             
@@ -4603,6 +4909,44 @@
             addSystemMessage(`🔇 Muted ${targetUser} for ${duration}`);
         }
         
+        function handleWarnCommand(args) {
+            if (!currentRoom) {
+                addSystemMessage('❌ Not in a room');
+                return;
+            }
+            if (!isModerator && !isAdmin && !isOwner) {
+                addSystemMessage('❌ You do not have permission');
+                return;
+            }
+            if (args.length < 1) {
+                addSystemMessage('Usage: /warn <username>');
+                return;
+            }
+            const targetUser = args[0];
+            
+            if (targetUser === currentUsername) {
+                addSystemMessage('❌ Cannot warn yourself');
+                return;
+            }
+            
+            const targetRank = onlineUsers.find(u => u.username === targetUser)?.rank || 'member';
+            const targetLevel = getRankLevel(targetRank);
+            const userLevel = getRankLevel(currentRank);
+            
+            if (targetLevel <= userLevel && currentRank !== 'owner') {
+                addSystemMessage('❌ Cannot warn users of equal or higher rank');
+                return;
+            }
+            
+            socket.emit('warn_user', {
+                targetUser,
+                roomName: currentRoom,
+                warnerName: currentUsername
+            });
+            
+            addSystemMessage(`⚠️ Warning sent to ${targetUser}`);
+        }
+        
         function handleUnmuteCommand(args) {
             if (!currentRoom) {
                 addSystemMessage('❌ Not in a room');
@@ -4647,19 +4991,34 @@
         
         function handleDeleteCommand(args) {
             if (!isAdmin && !isOwner) {
-                addSystemMessage('❌ Only admins can delete rooms');
+                addSystemMessage('❌ Only admins can delete');
                 return;
             }
-            if (args.length < 1) {
-                addSystemMessage('Usage: /delete <roomname>');
+            if (args.length < 2) {
+                addSystemMessage('Usage: /delete <user|room> <name>');
                 return;
             }
-            const roomName = args[0];
-            if (roomName === 'Main') {
-                addSystemMessage('❌ Cannot delete Main room');
-                return;
+            
+            const type = args[0].toLowerCase();
+            const name = args[1];
+            
+            if (type === 'room') {
+                if (name === 'Main') {
+                    addSystemMessage('❌ Cannot delete Main room');
+                    return;
+                }
+                socket.emit('delete_room', { roomName: name, password: '' });
+                addSystemMessage(`🗑️ Deleting room: ${name}`);
+            } else if (type === 'user') {
+                if (name === OWNER_USERNAME) {
+                    addSystemMessage('❌ Cannot delete owner');
+                    return;
+                }
+                socket.emit('delete_user', { targetUser: name });
+                addSystemMessage(`🗑️ Deleting user: ${name}`);
+            } else {
+                addSystemMessage('Usage: /delete <user|room> <name>');
             }
-            socket.emit('delete_room', { roomName, password: '' });
         }
         
         function handleEffectCommand(args) {
@@ -4712,7 +5071,7 @@
         }
         
         function handleRankCommand() {
-            addSystemMessage(`Your rank: ${currentRank.toUpperCase()} (Rank ${getRankLevel(currentRank)}/5)`);
+            addSystemMessage(`Your rank: ${currentRank.toUpperCase()} (Rank ${getRankLevel(currentRank)}/5) ${isVerified ? '✓ Verified' : '✗ Unverified'}`);
         }
         
         function handlePingCommand() {
@@ -4752,7 +5111,6 @@
             const command = parts[0].toLowerCase();
             const args = parts.slice(1);
 
-            // commands that should work even for muted/device‑muted users
             switch (command) {
                 case '/help': showHelp(); return true;
                 case '/users': handleUsersCommand(); return true;
@@ -4761,7 +5119,6 @@
                 case '/roll': handleRollCommand(args); return true;
             }
 
-            // after the lightweight commands we enforce mute/device restrictions
             if (checkIfUserMuted() || checkIfDeviceMuted()) {
                 addSystemMessage('❌ You are muted and cannot use commands');
                 return false;
@@ -4772,6 +5129,7 @@
                 case '/clear': handleClearCommand(args); break;
                 case '/ban': handleBanCommand(args); break;
                 case '/mute': handleMuteCommand(args); break;
+                case '/warn': handleWarnCommand(args); break;
                 case '/unmute': handleUnmuteCommand(args); break;
                 case '/unban': handleUnbanCommand(args); break;
                 case '/delete': handleDeleteCommand(args); break;
@@ -4947,6 +5305,9 @@
                         </div>
                         <div class="user-actions">
                             ${(isModerator && userLevel > currentUserLevel) ? `
+                                <button class="action-btn warning" style="padding: 4px 8px; font-size: 12px;" onclick="quickWarn('${user.username}')">⚠️</button>
+                            ` : ''}
+                            ${(isModerator && userLevel > currentUserLevel) ? `
                                 <button class="action-btn danger" style="padding: 4px 8px; font-size: 12px;" onclick="quickBan('${user.username}')">⛔</button>
                             ` : ''}
                             <button class="action-btn" style="padding: 4px 8px; font-size: 12px;" onclick="quickMsg('${user.username}')">💌</button>
@@ -4956,6 +5317,27 @@
             });
             
             content.innerHTML = html || '<div style="text-align: center; color: #888; padding: 20px;">No users in room</div>';
+        }
+        
+        function quickWarn(username) {
+            if (username === currentUsername) {
+                showToast('❌ Cannot warn yourself');
+                return;
+            }
+            const targetRank = onlineUsers.find(u => u.username === username)?.rank || 'member';
+            const targetLevel = getRankLevel(targetRank);
+            const userLevel = getRankLevel(currentRank);
+            if (targetLevel <= userLevel && currentRank !== 'owner') {
+                showToast('❌ Cannot warn users of equal or higher rank');
+                return;
+            }
+            socket.emit('warn_user', {
+                targetUser: username,
+                roomName: currentRoom,
+                warnerName: currentUsername
+            });
+            closeModal('userListModal');
+            showToast(`⚠️ Warning sent to ${username}`);
         }
         
         function quickBan(username) {
@@ -5146,11 +5528,10 @@
         });
         
         socket.on('messages_cleared', (data) => {
-            // only clear the chat if we are in the same room
             if (data && data.roomName && data.roomName !== currentRoom) return;
             msgContainer.innerHTML = '';
-            // private messages are cleared separately
         });
+        
         socket.on('private_messages_cleared', () => {
             privateMessages = [];
             const pmList = document.getElementById('privateMessagesList');
@@ -5168,15 +5549,11 @@
             }
         });
 
-
-
-        // device mute notification (merged into single handler)
         socket.on('device_muted', (data) => {
             isDeviceMuted = true;
             const durationMs = parseDurationClient(data.duration || '10m');
             deviceMuteExpiresAt = Date.now() + durationMs;
             showToast(`🔇 This device has been muted for ${data.duration || '10m'}`);
-            // we don't automatically leave but future commands/messages will fail
             if (isVideoActive && videoChat) {
                 videoChat.setMutedStatus(true);
                 videoChat.stop();
@@ -5237,7 +5614,6 @@
                 location.reload();
             }, 1500);
         });
-
         
         socket.on('room_deleted_by_owner', (data) => {
             showToast(`🗑️ Room "${data.roomName}" deleted`);
@@ -5283,6 +5659,12 @@
         document.getElementById('loginPassword')?.addEventListener('keypress', (e) => { 
             if (e.key === 'Enter') handleLogin(); 
         });
+        document.getElementById('regFullName')?.addEventListener('keypress', (e) => { 
+            if (e.key === 'Enter') handleRegister(); 
+        });
+        document.getElementById('regEmail')?.addEventListener('keypress', (e) => { 
+            if (e.key === 'Enter') handleRegister(); 
+        });
         document.getElementById('regUsername')?.addEventListener('keypress', (e) => { 
             if (e.key === 'Enter') handleRegister(); 
         });
@@ -5291,6 +5673,9 @@
         });
         document.getElementById('regConfirmPassword')?.addEventListener('keypress', (e) => { 
             if (e.key === 'Enter') handleRegister(); 
+        });
+        document.getElementById('verificationCode')?.addEventListener('keypress', (e) => { 
+            if (e.key === 'Enter') verifyCode(); 
         });
         
         document.getElementById('pmRecipientSelect')?.addEventListener('change', (e) => {
@@ -5308,10 +5693,8 @@
             return id;
         }
 
-        // call immediately on load
         deviceId = getDeviceId();
 
-        // sanitize inputs as user types
         ['loginUsername','regUsername','newRoomName'].forEach(id => {
             const el = document.getElementById(id);
             if (el) {
@@ -5351,6 +5734,8 @@
             if (data.authenticated) {
                 currentUsername = data.username;
                 updateRankUI(data.rank);
+                updateVerificationUI(data.isVerified);
+                
                 loggedInUsernameDisplay.textContent = data.username;
                 usernameDisplay.textContent = data.username;
                 
@@ -5394,7 +5779,6 @@
             }
         }
 
-        // handle server-sent system messages (e.g. mute/ban notices)
         socket.on('system_message', (data) => {
             addSystemMessage(data.message, data.timestamp);
         });
