@@ -76,6 +76,24 @@
             background: #d4c4a1;
             color: #3d2a0a;
         }
+        body[data-theme="hack"] {
+            background: #0f0f0f;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+        }
+        body[data-theme="hack"] .msg {
+            background: #1a1a1a;
+            border: 1px solid #00ff00;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+        }
+        body[data-theme="hack"] .header {
+            background: #0a0a0a;
+            border-bottom: 2px solid #00ff00;
+        }
+        body[data-theme="hack"] input {
+            font-family: 'Courier New', monospace;
+        }
 
         /* ========== EFFECT STYLES ========== */
         body.glitch {
@@ -106,44 +124,56 @@
             opacity: 0.8;
         }
 
-        body.hack {
+        body.hack-effect {
             background: black !important;
             color: #00ff00 !important;
             font-family: 'Courier New', monospace !important;
+            position: relative;
         }
-        body.hack .msg {
+        body.hack-effect .msg {
             font-family: 'Courier New', monospace !important;
             color: #00ff00 !important;
             background: #001100 !important;
             border: 1px solid #00ff00 !important;
             text-shadow: 0 0 5px #00ff00;
         }
-        body.hack .header {
+        body.hack-effect .header {
             background: #001100 !important;
             border-bottom: 2px solid #00ff00 !important;
         }
-        body.hack .header h1 {
+        body.hack-effect .header h1 {
             color: #00ff00 !important;
         }
 
         body.matrix {
             background: black !important;
             position: relative;
+            overflow: hidden;
         }
-        body.matrix::before {
-            content: "";
+        .matrix-rain {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: repeating-linear-gradient(0deg, rgba(0,255,0,0.1) 0px, rgba(0,255,0,0.1) 2px, transparent 2px, transparent 4px);
             pointer-events: none;
-            animation: matrix 20s linear infinite;
+            z-index: 9999;
         }
-        @keyframes matrix {
-            from { background-position: 0 0; }
-            to { background-position: 0 100%; }
+        .matrix-column {
+            position: absolute;
+            top: 0;
+            font-family: 'Courier New', monospace;
+            font-size: 20px;
+            color: #0f0;
+            text-shadow: 0 0 5px #0f0;
+            white-space: nowrap;
+            writing-mode: vertical-rl;
+            text-orientation: upright;
+            animation: matrix-fall linear infinite;
+        }
+        @keyframes matrix-fall {
+            from { transform: translateY(-100%); }
+            to { transform: translateY(100vh); }
         }
 
         body.rainbow {
@@ -159,7 +189,7 @@
             100% { background: #ff0000; }
         }
 
-        body.neon {
+        body.neon-effect {
             animation: neon-pulse 1s ease-in-out infinite alternate;
         }
         @keyframes neon-pulse {
@@ -336,6 +366,16 @@
         @keyframes warning-pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.7; }
+        }
+
+        /* ========== LINK STYLES ========== */
+        .msg a {
+            color: #ff4444 !important;
+            text-decoration: underline;
+            font-weight: bold;
+        }
+        .msg a:hover {
+            color: #ff8888 !important;
         }
 
         /* ========== AI MESSAGE STYLES ========== */
@@ -1040,6 +1080,7 @@
             display: flex;
             align-items: center;
             gap: 12px;
+            flex-wrap: wrap;
         }
 
         .user-rank-badge {
@@ -1051,6 +1092,12 @@
         .user-actions {
             display: flex;
             gap: 8px;
+        }
+
+        .user-email {
+            font-size: 10px;
+            color: #888;
+            margin-left: 8px;
         }
 
         /* ========== ROOMS LIST ========== */
@@ -1303,6 +1350,7 @@
     </style>
 </head>
 <body data-theme="default">
+    <div id="matrix-container" class="matrix-rain" style="display: none;"></div>
     <div id="chat-container">
         <!-- ========== AUTH SCREEN ========== -->
         <div id="auth-screen" style="display: flex; flex-direction: column; height: 100%;">
@@ -1398,6 +1446,7 @@
                             <option value="ocean">Ocean</option>
                             <option value="cyberpunk">Cyberpunk</option>
                             <option value="vintage">Vintage</option>
+                            <option value="hack">Hack</option>
                         </select>
                         <button onclick="createRoom()" class="action-btn success" style="width: 100%;">
                             <span>✨</span> CREATE ROOM
@@ -1680,6 +1729,7 @@
                     <button onclick="changeTheme('ocean')" class="action-btn">Ocean</button>
                     <button onclick="changeTheme('cyberpunk')" class="action-btn">Cyberpunk</button>
                     <button onclick="changeTheme('vintage')" class="action-btn">Vintage</button>
+                    <button onclick="changeTheme('hack')" class="action-btn">Hack</button>
                 </div>
             </div>
         </div>
@@ -1693,6 +1743,9 @@
                 <button class="modal-close" onclick="closeModal('effectsModal')">×</button>
             </div>
             <div class="modal-body">
+                <div style="margin-bottom: 15px;">
+                    <button onclick="stopAllEffects()" class="action-btn warning" style="width: 100%;">🛑 STOP ALL EFFECTS</button>
+                </div>
                 <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
                     <button onclick="triggerEffect('glitch')" class="action-btn">Glitch</button>
                     <button onclick="triggerEffect('flashbang')" class="action-btn">Flashbang</button>
@@ -1811,6 +1864,8 @@
         let isVerified = false;
         let messageCount = 0;
         let messageResetTime = null;
+        let currentEffect = null;
+        let matrixInterval = null;
 
         // device tracking
         let deviceId = null;
@@ -1831,6 +1886,7 @@
         // Private messages
         let privateMessages = [];
         let onlineUsers = [];
+        let allUsersData = new Map(); // Store user data (email, fullName) for admin view
         
         // Browser notifications
         let notificationsEnabled = true;
@@ -1844,6 +1900,7 @@
         const msgContainer = document.getElementById('messages');
         const input = document.getElementById('messageInput');
         const emojiPanel = document.getElementById('emojiPanel');
+        const matrixContainer = document.getElementById('matrix-container');
         
         // simple global error handler
         window.addEventListener('error', (e) => {
@@ -1987,7 +2044,7 @@
                     fullUrl = 'https://' + url;
                 }
                 const displayUrl = url.length > 40 ? url.substring(0, 37) + '...' : url;
-                return `<a href="${fullUrl}" target="_blank" rel="noopener noreferrer" style="color: #667eea; text-decoration: underline; cursor: pointer;">${displayUrl}</a>`;
+                return `<a href="${fullUrl}" target="_blank" rel="noopener noreferrer" style="color: #ff4444; text-decoration: underline; cursor: pointer; font-weight: bold;">${displayUrl}</a>`;
             });
             
             return escaped;
@@ -2154,9 +2211,58 @@
         
         // ========== EMAIL VALIDATION ==========
         function validateEmail(email) {
-            // Simple email validation - just check if it's a valid format
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             return emailRegex.test(email);
+        }
+        
+        // ========== EFFECT FUNCTIONS ==========
+        
+        function stopAllEffects() {
+            document.body.classList.remove('glitch', 'flashbang', 'black', 'hack-effect', 'matrix', 'rainbow', 'neon-effect', 'firework', 'gameroom');
+            if (matrixInterval) {
+                clearInterval(matrixInterval);
+                matrixInterval = null;
+            }
+            if (matrixContainer) {
+                matrixContainer.style.display = 'none';
+                matrixContainer.innerHTML = '';
+            }
+            currentEffect = null;
+            showToast('✨ All effects stopped');
+        }
+        
+        function startMatrixEffect() {
+            if (!matrixContainer) return;
+            matrixContainer.style.display = 'block';
+            matrixContainer.innerHTML = '';
+            
+            const chars = '01アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン';
+            const columns = Math.floor(window.innerWidth / 20);
+            
+            for (let i = 0; i < columns; i++) {
+                const column = document.createElement('div');
+                column.className = 'matrix-column';
+                column.style.left = i * 20 + 'px';
+                column.style.animationDuration = Math.random() * 3 + 2 + 's';
+                column.style.animationDelay = Math.random() * 2 + 's';
+                
+                let content = '';
+                const length = Math.floor(Math.random() * 20) + 10;
+                for (let j = 0; j < length; j++) {
+                    content += chars[Math.floor(Math.random() * chars.length)] + '<br>';
+                }
+                column.innerHTML = content;
+                matrixContainer.appendChild(column);
+            }
+            
+            matrixInterval = setInterval(() => {
+                const columns = matrixContainer.children;
+                for (let col of columns) {
+                    if (Math.random() > 0.7) {
+                        col.style.opacity = Math.random() * 0.5 + 0.5;
+                    }
+                }
+            }, 500);
         }
         
         // ========== AI FUNCTIONS ==========
@@ -2397,7 +2503,8 @@
             '🐎', '🐖', '🐏', '🐑', '🦙', '🐐', '🦌', '🐕', '🐩', '🐈', '🐓', '🦃', '🦤', '🦚', '🦜', '🦢', '🦩', '🐦', '🐧', '🐤',
             '🐣', '🐥', '🐺', '🦝', '🐗', '🐴', '🦄', '🐝', '🪲', '🐞', '🦋', '🐌', '🐛', '🐜', '🪰', '🪱', '🦟', '🦗', '🕷️', '🕸️',
             '🐢', '🐍', '🦎', '🦖', '🦕', '🐙', '🦑', '🦐', '🦞', '🦀', '🐡', '🐠', '🐟', '🐬', '🐳', '🐋', '🦈', '🌍', '🌎', '🌏',
-            '🌕', '🌖', '🌗', '🌘', '🌑', '🌒', '🌓', '🌔', '☀️', '🌝', '🌛', '🌜', '🌚', '☁️', '⛅', '🌤️', '🌥️', '🌦️', '🌧️', '🌨️'
+            '🌕', '🌖', '🌗', '🌘', '🌑', '🌒', '🌓', '🌔', '☀️', '🌝', '🌛', '🌜', '🌚', '☁️', '⛅', '🌤️', '🌥️', '🌦️', '🌧️', '🌨️',
+            '👍', '👎'
         ];
         
         function loadEmojis() {
@@ -2560,7 +2667,6 @@
             const existingDeleteBtn = document.getElementById('deleteBtn');
             if (existingDeleteBtn) existingDeleteBtn.remove();
             
-            // Add buttons based on rank
             const headerActions = document.querySelector('.header .user-info');
             if (headerActions) {
                 if (isModerator) {
@@ -3909,7 +4015,6 @@
                 return;
             }
             
-            // Validate email format
             if (!validateEmail(email)) {
                 showAuthMessage('Please enter a valid email address');
                 return;
@@ -4003,6 +4108,8 @@
             
             const deleteBtn = document.getElementById('deleteBtn');
             if (deleteBtn) deleteBtn.remove();
+            
+            stopAllEffects();
         }
         
         // ========== GRANT RANK ==========
@@ -4040,9 +4147,19 @@
                 return;
             }
             
+            const targetRank = onlineUsers.find(u => u.username === targetUser)?.rank || 'member';
+            const targetLevel = getRankLevel(targetRank);
+            const userLevel = getRankLevel(currentRank);
+            
+            if (targetLevel <= userLevel && currentRank !== 'owner') {
+                showToast('❌ Cannot warn users of equal or higher rank');
+                return;
+            }
+            
             socket.emit('warn_user', {
                 targetUser,
-                roomName: currentRoom
+                roomName: currentRoom,
+                warnerName: currentUsername
             });
             
             closeModal('warnModal');
@@ -4145,6 +4262,16 @@
         socket.on('message_limit_update', (data) => {
             messageCount = data.count;
             updateMessageLimitDisplay();
+        });
+        
+        socket.on('user_data', (data) => {
+            // Store user data for admin view
+            if (data.username && data.email) {
+                allUsersData.set(data.username, {
+                    email: data.email,
+                    fullName: data.fullName
+                });
+            }
         });
         
         // ========== WARNING EVENT ==========
@@ -4258,9 +4385,15 @@
         
         function joinRoom(roomName, hasPassword = false) {
             if (hasPassword) {
-                const pwd = prompt('Enter room password:');
-                if (pwd === null) return;
-                socket.emit('join_room', { roomName, password: pwd });
+                if (isOwner) {
+                    // Owner can bypass password
+                    socket.emit('join_room', { roomName, password: '' });
+                    showToast('👑 Owner bypassed room password');
+                } else {
+                    const pwd = prompt('Enter room password:');
+                    if (pwd === null) return;
+                    socket.emit('join_room', { roomName, password: pwd });
+                }
             } else {
                 socket.emit('join_room', { roomName, password: '' });
             }
@@ -4549,7 +4682,7 @@
                 <div class="help-section">
                     <div class="help-title">💬 EVERYONE</div>
                     <div><span class="help-command">/help</span> <span class="help-desc">- Show this help menu</span></div>
-                    <div><span class="help-command">/users</span> <span class="help-desc">- List users (🟢 in room, 🟡 online elsewhere, 🔴 offline)</span></div>
+                    <div><span class="help-command">/users</span> <span class="help-desc">- List users (🟢 in room, 🟡 online elsewhere, 🔴 offline) - Shows name to mod, email to admin+</span></div>
                     <div><span class="help-command">/msg &lt;user&gt; &lt;text&gt;</span> <span class="help-desc">- Send private message</span></div>
                     <div><span class="help-command">/flip</span> <span class="help-desc">- Flip a coin (heads/tails)</span></div>
                     <div><span class="help-command">/roll &lt;min&gt; &lt;max&gt;</span> <span class="help-desc">- Roll a random number</span></div>
@@ -4558,8 +4691,8 @@
                 
                 <div class="help-section">
                     <div class="help-title">📊 RANK SYSTEM (Lower number = Higher rank)</div>
-                    <div><span class="help-rank owner">OWNER (1)</span> <span class="help-desc">- Can see ALL private messages, Video enabled, Can ban anyone, Can grant any rank, Can clear chat, Can delete users</span></div>
-                    <div><span class="help-rank admin">ADMIN (2)</span> <span class="help-desc">- Can see messages from rank 3-5, Video enabled, Can ban rank 3-5, Can grant mod/vip/member, Can delete rooms</span></div>
+                    <div><span class="help-rank owner">OWNER (1)</span> <span class="help-desc">- Can see ALL private messages, Video enabled, Can ban anyone, Can grant any rank, Can clear chat, Can delete users, Can bypass room passwords</span></div>
+                    <div><span class="help-rank admin">ADMIN (2)</span> <span class="help-desc">- Can see messages from rank 3-5, Video enabled, Can ban rank 3-5, Can grant mod/vip/member, Can delete rooms, CANNOT demote other admins</span></div>
                     <div><span class="help-rank mod">MOD (3)</span> <span class="help-desc">- Can see messages from rank 4-5, Video enabled, Can ban rank 4-5, Can warn users</span></div>
                     <div><span class="help-rank vip">VIP (4)</span> <span class="help-desc">- Can see only their own messages, Video enabled, AI access, Image generation</span></div>
                     <div><span class="help-rank member">MEMBER (5)</span> <span class="help-desc">- Can see only their own messages, Video disabled, AI disabled, Image disabled</span></div>
@@ -4588,10 +4721,11 @@
                 ${isModerator ? `
                 <div class="help-section">
                     <div class="help-title">🛡️ MODERATOR+ COMMANDS</div>
-                    <div><span class="help-command">/ban &lt;user&gt; [duration]</span> <span class="help-desc">- Ban user (10m, 1h, 1d) - Can ban users with lower rank (VIP, Member)</span></div>
+                    <div><span class="help-command">/ban &lt;user&gt; [duration]</span> <span class="help-desc">- Ban user (default 10m) - Can ban users with lower rank (VIP, Member)</span></div>
                     <div><span class="help-command">/mute &lt;user&gt; [duration]</span> <span class="help-desc">- Mute user - Can mute users with lower rank</span></div>
                     <div><span class="help-command">/unmute &lt;user&gt;</span> <span class="help-desc">- Unmute user</span></div>
                     <div><span class="help-command">/warn &lt;user&gt;</span> <span class="help-desc">- Warn a user (sends red system message)</span></div>
+                    <div><span class="help-command">/effect off</span> <span class="help-desc">- Stop all effects</span></div>
                 </div>
                 ` : ''}
                 
@@ -4601,7 +4735,7 @@
                     <div><span class="help-command">/unban &lt;user&gt;</span> <span class="help-desc">- Unban user</span></div>
                     <div><span class="help-command">/delete room &lt;room&gt;</span> <span class="help-desc">- Delete any room</span></div>
                     <div><span class="help-command">/delete user &lt;user&gt;</span> <span class="help-desc">- Delete a user account</span></div>
-                    <div><span class="help-command">/grant &lt;user&gt; &lt;rank&gt;</span> <span class="help-desc">- Grant mod/vip/member (admin+)</span></div>
+                    <div><span class="help-command">/grant &lt;user&gt; &lt;rank&gt;</span> <span class="help-desc">- Grant mod/vip/member (CANNOT grant admin)</span></div>
                     <div><span class="help-command">/ban &lt;user&gt; [duration]</span> <span class="help-desc">- Can ban rank 3-5 (Mod, VIP, Member)</span></div>
                 </div>
                 ` : ''}
@@ -4624,11 +4758,12 @@
                         <div><span class="help-command">/effect flashbang</span> <span class="help-desc">- Flash</span></div>
                         <div><span class="help-command">/effect black</span> <span class="help-desc">- Blackout</span></div>
                         <div><span class="help-command">/effect hack</span> <span class="help-desc">- Hacker</span></div>
-                        <div><span class="help-command">/effect matrix</span> <span class="help-desc">- Matrix</span></div>
+                        <div><span class="help-command">/effect matrix</span> <span class="help-desc">- Matrix (falling binary code)</span></div>
                         <div><span class="help-command">/effect rainbow</span> <span class="help-desc">- Rainbow</span></div>
                         <div><span class="help-command">/effect neon</span> <span class="help-desc">- Neon</span></div>
                         <div><span class="help-command">/effect firework</span> <span class="help-desc">- Fireworks</span></div>
                         <div><span class="help-command">/effect confetti</span> <span class="help-desc">- Confetti</span></div>
+                        <div><span class="help-command">/effect off</span> <span class="help-desc">- Stop all effects</span></div>
                     </div>
                 </div>
                 ` : ''}
@@ -4636,7 +4771,7 @@
                 <div style="text-align: center; margin-top: 15px; color: #888; font-size: 11px; border-top: 1px solid rgba(102,126,234,0.3); padding-top: 10px;">
                     🤖 AI command available for VIP+ • 🔔 Notifications work in background<br>
                     ⚡ Rank levels: Owner(1) > Admin(2) > Moderator(3) > VIP(4) > Member(5)<br>
-                    📧 Email verification required for new accounts
+                    📧 Email verification required for new accounts • Links appear in red
                 </div>
             `;
             
@@ -4710,14 +4845,25 @@
                         <span>🟢 IN THIS ROOM</span>
                         <span style="font-size: 12px; color: #888;">(${data.roomUsers.length})</span>
                     </div>
-                    ${data.roomUsers.map(user => `
-                        <div style="display: flex; align-items: center; margin: 8px 0; padding: 6px 10px; background: rgba(74, 222, 128, 0.1); border-radius: 8px;">
-                            <span style="font-size: 16px; margin-right: 10px;">🟢</span>
-                            <span style="font-weight: bold; color: #4ade80;">${user.username}</span>
-                            ${getRankBadge(user.rank)}
-                            <span style="margin-left: auto; font-size: 11px; color: #888;">Level ${getRankLevel(user.rank)}</span>
-                        </div>
-                    `).join('')}
+                    ${data.roomUsers.map(user => {
+                        let extraInfo = '';
+                        if (isAdmin || isOwner) {
+                            extraInfo = `<div style="font-size: 10px; color: #888;">${user.email || 'No email'} | ${user.fullName || ''}</div>`;
+                        } else if (isModerator) {
+                            extraInfo = `<div style="font-size: 10px; color: #888;">${user.fullName || ''}</div>`;
+                        }
+                        return `
+                            <div style="display: flex; align-items: center; margin: 8px 0; padding: 6px 10px; background: rgba(74, 222, 128, 0.1); border-radius: 8px;">
+                                <span style="font-size: 16px; margin-right: 10px;">🟢</span>
+                                <div style="flex: 1;">
+                                    <span style="font-weight: bold; color: #4ade80;">${user.username}</span>
+                                    ${getRankBadge(user.rank)}
+                                    <span style="margin-left: auto; font-size: 11px; color: #888;">Level ${getRankLevel(user.rank)}</span>
+                                    ${extraInfo}
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
                 </div>
                 ` : ''}
                 
@@ -4727,16 +4873,27 @@
                         <span>🟡 ONLINE ELSEWHERE</span>
                         <span style="font-size: 12px; color: #888;">(${data.otherRoomUsers.length})</span>
                     </div>
-                    ${data.otherRoomUsers.map(user => `
-                        <div style="display: flex; align-items: center; margin: 8px 0; padding: 6px 10px; background: rgba(255, 170, 0, 0.1); border-radius: 8px;">
-                            <span style="font-size: 16px; margin-right: 10px;">🟡</span>
-                            <span style="font-weight: bold; color: #ffaa00;">${user.username}</span>
-                            ${getRankBadge(user.rank)}
-                            <span style="margin-left: auto; font-size: 11px; background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 12px;">
-                                📍 ${user.room}
-                            </span>
-                        </div>
-                    `).join('')}
+                    ${data.otherRoomUsers.map(user => {
+                        let extraInfo = '';
+                        if (isAdmin || isOwner) {
+                            extraInfo = `<div style="font-size: 10px; color: #888;">${user.email || 'No email'} | ${user.fullName || ''}</div>`;
+                        } else if (isModerator) {
+                            extraInfo = `<div style="font-size: 10px; color: #888;">${user.fullName || ''}</div>`;
+                        }
+                        return `
+                            <div style="display: flex; align-items: center; margin: 8px 0; padding: 6px 10px; background: rgba(255, 170, 0, 0.1); border-radius: 8px;">
+                                <span style="font-size: 16px; margin-right: 10px;">🟡</span>
+                                <div style="flex: 1;">
+                                    <span style="font-weight: bold; color: #ffaa00;">${user.username}</span>
+                                    ${getRankBadge(user.rank)}
+                                    <span style="margin-left: auto; font-size: 11px; background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 12px;">
+                                        📍 ${user.room}
+                                    </span>
+                                    ${extraInfo}
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
                 </div>
                 ` : ''}
                 
@@ -4747,13 +4904,22 @@
                         <span style="font-size: 12px; color: #888;">(${data.notOnlineUsers.length})</span>
                     </div>
                     <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px;">
-                        ${data.notOnlineUsers.map(user => `
-                            <div style="display: flex; align-items: center; padding: 6px 10px; background: rgba(255, 68, 68, 0.1); border-radius: 8px;">
-                                <span style="font-size: 14px; margin-right: 8px;">🔴</span>
-                                <span style="color: #ff8888;">${user.username}</span>
-                                ${getRankBadge(user.rank)}
-                            </div>
-                        `).join('')}
+                        ${data.notOnlineUsers.map(user => {
+                            let extraInfo = '';
+                            if (isAdmin || isOwner) {
+                                extraInfo = `<div style="font-size: 10px; color: #888;">${user.email || 'No email'}</div>`;
+                            }
+                            return `
+                                <div style="display: flex; flex-direction: column; padding: 6px 10px; background: rgba(255, 68, 68, 0.1); border-radius: 8px;">
+                                    <div style="display: flex; align-items: center;">
+                                        <span style="font-size: 14px; margin-right: 8px;">🔴</span>
+                                        <span style="color: #ff8888;">${user.username}</span>
+                                        ${getRankBadge(user.rank)}
+                                    </div>
+                                    ${extraInfo}
+                                </div>
+                            `;
+                        }).join('')}
                     </div>
                 </div>
                 ` : ''}
@@ -4769,6 +4935,8 @@
                     <span>🟢 In this room</span> • 
                     <span>🟡 Online elsewhere</span> • 
                     <span>🔴 Offline</span>
+                    ${isAdmin || isOwner ? '<br>📧 Email shown for Admin+' : ''}
+                    ${isModerator ? '<br>📝 Name shown for Moderator+' : ''}
                 </div>
             `;
             
@@ -4858,14 +5026,27 @@
             const targetRank = onlineUsers.find(u => u.username === targetUser)?.rank || 'member';
             const targetLevel = getRankLevel(targetRank);
             const userLevel = getRankLevel(currentRank);
+            
+            // Check if trying to ban admin (admin cannot ban other admins)
+            if (targetRank === 'admin' && !isOwner) {
+                addSystemMessage('❌ Cannot ban other admins');
+                return;
+            }
+            
             if (targetLevel <= userLevel && currentRank !== 'owner') {
                 addSystemMessage('❌ Cannot ban users of equal or higher rank');
                 return;
             }
+            
             let duration = '10m';
-            if (args.length >= 2 && /^\d+[hmd]?$/.test(args[1])) {
-                duration = args[1];
+            if (args.length >= 2) {
+                if (/^\d+[hmd]?$/.test(args[1])) {
+                    duration = args[1];
+                } else {
+                    duration = '10m';
+                }
             }
+            
             socket.emit('ban_user', {
                 roomName: currentRoom,
                 bannedUser: targetUser,
@@ -4873,6 +5054,7 @@
                 bannerName: currentUsername,
                 password: ''
             });
+            addSystemMessage(`⛔ Banning ${targetUser} for ${duration}...`);
         }
         
         function handleMuteCommand(args) {
@@ -4892,10 +5074,18 @@
             const targetRank = onlineUsers.find(u => u.username === targetUser)?.rank || 'member';
             const targetLevel = getRankLevel(targetRank);
             const userLevel = getRankLevel(currentRank);
+            
+            // Check if trying to mute admin (admin cannot mute other admins)
+            if (targetRank === 'admin' && !isOwner) {
+                addSystemMessage('❌ Cannot mute other admins');
+                return;
+            }
+            
             if (targetLevel <= userLevel && currentRank !== 'owner') {
                 addSystemMessage('❌ Cannot mute users of equal or higher rank');
                 return;
             }
+            
             let duration = '10m';
             if (args.length >= 2 && /^\d+[hmd]?$/.test(args[1])) {
                 duration = args[1];
@@ -4906,7 +5096,7 @@
                 duration,
                 muterName: currentUsername
             });
-            addSystemMessage(`🔇 Muted ${targetUser} for ${duration}`);
+            addSystemMessage(`🔇 Muting ${targetUser} for ${duration}...`);
         }
         
         function handleWarnCommand(args) {
@@ -4932,6 +5122,12 @@
             const targetRank = onlineUsers.find(u => u.username === targetUser)?.rank || 'member';
             const targetLevel = getRankLevel(targetRank);
             const userLevel = getRankLevel(currentRank);
+            
+            // Check if trying to warn admin (admin cannot warn other admins)
+            if (targetRank === 'admin' && !isOwner) {
+                addSystemMessage('❌ Cannot warn other admins');
+                return;
+            }
             
             if (targetLevel <= userLevel && currentRank !== 'owner') {
                 addSystemMessage('❌ Cannot warn users of equal or higher rank');
@@ -4965,7 +5161,7 @@
                 unmutedUser: args[0],
                 unmuterName: currentUsername
             });
-            addSystemMessage(`🔓 Unmuted ${args[0]}`);
+            addSystemMessage(`🔓 Unmuting ${args[0]}...`);
         }
         
         function handleUnbanCommand(args) {
@@ -4987,6 +5183,7 @@
                 unbannerName: currentUsername,
                 password: ''
             });
+            addSystemMessage(`✅ Unbanning ${args[0]}...`);
         }
         
         function handleDeleteCommand(args) {
@@ -5035,6 +5232,12 @@
                 return;
             }
             const effect = args[0].toLowerCase();
+            
+            if (effect === 'off') {
+                stopAllEffects();
+                return;
+            }
+            
             socket.emit('effect_command', { effect, roomName: currentRoom });
         }
         
@@ -5062,11 +5265,19 @@
             }
             const targetUser = args[0];
             const newRank = args[1].toLowerCase();
+            
+            // Admin cannot grant admin rank
+            if (newRank === 'admin' && !isOwner) {
+                addSystemMessage('❌ Only the owner can grant admin rank');
+                return;
+            }
+            
             const validRanks = isOwner ? ['admin', 'moderator', 'vip', 'member'] : ['moderator', 'vip', 'member'];
             if (!validRanks.includes(newRank)) {
                 addSystemMessage(`❌ You can only grant: ${validRanks.join(', ')}`);
                 return;
             }
+            
             socket.emit('grant_rank', { targetUser, newRank, password: '' });
         }
         
@@ -5181,12 +5392,16 @@
         
         socket.on('room_effect', (data) => {
             addSystemMessage(`✨ ${data.triggeredBy} triggered: ${data.effect}`);
-            document.body.classList.remove('glitch', 'flashbang', 'black', 'hack', 'matrix', 'rainbow', 'neon', 'firework', 'gameroom');
+            
+            // Stop previous effect if it's a different one
+            if (currentEffect !== data.effect) {
+                stopAllEffects();
+                currentEffect = data.effect;
+            }
             
             switch(data.effect) {
                 case 'glitch':
                     document.body.classList.add('glitch');
-                    setTimeout(() => document.body.classList.remove('glitch'), 5000);
                     break;
                 case 'flashbang':
                     document.body.classList.add('flashbang');
@@ -5194,23 +5409,19 @@
                     break;
                 case 'black':
                     document.body.classList.add('black');
-                    setTimeout(() => document.body.classList.remove('black'), 5000);
                     break;
                 case 'hack':
-                    document.body.classList.add('hack');
-                    setTimeout(() => document.body.classList.remove('hack'), 10000);
+                    document.body.classList.add('hack-effect');
                     break;
                 case 'matrix':
                     document.body.classList.add('matrix');
-                    setTimeout(() => document.body.classList.remove('matrix'), 10000);
+                    startMatrixEffect();
                     break;
                 case 'rainbow':
                     document.body.classList.add('rainbow');
-                    setTimeout(() => document.body.classList.remove('rainbow'), 5000);
                     break;
                 case 'neon':
-                    document.body.classList.add('neon');
-                    setTimeout(() => document.body.classList.remove('neon'), 5000);
+                    document.body.classList.add('neon-effect');
                     break;
                 case 'firework':
                     document.body.classList.add('firework');
@@ -5223,7 +5434,6 @@
                     break;
                 case 'gameroom':
                     document.body.classList.add('gameroom');
-                    setTimeout(() => document.body.classList.remove('gameroom'), 10000);
                     break;
             }
         });
@@ -5276,6 +5486,7 @@
             
             const select = document.getElementById('pmRecipientSelect');
             if (select) {
+                select.innerHTML = '<option value="">Select user...</option>';
                 onlineUsers.forEach(user => {
                     const option = document.createElement('option');
                     option.value = user.username;
@@ -5295,19 +5506,33 @@
             users.forEach(user => {
                 const userLevel = getRankLevel(user.rank);
                 const currentUserLevel = getRankLevel(currentRank);
+                const userData = allUsersData.get(user.username) || {};
+                
+                let extraInfo = '';
+                if (isAdmin || isOwner) {
+                    extraInfo = `<div class="user-email">${userData.email || ''} | ${userData.fullName || ''}</div>`;
+                } else if (isModerator) {
+                    extraInfo = `<div class="user-email">${userData.fullName || ''}</div>`;
+                }
+                
+                const canWarn = isModerator && userLevel > currentUserLevel && user.rank !== 'admin';
+                const canBan = isModerator && userLevel > currentUserLevel && user.rank !== 'admin';
                 
                 html += `
                     <div class="user-list-item">
                         <div class="user-info-modal">
-                            <span>${user.username}</span>
-                            ${getRankBadge(user.rank)}
-                            <span style="font-size: 10px; color: #888;">Rank ${userLevel}</span>
+                            <div>
+                                <span>${user.username}</span>
+                                ${getRankBadge(user.rank)}
+                                <span style="font-size: 10px; color: #888;">Rank ${userLevel}</span>
+                                ${extraInfo}
+                            </div>
                         </div>
                         <div class="user-actions">
-                            ${(isModerator && userLevel > currentUserLevel) ? `
+                            ${canWarn ? `
                                 <button class="action-btn warning" style="padding: 4px 8px; font-size: 12px;" onclick="quickWarn('${user.username}')">⚠️</button>
                             ` : ''}
-                            ${(isModerator && userLevel > currentUserLevel) ? `
+                            ${canBan ? `
                                 <button class="action-btn danger" style="padding: 4px 8px; font-size: 12px;" onclick="quickBan('${user.username}')">⛔</button>
                             ` : ''}
                             <button class="action-btn" style="padding: 4px 8px; font-size: 12px;" onclick="quickMsg('${user.username}')">💌</button>
@@ -5327,10 +5552,17 @@
             const targetRank = onlineUsers.find(u => u.username === username)?.rank || 'member';
             const targetLevel = getRankLevel(targetRank);
             const userLevel = getRankLevel(currentRank);
+            
+            if (targetRank === 'admin' && !isOwner) {
+                showToast('❌ Cannot warn other admins');
+                return;
+            }
+            
             if (targetLevel <= userLevel && currentRank !== 'owner') {
                 showToast('❌ Cannot warn users of equal or higher rank');
                 return;
             }
+            
             socket.emit('warn_user', {
                 targetUser: username,
                 roomName: currentRoom,
@@ -5348,6 +5580,12 @@
             const targetRank = onlineUsers.find(u => u.username === username)?.rank || 'member';
             const targetLevel = getRankLevel(targetRank);
             const userLevel = getRankLevel(currentRank);
+            
+            if (targetRank === 'admin' && !isOwner) {
+                showToast('❌ Cannot ban other admins');
+                return;
+            }
+            
             if (targetLevel <= userLevel && currentRank !== 'owner') {
                 showToast('❌ Cannot ban users of equal or higher rank');
                 return;
@@ -5385,7 +5623,12 @@
             const select = document.getElementById('pmRecipientSelect');
             if (!select) return;
             select.innerHTML = '<option value="">Select user...</option>';
-            socket.emit('get_room_users', { roomName: currentRoom });
+            onlineUsers.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user.username;
+                option.innerHTML = `${user.username} ${getRankBadge(user.rank)}`;
+                select.appendChild(option);
+            });
         }
         
         function sendPrivateMessage() {

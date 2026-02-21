@@ -9,15 +9,16 @@
     "build": "mkdir -p uploads"
   },
   "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "crypto": "^1.0.1",
     "dotenv": "^16.0.3",
+    "error": "^10.4.0",
     "express": "^4.18.2",
-    "socket.io": "^4.5.4",
     "mongoose": "^7.0.0",
     "multer": "^1.4.5-lts.1",
-    "sharp": "^0.32.0",
     "nodemailer": "^6.9.1",
-    "bcryptjs": "^2.4.3",
-    "crypto": "^1.0.1"
+    "sharp": "^0.32.0",
+    "socket.io": "^4.5.4"
   },
   "engines": {
     "node": "18.x"

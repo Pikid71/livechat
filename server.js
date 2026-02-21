@@ -7,7 +7,6 @@ const mongoose = require('mongoose');
 const multer = require('multer');
 const sharp = require('sharp');
 const fs = require('fs').promises;
-const nodemailer = require('nodemailer');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 
@@ -28,14 +27,10 @@ const io = new Server(server, {
 let MONGODB_URI = process.env.MONGODB_URI;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const PORT = process.env.PORT || 3000;
-const OWNER_USERNAME = process.env.OWNER_USERNAME;
-const OWNER_EMAIL = process.env.OWNER_EMAIL;
-const OWNER_FULLNAME = process.env.OWNER_FULLNAME;
+const OWNER_USERNAME = process.env.OWNER_USERNAME || 'Pi_Kid71';
+const OWNER_EMAIL = process.env.OWNER_EMAIL || 'misha037@hsd.k12.or.us';
+const OWNER_FULLNAME = process.env.OWNER_FULLNAME || 'Aashish Mishra';
 const NODE_ENV = process.env.NODE_ENV || 'development';
-
-// Email configuration
-const EMAIL_USER = process.env.EMAIL_USER;
-const EMAIL_PASS = process.env.EMAIL_PASS;
 
 console.log('\n' + '='.repeat(70));
 console.log('🚀 BLACK HOLE CHAT V2 - SERVER STARTING');
@@ -53,7 +48,6 @@ console.log('='.repeat(70) + '\n');
 const uploadDir = process.env.UPLOAD_PATH || path.join(__dirname, 'uploads');
 console.log(`📁 Upload directory: ${uploadDir}`);
 
-// Create uploads directory if it doesn't exist
 (async () => {
   try {
     await fs.mkdir(uploadDir, { recursive: true });
@@ -295,7 +289,6 @@ async function initializeDefaultData() {
       console.log('✅ Default "Main" room created');
     }
 
-    // Create owner account with verification
     const owner = await User.findOne({ username: OWNER_USERNAME });
     if (!owner) {
       const hashedPassword = await bcrypt.hash(ADMIN_PASSWORD, 10);
@@ -337,7 +330,6 @@ async function loadInitialData() {
   try {
     console.log('🔁 Loading initial data from MongoDB into memory store...');
 
-    // Load users
     const users = await User.find({}).lean();
     users.forEach(u => {
       memoryStore.users.set(u.username, {
@@ -352,7 +344,6 @@ async function loadInitialData() {
       });
     });
 
-    // Load rooms
     const rooms = await Room.find({}).lean();
     for (const r of rooms) {
       const roomObj = {
@@ -364,7 +355,6 @@ async function loadInitialData() {
         theme: r.theme || 'default'
       };
       
-      // Load messages for this room
       if (r.messages && r.messages.length > 0) {
         const msgs = await Message.find({ _id: { $in: r.messages } }).sort({ timestamp: 1 }).lean();
         roomObj.messages = msgs.map(m => ({
@@ -382,7 +372,6 @@ async function loadInitialData() {
       memoryStore.rooms.set(r.name, roomObj);
     }
 
-    // Load files
     const files = await FileModel.find({}).lean();
     files.forEach(f => {
       if (!memoryStore.files.has(f.filename)) {
@@ -400,7 +389,6 @@ async function loadInitialData() {
       }
     });
 
-    // Load active bans
     const bans = await Ban.find({ isActive: true, expiresAt: { $gt: new Date() } }).lean();
     bans.forEach(b => {
       const roomBans = memoryStore.bans.get(b.roomName) || [];
@@ -412,7 +400,6 @@ async function loadInitialData() {
       memoryStore.bans.set(b.roomName, roomBans);
     });
 
-    // Load recent private messages
     const pms = await PrivateMessage.find({}).sort({ timestamp: -1 }).limit(200).lean();
     memoryStore.privateMessages = pms.reverse().map(pm => ({
       from: pm.from,
@@ -421,7 +408,6 @@ async function loadInitialData() {
       timestamp: pm.timestamp
     }));
 
-    // Load message counts
     const msgCounts = await MessageCount.find({}).lean();
     msgCounts.forEach(mc => {
       memoryStore.messageCounts.set(mc.username, {
@@ -444,79 +430,9 @@ connectToMongoDB();
 // ============================================
 // 📧 EMAIL VERIFICATION SETUP
 // ============================================
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: EMAIL_USER,
-    pass: EMAIL_PASS
-  }
-});
 
-// Email validation function
-function validateSchoolEmail(email) {
-  // Must end with hsd.k12.or.us
-  if (!email.endsWith('@hsd.k12.or.us')) {
-    return { valid: false, reason: 'Email must be from hsd.k12.or.us domain' };
-  }
-
-  const localPart = email.split('@')[0];
-  
-  // Check length: 21-22 characters total (including @hsd.k12.or.us)
-  // @hsd.k12.or.us is 15 characters
-  const localPartLength = localPart.length;
-  if (localPartLength < 6 || localPartLength > 7) { // 6-7 chars local + 15 domain = 21-22 total
-    return { valid: false, reason: 'Email must be 21-22 characters total' };
-  }
-
-  // Check first 4-5 characters are alphabetic
-  const alphaPart = localPart.match(/^[a-zA-Z]+/);
-  if (!alphaPart || alphaPart[0].length < 4 || alphaPart[0].length > 5) {
-    return { valid: false, reason: 'Email must start with 4-5 alphabetic characters' };
-  }
-
-  // Check for 3 numbers in the remaining part
-  const remainingPart = localPart.substring(alphaPart[0].length);
-  const numbers = remainingPart.match(/\d/g);
-  if (!numbers || numbers.length !== 3) {
-    return { valid: false, reason: 'Email must contain exactly 3 numbers after the alphabetic part' };
-  }
-
-  // Check remaining part after numbers is empty (should be just numbers)
-  if (remainingPart.length !== 3) {
-    return { valid: false, reason: 'Email format invalid - should be letters then exactly 3 numbers' };
-  }
-
-  return { valid: true };
-}
-
-// Generate 6-digit verification code
 function generateVerificationCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
-}
-
-// Send verification email
-async function sendVerificationEmail(email, code, fullName) {
-  const mailOptions = {
-    from: EMAIL_USER,
-    to: email,
-    subject: 'Black Hole Chat V2 - Email Verification',
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px;">
-        <h1 style="color: white; text-align: center;">🕳️ Black Hole Chat V2</h1>
-        <div style="background: white; padding: 30px; border-radius: 8px; margin-top: 20px;">
-          <h2 style="color: #333; margin-top: 0;">Hello ${fullName}!</h2>
-          <p style="color: #666; font-size: 16px;">Your verification code is:</p>
-          <div style="background: #f0f0f0; padding: 20px; text-align: center; border-radius: 8px; margin: 20px 0;">
-            <span style="font-size: 36px; font-weight: bold; letter-spacing: 5px; color: #667eea;">${code}</span>
-          </div>
-          <p style="color: #666; font-size: 14px;">This code will expire in 10 minutes.</p>
-          <p style="color: #999; font-size: 12px; margin-top: 30px;">If you didn't request this, please ignore this email.</p>
-        </div>
-      </div>
-    `
-  };
-
-  await transporter.sendMail(mailOptions);
 }
 
 // ============================================
@@ -665,7 +581,6 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     let fileSize = req.file.size;
     let fileType = req.file.mimetype;
 
-    // Only optimize images for non-owner users
     if (req.file.mimetype.startsWith('image/') && !isOwner) {
       try {
         const optimizedPath = path.join(uploadDir, 'opt-' + req.file.filename);
@@ -688,7 +603,6 @@ app.post('/upload', upload.single('file'), async (req, res) => {
 
     const fileUrl = `/uploads/${path.basename(finalPath)}`;
     
-    // Save to MongoDB
     if (isMongoConnected && FileModel) {
       try {
         const fileDoc = await FileModel.create({
@@ -702,7 +616,6 @@ app.post('/upload', upload.single('file'), async (req, res) => {
           fileUrl: fileUrl
         });
         
-        // Also save to memory store
         memoryStore.files.set(path.basename(finalPath), {
           filename: path.basename(finalPath),
           originalName: req.file.originalname,
@@ -847,19 +760,17 @@ function recordMessage(username, text) {
   return count;
 }
 
-// Check if unverified user can send message (5 per 10 minutes)
 async function checkMessageLimit(username) {
-  if (!isMongoConnected) return true; // Allow if no DB
+  if (!isMongoConnected) return true;
   
   try {
     const user = await User.findOne({ username });
-    if (user && user.isVerified) return true; // Verified users have no limit
+    if (user && user.isVerified) return true;
     
     const now = Date.now();
     let msgCount = memoryStore.messageCounts.get(username);
     
     if (!msgCount) {
-      // Check DB
       const dbCount = await MessageCount.findOne({ username });
       if (dbCount) {
         msgCount = {
@@ -874,7 +785,6 @@ async function checkMessageLimit(username) {
       }
     }
     
-    // Reset if 10 minutes have passed
     if (now - msgCount.resetTime > 10 * 60 * 1000) {
       msgCount.count = 0;
       msgCount.resetTime = now;
@@ -888,7 +798,7 @@ async function checkMessageLimit(username) {
     return msgCount.count < 5;
   } catch (err) {
     console.error('Error checking message limit:', err);
-    return true; // Allow on error
+    return true;
   }
 }
 
@@ -904,7 +814,6 @@ async function incrementMessageCount(username) {
       memoryStore.messageCounts.set(username, msgCount);
     }
     
-    // Reset if 10 minutes have passed
     if (now - msgCount.resetTime > 10 * 60 * 1000) {
       msgCount.count = 0;
       msgCount.resetTime = now;
@@ -952,7 +861,9 @@ const PERMISSIONS = {
     canUpload: true, 
     canVoice: true, 
     canVideo: true,
-    canSeeAllPrivate: true
+    canSeeAllPrivate: true,
+    canBypassPassword: true,
+    canDeleteAnyUser: true
   },
   admin: { 
     level: 2, 
@@ -961,12 +872,14 @@ const PERMISSIONS = {
     canMute: true,
     canDeleteRoom: true, 
     canClear: false, // Only owner can clear
-    canGrant: ['moderator', 'vip', 'member'], 
+    canGrant: ['moderator', 'vip', 'member'], // CANNOT grant admin
     canUseEffects: true, 
     canUpload: true, 
     canVoice: true, 
     canVideo: true,
-    canSeeAllPrivate: false
+    canSeeAllPrivate: false,
+    canBypassPassword: false,
+    canDeleteAnyUser: false // Cannot delete admins
   },
   moderator: { 
     level: 3, 
@@ -980,7 +893,9 @@ const PERMISSIONS = {
     canUpload: true, 
     canVoice: true, 
     canVideo: true,
-    canSeeAllPrivate: false
+    canSeeAllPrivate: false,
+    canBypassPassword: false,
+    canDeleteAnyUser: false
   },
   vip: { 
     level: 4, 
@@ -994,7 +909,9 @@ const PERMISSIONS = {
     canUpload: true, 
     canVoice: true, 
     canVideo: true,
-    canSeeAllPrivate: false
+    canSeeAllPrivate: false,
+    canBypassPassword: false,
+    canDeleteAnyUser: false
   },
   member: { 
     level: 5, 
@@ -1008,7 +925,9 @@ const PERMISSIONS = {
     canUpload: false, 
     canVoice: true, 
     canVideo: false,
-    canSeeAllPrivate: false
+    canSeeAllPrivate: false,
+    canBypassPassword: false,
+    canDeleteAnyUser: false
   }
 };
 
@@ -1083,7 +1002,6 @@ io.on('connection', (socket) => {
         });
       };
 
-      // Check in-memory store first
       if (memoryStore.users.has(username)) {
         const user = memoryStore.users.get(username);
         const isValid = await bcrypt.compare(password, user.password);
@@ -1094,13 +1012,11 @@ io.on('connection', (socket) => {
         }
       }
 
-      // Check MongoDB
       if (isMongoConnected && User) {
         const user = await User.findOne({ username });
         if (user) {
           const isValid = await bcrypt.compare(password, user.password);
           if (isValid) {
-            // Update memory store
             memoryStore.users.set(username, {
               username: user.username,
               fullName: user.fullName,
@@ -1131,37 +1047,24 @@ io.on('connection', (socket) => {
     try {
       const { fullName, email, username, password } = data;
       
-      // Validate email
-      const emailValidation = validateSchoolEmail(email);
-      if (!emailValidation.valid) {
-        return socket.emit('auth_error', { message: emailValidation.reason });
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return socket.emit('auth_error', { message: 'Please enter a valid email address' });
       }
       
-      // Check if email already exists (except owner's email which allows up to 10 accounts)
-      if (email !== OWNER_EMAIL) {
-        const existingUser = await User.findOne({ email });
-        if (existingUser) {
-          return socket.emit('auth_error', { message: 'Email already registered' });
-        }
-      } else {
-        // Owner's email - check if less than 10 accounts
-        const ownerAccounts = await User.countDocuments({ email: OWNER_EMAIL });
-        if (ownerAccounts >= 10) {
-          return socket.emit('auth_error', { message: 'Maximum accounts for this email reached' });
-        }
+      const existingUser = await User.findOne({ email });
+      if (existingUser) {
+        return socket.emit('auth_error', { message: 'Email already registered' });
       }
       
-      // Check if username exists
       const existingUsername = await User.findOne({ username });
       if (existingUsername) {
         return socket.emit('auth_error', { message: 'Username already taken' });
       }
       
-      // Generate verification code
       const code = generateVerificationCode();
       const hashedPassword = await bcrypt.hash(password, 10);
       
-      // Save verification data
       await VerificationCode.create({
         email,
         code,
@@ -1170,19 +1073,16 @@ io.on('connection', (socket) => {
         password: hashedPassword
       });
       
-      // Send email
-      await sendVerificationEmail(email, code, fullName);
+      console.log(`📧 Verification code ${code} for ${email} (user: ${username})`);
       
       socket.emit('verification_sent', { 
-        message: 'Verification code sent to your email',
+        message: 'Verification code generated',
         email 
       });
       
-      console.log(`📧 Verification code sent to ${email} for user ${username}`);
-      
     } catch (err) {
       console.error('Verification request error:', err);
-      socket.emit('auth_error', { message: 'Failed to send verification code' });
+      socket.emit('auth_error', { message: 'Failed to generate verification code' });
     }
   });
   
@@ -1193,14 +1093,13 @@ io.on('connection', (socket) => {
       const verification = await VerificationCode.findOne({ 
         email, 
         code,
-        createdAt: { $gt: new Date(Date.now() - 10 * 60 * 1000) } // Within 10 minutes
+        createdAt: { $gt: new Date(Date.now() - 10 * 60 * 1000) }
       });
       
       if (!verification) {
         return socket.emit('auth_error', { message: 'Invalid or expired verification code' });
       }
       
-      // Create user
       const user = await User.create({
         username: verification.username,
         fullName: verification.fullName,
@@ -1210,7 +1109,6 @@ io.on('connection', (socket) => {
         lastLogin: new Date()
       });
       
-      // Add to memory store
       memoryStore.users.set(verification.username, {
         username: verification.username,
         fullName: verification.fullName,
@@ -1222,10 +1120,8 @@ io.on('connection', (socket) => {
         deviceIds: []
       });
       
-      // Delete verification code
       await VerificationCode.deleteOne({ _id: verification._id });
       
-      // Auto login
       currentUser = verification.username;
       userRank = 'member';
       isVerified = true;
@@ -1312,9 +1208,12 @@ io.on('connection', (socket) => {
       
       for (const [sid, session] of memoryStore.sessions) {
         if (session.roomName === roomName) {
+          const userData = memoryStore.users.get(session.username) || {};
           users.push({
             username: session.username,
-            rank: session.rank || 'member'
+            rank: session.rank || 'member',
+            fullName: userData.fullName || '',
+            email: userData.email || ''
           });
         }
       }
@@ -1336,9 +1235,12 @@ io.on('connection', (socket) => {
       const roomUsers = [];
       for (const [sid, session] of memoryStore.sessions) {
         if (session.roomName === roomName && session.username !== currentUser) {
+          const userData = memoryStore.users.get(session.username) || {};
           roomUsers.push({
             username: session.username,
-            rank: session.rank || 'member'
+            rank: session.rank || 'member',
+            fullName: userData.fullName || '',
+            email: userData.email || ''
           });
         }
       }
@@ -1356,6 +1258,7 @@ io.on('connection', (socket) => {
         let isOnline = false;
         let userRoom = null;
         let userRank = memoryStore.users.get(username)?.rank || 'member';
+        const userData = memoryStore.users.get(username) || {};
         
         for (const [sid, session] of memoryStore.sessions) {
           if (session.username === username) {
@@ -1369,12 +1272,16 @@ io.on('connection', (socket) => {
           otherRoomUsers.push({
             username,
             rank: userRank,
-            room: userRoom
+            room: userRoom,
+            fullName: userData.fullName || '',
+            email: userData.email || ''
           });
         } else {
           notOnlineUsers.push({
             username,
-            rank: userRank
+            rank: userRank,
+            fullName: userData.fullName || '',
+            email: userData.email || ''
           });
         }
       });
@@ -1470,8 +1377,14 @@ io.on('connection', (socket) => {
         return socket.emit('error', { message: 'Room does not exist' });
       }
       
+      const permissions = PERMISSIONS[userRank] || PERMISSIONS.member;
+      
       if (room.password && room.password !== password) {
-        return socket.emit('error', { message: 'Incorrect password' });
+        if (!permissions.canBypassPassword) {
+          return socket.emit('error', { message: 'Incorrect password' });
+        } else {
+          console.log(`👑 Owner ${currentUser} bypassed password for room ${roomName}`);
+        }
       }
       
       if (currentRoom) {
@@ -1580,7 +1493,6 @@ io.on('connection', (socket) => {
         return;
       }
 
-      // Check message limit for unverified users
       const canSend = await checkMessageLimit(currentUser);
       if (!canSend) {
         socket.emit('system_message', { 
@@ -1667,15 +1579,56 @@ io.on('connection', (socket) => {
         if (room.messages.length > 100) room.messages.shift();
       }
       
-      // Increment message count for unverified users
       if (!isVerified) {
         await incrementMessageCount(currentUser);
+        socket.emit('message_limit_update', { count: memoryStore.messageCounts.get(currentUser)?.count || 0 });
       }
       
       io.to(currentRoom).emit('chat message', messageData);
       
     } catch (err) {
       console.error('message error:', err);
+    }
+  });
+  
+  // ========== WARN USER ==========
+  
+  socket.on('warn_user', (data) => {
+    try {
+      if (!currentUser || !currentRoom) return;
+      
+      const { targetUser, warnerName } = data;
+      
+      if (targetUser === currentUser) {
+        return socket.emit('error', { message: 'Cannot warn yourself' });
+      }
+      
+      const targetRank = memoryStore.users.get(targetUser)?.rank || 'member';
+      const targetLevel = getRankLevel(targetRank);
+      const warnerLevel = getRankLevel(userRank);
+      
+      if (targetLevel <= warnerLevel && userRank !== 'owner') {
+        return socket.emit('error', { message: 'Cannot warn users of equal or higher rank' });
+      }
+      
+      if (targetRank === 'admin' && userRank !== 'owner') {
+        return socket.emit('error', { message: 'Cannot warn other admins' });
+      }
+      
+      const warnMsg = {
+        username: 'System',
+        message: `⚠️ WARNING: ${targetUser} was warned by ${warnerName}`,
+        timestamp: new Date(),
+        rank: 'system'
+      };
+      
+      io.to(currentRoom).emit('chat message', warnMsg);
+      io.to(currentRoom).emit('user_warned', { targetUser, warnerName, timestamp: new Date() });
+      
+      console.log(`⚠️ ${targetUser} warned by ${warnerName} in ${currentRoom}`);
+      
+    } catch (err) {
+      console.error('warn_user error:', err);
     }
   });
   
@@ -1951,7 +1904,6 @@ io.on('connection', (socket) => {
         rank: rank
       });
       
-      // Send own stream info back to client
       socket.emit('video_self_joined', {
         userId: socket.id,
         username: username,
@@ -2008,7 +1960,7 @@ io.on('connection', (socket) => {
       const { target, answer } = data;
       io.to(target).emit('video_answer', {
         from: socket.id,
-        answer: answer
+        answer
       });
     } catch (err) {
       console.error('video_answer error:', err);
@@ -2094,19 +2046,18 @@ io.on('connection', (socket) => {
         return socket.emit('error', { message: '❌ Cannot ban yourself' });
       }
       
-      // Get ranks and levels
       const bannedUserRank = memoryStore.users.get(bannedUser)?.rank || 'member';
       const bannedLevel = getRankLevel(bannedUserRank);
       const bannerLevel = getRankLevel(userRank);
       
-      console.log(`🔨 Ban attempt: ${currentUser} (${userRank}, level ${bannerLevel}) trying to ban ${bannedUser} (${bannedUserRank}, level ${bannedLevel})`);
+      if (bannedUserRank === 'admin' && userRank !== 'owner') {
+        return socket.emit('error', { message: '❌ Cannot ban other admins' });
+      }
       
-      // Check if banner has higher rank (lower level number) than banned user
       if (bannerLevel >= bannedLevel && userRank !== 'owner') {
         return socket.emit('error', { message: `❌ Cannot ban users of equal or higher rank. Your rank: ${userRank} (${bannerLevel}), Target rank: ${bannedUserRank} (${bannedLevel})` });
       }
       
-      // Parse duration
       let durationMs = 10 * 60 * 1000;
       const match = duration.match(/^(\d+)([hmd])$/);
       if (match) {
@@ -2275,6 +2226,10 @@ io.on('connection', (socket) => {
       const mutedLevel = getRankLevel(mutedUserRank);
       const muterLevel = getRankLevel(userRank);
       
+      if (mutedUserRank === 'admin' && userRank !== 'owner') {
+        return socket.emit('error', { message: '❌ Cannot mute other admins' });
+      }
+      
       if (muterLevel >= mutedLevel && userRank !== 'owner') {
         return socket.emit('error', { message: `❌ Cannot mute users of equal or higher rank. Your rank: ${userRank} (${muterLevel}), Target rank: ${mutedUserRank} (${mutedLevel})` });
       }
@@ -2412,6 +2367,51 @@ io.on('connection', (socket) => {
     }
   });
   
+  socket.on('delete_user', (data) => {
+    try {
+      if (!currentUser) return;
+      
+      const permissions = PERMISSIONS[userRank] || PERMISSIONS.member;
+      if (!permissions.canDeleteAnyUser && userRank !== 'owner') {
+        return socket.emit('error', { message: 'You do not have permission to delete users' });
+      }
+      
+      const { targetUser } = data;
+      
+      if (targetUser === OWNER_USERNAME) {
+        return socket.emit('error', { message: 'Cannot delete owner' });
+      }
+      
+      const targetRank = memoryStore.users.get(targetUser)?.rank || 'member';
+      
+      if (targetRank === 'admin' && userRank !== 'owner') {
+        return socket.emit('error', { message: 'Cannot delete other admins' });
+      }
+      
+      memoryStore.users.delete(targetUser);
+      
+      for (const [sid, session] of memoryStore.sessions) {
+        if (session.username === targetUser) {
+          io.to(sid).emit('user_deleted', { deletedUser: targetUser, deletedBy: currentUser });
+          const socketToDisconnect = io.sockets.sockets.get(sid);
+          if (socketToDisconnect) socketToDisconnect.disconnect(true);
+          memoryStore.sessions.delete(sid);
+        }
+      }
+      
+      io.emit('system_message', { 
+        message: `🗑️ User ${targetUser} was deleted by ${currentUser}`,
+        timestamp: new Date() 
+      });
+      
+      console.log(`🗑️ User ${targetUser} deleted by ${currentUser}`);
+      
+    } catch (err) {
+      console.error('delete_user error:', err);
+      socket.emit('error', { message: 'Failed to delete user: ' + err.message });
+    }
+  });
+  
   socket.on('effect_command', (data) => {
     try {
       if (!currentUser || !currentRoom) return;
@@ -2463,20 +2463,21 @@ io.on('connection', (socket) => {
       
       if (!targetUser || !newRank) return;
       
-      if (!permissions.canGrant.includes(newRank)) {
-        return socket.emit('error', { message: `❌ Cannot grant ${newRank} rank` });
+      if (newRank === 'admin' && userRank !== 'owner') {
+        return socket.emit('error', { message: 'Only the owner can grant admin rank' });
       }
       
-      // Check if target user exists
+      if (!permissions.canGrant.includes(newRank)) {
+        return socket.emit('error', { message: `Cannot grant ${newRank} rank` });
+      }
+      
       const targetUserData = memoryStore.users.get(targetUser);
       if (!targetUserData) {
-        return socket.emit('error', { message: `❌ User ${targetUser} not found` });
+        return socket.emit('error', { message: `User ${targetUser} not found` });
       }
       
-      // Update in memory store
       targetUserData.rank = newRank;
       
-      // Update in MongoDB
       if (isMongoConnected && User) {
         (async () => {
           try {
@@ -2491,7 +2492,6 @@ io.on('connection', (socket) => {
         })();
       }
       
-      // Update any active sessions for this user
       for (const [sid, session] of memoryStore.sessions) {
         if (session.username === targetUser) {
           session.rank = newRank;
@@ -2522,7 +2522,7 @@ io.on('connection', (socket) => {
         return socket.emit('error', { message: '❌ You are muted and cannot use commands' });
       }
       
-      const validThemes = ['default', 'dark', 'light', 'neon', 'midnight', 'sunset', 'forest', 'ocean', 'cyberpunk', 'vintage'];
+      const validThemes = ['default', 'dark', 'light', 'neon', 'midnight', 'sunset', 'forest', 'ocean', 'cyberpunk', 'vintage', 'hack'];
       
       if (!validThemes.includes(theme)) {
         return socket.emit('error', { message: '❌ Invalid theme' });
@@ -2586,7 +2586,6 @@ setInterval(async () => {
   }
   
   try {
-    // Backup room messages
     if (Message && memoryStore.rooms.size > 0) {
       for (const [roomName, room] of memoryStore.rooms.entries()) {
         if (room.messages && room.messages.length > 0) {
@@ -2614,7 +2613,6 @@ setInterval(async () => {
                 });
                 await message.save();
                 
-                // Add message reference to room
                 await Room.updateOne(
                   { name: roomName },
                   { $push: { messages: message._id } }
@@ -2626,7 +2624,6 @@ setInterval(async () => {
       }
     }
     
-    // Backup private messages
     if (PrivateMessage && memoryStore.privateMessages.length > 0) {
       const messagesToBackup = memoryStore.privateMessages.slice();
       
@@ -2675,15 +2672,16 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`👑 Owner: ${OWNER_USERNAME} (${OWNER_FULLNAME})`);
   console.log(`📧 Owner Email: ${OWNER_EMAIL}`);
   console.log(`📊 Rank System:`);
-  console.log(`   1. 👑 Owner - Can see ALL private messages, Video enabled, Can grant any rank, Can clear chat`);
-  console.log(`   2. 👮 Admin - Can grant moderator/vip/member, Cannot clear chat`);
-  console.log(`   3. 🛡️ Moderator - Can ban/mute users with lower rank, Cannot grant ranks`);
+  console.log(`   1. 👑 Owner - Can see ALL private messages, Video enabled, Can grant any rank, Can clear chat, Can bypass room passwords, Can delete any user`);
+  console.log(`   2. 👮 Admin - Can grant moderator/vip/member, CANNOT grant admin, CANNOT demote other admins, CANNOT clear chat`);
+  console.log(`   3. 🛡️ Moderator - Can ban/mute/warn users with lower rank, Cannot grant ranks`);
   console.log(`   4. ⭐ VIP - Video enabled, AI access, Image generation`);
   console.log(`   5. 👤 Member - Basic access, Video disabled, AI disabled`);
-  console.log(`   6. 👤 New member - Must verify email to get member rank`);
   console.log(`📧 Email Verification: Required for new accounts`);
   console.log(`⏱️ Unverified users: Limited to 5 messages per 10 minutes`);
-  console.log(`🎥 Video Chat: Now shows your own camera`);
+  console.log(`🎥 Video Chat: Now shows your own camera and others' feeds`);
+  console.log(`⚠️ Warn Command: Available for Moderator+`);
+  console.log(`🎮 Effects: Last forever until new effect or /effect off`);
   console.log(`💾 MongoDB: ${isMongoConnected ? 'CONNECTED' : 'DISCONNECTED'}`);
   console.log(`📁 Uploads: ${uploadDir} (${memoryStore.files.size} files in memory)`);
   console.log(`🌍 URL: http://localhost:${PORT}`);
