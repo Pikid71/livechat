@@ -136,4 +136,4 @@ public
 *.tmp
 *.temp
 *.log
-*.pid
+*.pid.env
