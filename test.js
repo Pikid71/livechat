@@ -1,45 +1,29 @@
-require('dotenv').config();
-const mongoose = require('mongoose');
+// 1. Initialize EmailJS with your Public Key
+// (Find this in Account > API Keys)
+emailjs.init({
+  publicKey: "YOUR_PUBLIC_KEY",
+});
 
-const MONGODB_URI = process.env.MONGODB_URI;
+// 2. Define the test function
+function runEmailTest() {
+  // These keys must match the {{variable_names}} in your EmailJS template
+  const templateParams = {
+    to_name: "Tester",
+    message: "If you see this, EmailJS is working perfectly!",
+    from_name: "My App Test"
+  };
 
-console.log('🔍 TESTING MONGODB CONNECTION');
-console.log('==============================');
-console.log('URI:', MONGODB_URI ? MONGODB_URI.replace(/:[^:@]*@/, ':****@') : 'NOT SET');
-console.log('');
-
-async function testConnection() {
-  try {
-    console.log('Connecting...');
-    await mongoose.connect(MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 5000,
+  // 3. Send the email
+  emailjs.send('YOUR_SERVICE_ID', 'YOUR_TEMPLATE_ID', templateParams)
+    .then((response) => {
+      console.log('SUCCESS!', response.status, response.text);
+      alert('Test Email Sent!');
+    })
+    .catch((error) => {
+      console.error('FAILED...', error);
+      alert('Check the console for error details.');
     });
-    console.log('✅ SUCCESS! Connected to MongoDB');
-    console.log('Database:', mongoose.connection.name);
-    console.log('Host:', mongoose.connection.host);
-    process.exit(0);
-  } catch (err) {
-    console.error('❌ FAILED!');
-    console.error('Error Code:', err.code);
-    console.error('Error Name:', err.name);
-    console.error('Error Message:', err.message);
-    
-    if (err.message.includes('Authentication failed')) {
-      console.log('\n🔑 FIX: Username/Password issue');
-      console.log('   Make sure password has %40 instead of @');
-    }
-    if (err.message.includes('getaddrinfo')) {
-      console.log('\n🌐 FIX: Cluster name issue');
-      console.log('   Should be: cluster0.j2qik61.mongodb.net');
-    }
-    if (err.message.includes('timed out')) {
-      console.log('\n🔓 FIX: Network Access issue');
-      console.log('   Add 0.0.0.0/0 to MongoDB Atlas Network Access');
-    }
-    process.exit(1);
-  }
 }
 
-testConnection();
+// 4. Run the test (you can also hook this to a button click)
+runEmailTest();

@@ -8,7 +8,7 @@ const multer = require('multer');
 const sharp = require('sharp');
 const fs = require('fs').promises;
 const bcrypt = require('bcryptjs');
-const crypto = require('crypto');
+const axios = require('axios');
 
 const app = express();
 const server = http.createServer(app);
@@ -32,12 +32,20 @@ const OWNER_EMAIL = process.env.OWNER_EMAIL || 'misha037@hsd.k12.or.us';
 const OWNER_FULLNAME = process.env.OWNER_FULLNAME || 'Aashish Mishra';
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
+// EmailJS Configuration
+const EMAILJS_SERVICE_ID = 'blackchat_conformation';
+const EMAILJS_TEMPLATE_ID = 'template_nngetk9';
+const EMAILJS_PUBLIC_KEY = process.env.EMAILJS_PUBLIC_KEY || 'your_public_key';
+const EMAILJS_PRIVATE_KEY = process.env.EMAILJS_PRIVATE_KEY || 'your_private_key';
+
 console.log('\n' + '='.repeat(70));
 console.log('🚀 BLACK HOLE CHAT V2 - SERVER STARTING');
 console.log('='.repeat(70));
 console.log(`📡 Port: ${PORT}`);
 console.log(`👑 Owner: ${OWNER_USERNAME} (${OWNER_FULLNAME})`);
 console.log(`📧 Owner Email: ${OWNER_EMAIL}`);
+console.log(`📧 EmailJS Service: ${EMAILJS_SERVICE_ID}`);
+console.log(`📧 EmailJS Template: ${EMAILJS_TEMPLATE_ID}`);
 console.log(`🔑 Admin Password: ${ADMIN_PASSWORD ? '****' : 'default'}`);
 console.log(`🌍 Environment: ${NODE_ENV}`);
 console.log('='.repeat(70) + '\n');
@@ -428,11 +436,56 @@ async function loadInitialData() {
 connectToMongoDB();
 
 // ============================================
-// 📧 EMAIL VERIFICATION SETUP
+// 📧 EMAIL VERIFICATION WITH EMAILJS
 // ============================================
 
 function generateVerificationCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+async function sendVerificationEmail(email, code, fullName, username) {
+  try {
+    console.log(`📧 Attempting to send verification email to ${email}...`);
+    
+    const now = new Date();
+    const timeString = now.toLocaleString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric',
+      hour: '2-digit', 
+      minute: '2-digit'
+    });
+    
+    const response = await axios.post('https://api.emailjs.com/api/v1.0/email/send', {
+      service_id: EMAILJS_SERVICE_ID,
+      template_id: EMAILJS_TEMPLATE_ID,
+      user_id: EMAILJS_PUBLIC_KEY,
+      accessToken: EMAILJS_PRIVATE_KEY,
+      template_params: {
+        name: fullName,
+        time: timeString,
+        message: `Your verification code is: ${code}. Please enter this code to complete your registration. This code will expire in 10 minutes.`,
+        to_email: email,
+        from_name: 'Black Hole Chat V2',
+        reply_to: 'noreply@blackholechat.com'
+      }
+    });
+
+    if (response.status === 200) {
+      console.log(`✅ Verification email sent successfully to ${email}`);
+      return true;
+    } else {
+      console.error(`❌ EmailJS returned status: ${response.status}`);
+      return false;
+    }
+  } catch (error) {
+    console.error('❌ Failed to send verification email:', error.message);
+    if (error.response) {
+      console.error('EmailJS Error Details:', error.response.data);
+    }
+    console.log(`⚠️ Email sending failed, but code ${code} generated for ${email}`);
+    return false;
+  }
 }
 
 // ============================================
@@ -1073,12 +1126,21 @@ io.on('connection', (socket) => {
         password: hashedPassword
       });
       
-      console.log(`📧 Verification code ${code} for ${email} (user: ${username})`);
+      const emailSent = await sendVerificationEmail(email, code, fullName, username);
       
-      socket.emit('verification_sent', { 
-        message: 'Verification code generated',
-        email 
-      });
+      if (emailSent) {
+        socket.emit('verification_sent', { 
+          message: 'Verification code sent to your email',
+          email 
+        });
+        console.log(`📧 Verification code sent to ${email} for user ${username}`);
+      } else {
+        socket.emit('verification_sent', { 
+          message: `Verification code: ${code} (Email sending failed - check EmailJS configuration)`,
+          email 
+        });
+        console.log(`⚠️ Email sending failed, but code ${code} generated for ${email}`);
+      }
       
     } catch (err) {
       console.error('Verification request error:', err);
@@ -2671,13 +2733,15 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n📡 Port: ${PORT}`);
   console.log(`👑 Owner: ${OWNER_USERNAME} (${OWNER_FULLNAME})`);
   console.log(`📧 Owner Email: ${OWNER_EMAIL}`);
+  console.log(`📧 EmailJS Service: ${EMAILJS_SERVICE_ID}`);
+  console.log(`📧 EmailJS Template: ${EMAILJS_TEMPLATE_ID}`);
   console.log(`📊 Rank System:`);
   console.log(`   1. 👑 Owner - Can see ALL private messages, Video enabled, Can grant any rank, Can clear chat, Can bypass room passwords, Can delete any user`);
   console.log(`   2. 👮 Admin - Can grant moderator/vip/member, CANNOT grant admin, CANNOT demote other admins, CANNOT clear chat`);
   console.log(`   3. 🛡️ Moderator - Can ban/mute/warn users with lower rank, Cannot grant ranks`);
   console.log(`   4. ⭐ VIP - Video enabled, AI access, Image generation`);
   console.log(`   5. 👤 Member - Basic access, Video disabled, AI disabled`);
-  console.log(`📧 Email Verification: Required for new accounts`);
+  console.log(`📧 Email Verification: Required for new accounts (via EmailJS)`);
   console.log(`⏱️ Unverified users: Limited to 5 messages per 10 minutes`);
   console.log(`🎥 Video Chat: Now shows your own camera and others' feeds`);
   console.log(`⚠️ Warn Command: Available for Moderator+`);

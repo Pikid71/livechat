@@ -1844,7 +1844,7 @@
 
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
-        // ========== BLACK HOLE CHAT V2 - COMPLETE CLIENT ==========
+        // ========== BLACK HOLE CHAT V2 - COMPLETE CLIENT WITH EMAIL VERIFICATION ==========
         
         // Socket.IO connection
         const socket = io();
@@ -4265,7 +4265,6 @@
         });
         
         socket.on('user_data', (data) => {
-            // Store user data for admin view
             if (data.username && data.email) {
                 allUsersData.set(data.username, {
                     email: data.email,
@@ -4386,7 +4385,6 @@
         function joinRoom(roomName, hasPassword = false) {
             if (hasPassword) {
                 if (isOwner) {
-                    // Owner can bypass password
                     socket.emit('join_room', { roomName, password: '' });
                     showToast('👑 Owner bypassed room password');
                 } else {
@@ -4692,7 +4690,7 @@
                 <div class="help-section">
                     <div class="help-title">📊 RANK SYSTEM (Lower number = Higher rank)</div>
                     <div><span class="help-rank owner">OWNER (1)</span> <span class="help-desc">- Can see ALL private messages, Video enabled, Can ban anyone, Can grant any rank, Can clear chat, Can delete users, Can bypass room passwords</span></div>
-                    <div><span class="help-rank admin">ADMIN (2)</span> <span class="help-desc">- Can see messages from rank 3-5, Video enabled, Can ban rank 3-5, Can grant mod/vip/member, Can delete rooms, CANNOT demote other admins</span></div>
+                    <div><span class="help-rank admin">ADMIN (2)</span> <span class="help-desc">- Can see messages from rank 3-5, Video enabled, Can ban rank 3-5, Can grant mod/vip/member, Can delete rooms, CANNOT demote other admins, CANNOT clear chat</span></div>
                     <div><span class="help-rank mod">MOD (3)</span> <span class="help-desc">- Can see messages from rank 4-5, Video enabled, Can ban rank 4-5, Can warn users</span></div>
                     <div><span class="help-rank vip">VIP (4)</span> <span class="help-desc">- Can see only their own messages, Video enabled, AI access, Image generation</span></div>
                     <div><span class="help-rank member">MEMBER (5)</span> <span class="help-desc">- Can see only their own messages, Video disabled, AI disabled, Image disabled</span></div>
@@ -4848,17 +4846,19 @@
                     ${data.roomUsers.map(user => {
                         let extraInfo = '';
                         if (isAdmin || isOwner) {
-                            extraInfo = `<div style="font-size: 10px; color: #888;">${user.email || 'No email'} | ${user.fullName || ''}</div>`;
+                            extraInfo = `<div style="font-size: 10px; color: #888;">📧 ${user.email || 'No email'} | 👤 ${user.fullName || ''}</div>`;
                         } else if (isModerator) {
-                            extraInfo = `<div style="font-size: 10px; color: #888;">${user.fullName || ''}</div>`;
+                            extraInfo = `<div style="font-size: 10px; color: #888;">👤 ${user.fullName || ''}</div>`;
                         }
                         return `
                             <div style="display: flex; align-items: center; margin: 8px 0; padding: 6px 10px; background: rgba(74, 222, 128, 0.1); border-radius: 8px;">
                                 <span style="font-size: 16px; margin-right: 10px;">🟢</span>
                                 <div style="flex: 1;">
-                                    <span style="font-weight: bold; color: #4ade80;">${user.username}</span>
-                                    ${getRankBadge(user.rank)}
-                                    <span style="margin-left: auto; font-size: 11px; color: #888;">Level ${getRankLevel(user.rank)}</span>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <span style="font-weight: bold; color: #4ade80;">${user.username}</span>
+                                        ${getRankBadge(user.rank)}
+                                        <span style="font-size: 11px; color: #888;">Level ${getRankLevel(user.rank)}</span>
+                                    </div>
                                     ${extraInfo}
                                 </div>
                             </div>
@@ -4876,19 +4876,21 @@
                     ${data.otherRoomUsers.map(user => {
                         let extraInfo = '';
                         if (isAdmin || isOwner) {
-                            extraInfo = `<div style="font-size: 10px; color: #888;">${user.email || 'No email'} | ${user.fullName || ''}</div>`;
+                            extraInfo = `<div style="font-size: 10px; color: #888;">📧 ${user.email || 'No email'} | 👤 ${user.fullName || ''}</div>`;
                         } else if (isModerator) {
-                            extraInfo = `<div style="font-size: 10px; color: #888;">${user.fullName || ''}</div>`;
+                            extraInfo = `<div style="font-size: 10px; color: #888;">👤 ${user.fullName || ''}</div>`;
                         }
                         return `
                             <div style="display: flex; align-items: center; margin: 8px 0; padding: 6px 10px; background: rgba(255, 170, 0, 0.1); border-radius: 8px;">
                                 <span style="font-size: 16px; margin-right: 10px;">🟡</span>
                                 <div style="flex: 1;">
-                                    <span style="font-weight: bold; color: #ffaa00;">${user.username}</span>
-                                    ${getRankBadge(user.rank)}
-                                    <span style="margin-left: auto; font-size: 11px; background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 12px;">
-                                        📍 ${user.room}
-                                    </span>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <span style="font-weight: bold; color: #ffaa00;">${user.username}</span>
+                                        ${getRankBadge(user.rank)}
+                                        <span style="font-size: 11px; background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 12px;">
+                                            📍 ${user.room}
+                                        </span>
+                                    </div>
                                     ${extraInfo}
                                 </div>
                             </div>
@@ -4903,16 +4905,18 @@
                         <span>🔴 OFFLINE</span>
                         <span style="font-size: 12px; color: #888;">(${data.notOnlineUsers.length})</span>
                     </div>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px;">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px;">
                         ${data.notOnlineUsers.map(user => {
                             let extraInfo = '';
                             if (isAdmin || isOwner) {
-                                extraInfo = `<div style="font-size: 10px; color: #888;">${user.email || 'No email'}</div>`;
+                                extraInfo = `<div style="font-size: 10px; color: #888;">📧 ${user.email || 'No email'}</div>`;
+                            } else if (isModerator) {
+                                extraInfo = `<div style="font-size: 10px; color: #888;">👤 ${user.fullName || ''}</div>`;
                             }
                             return `
-                                <div style="display: flex; flex-direction: column; padding: 6px 10px; background: rgba(255, 68, 68, 0.1); border-radius: 8px;">
-                                    <div style="display: flex; align-items: center;">
-                                        <span style="font-size: 14px; margin-right: 8px;">🔴</span>
+                                <div style="display: flex; flex-direction: column; padding: 8px; background: rgba(255, 68, 68, 0.1); border-radius: 8px;">
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <span style="font-size: 14px;">🔴</span>
                                         <span style="color: #ff8888;">${user.username}</span>
                                         ${getRankBadge(user.rank)}
                                     </div>
@@ -4936,7 +4940,7 @@
                     <span>🟡 Online elsewhere</span> • 
                     <span>🔴 Offline</span>
                     ${isAdmin || isOwner ? '<br>📧 Email shown for Admin+' : ''}
-                    ${isModerator ? '<br>📝 Name shown for Moderator+' : ''}
+                    ${isModerator ? '<br>👤 Name shown for Moderator+' : ''}
                 </div>
             `;
             
@@ -5027,7 +5031,6 @@
             const targetLevel = getRankLevel(targetRank);
             const userLevel = getRankLevel(currentRank);
             
-            // Check if trying to ban admin (admin cannot ban other admins)
             if (targetRank === 'admin' && !isOwner) {
                 addSystemMessage('❌ Cannot ban other admins');
                 return;
@@ -5042,8 +5045,6 @@
             if (args.length >= 2) {
                 if (/^\d+[hmd]?$/.test(args[1])) {
                     duration = args[1];
-                } else {
-                    duration = '10m';
                 }
             }
             
@@ -5075,7 +5076,6 @@
             const targetLevel = getRankLevel(targetRank);
             const userLevel = getRankLevel(currentRank);
             
-            // Check if trying to mute admin (admin cannot mute other admins)
             if (targetRank === 'admin' && !isOwner) {
                 addSystemMessage('❌ Cannot mute other admins');
                 return;
@@ -5123,7 +5123,6 @@
             const targetLevel = getRankLevel(targetRank);
             const userLevel = getRankLevel(currentRank);
             
-            // Check if trying to warn admin (admin cannot warn other admins)
             if (targetRank === 'admin' && !isOwner) {
                 addSystemMessage('❌ Cannot warn other admins');
                 return;
@@ -5266,7 +5265,6 @@
             const targetUser = args[0];
             const newRank = args[1].toLowerCase();
             
-            // Admin cannot grant admin rank
             if (newRank === 'admin' && !isOwner) {
                 addSystemMessage('❌ Only the owner can grant admin rank');
                 return;
@@ -5393,7 +5391,6 @@
         socket.on('room_effect', (data) => {
             addSystemMessage(`✨ ${data.triggeredBy} triggered: ${data.effect}`);
             
-            // Stop previous effect if it's a different one
             if (currentEffect !== data.effect) {
                 stopAllEffects();
                 currentEffect = data.effect;
@@ -5510,9 +5507,9 @@
                 
                 let extraInfo = '';
                 if (isAdmin || isOwner) {
-                    extraInfo = `<div class="user-email">${userData.email || ''} | ${userData.fullName || ''}</div>`;
+                    extraInfo = `<div class="user-email">📧 ${userData.email || 'No email'} | 👤 ${userData.fullName || ''}</div>`;
                 } else if (isModerator) {
-                    extraInfo = `<div class="user-email">${userData.fullName || ''}</div>`;
+                    extraInfo = `<div class="user-email">👤 ${userData.fullName || ''}</div>`;
                 }
                 
                 const canWarn = isModerator && userLevel > currentUserLevel && user.rank !== 'admin';
@@ -5522,9 +5519,11 @@
                     <div class="user-list-item">
                         <div class="user-info-modal">
                             <div>
-                                <span>${user.username}</span>
-                                ${getRankBadge(user.rank)}
-                                <span style="font-size: 10px; color: #888;">Rank ${userLevel}</span>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span>${user.username}</span>
+                                    ${getRankBadge(user.rank)}
+                                    <span style="font-size: 10px; color: #888;">Rank ${userLevel}</span>
+                                </div>
                                 ${extraInfo}
                             </div>
                         </div>
