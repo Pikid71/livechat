@@ -42,13 +42,13 @@ services:
       
       # EmailJS Configuration
       - key: EMAILJS_SERVICE_ID
-        value: blackchat_conformation
+        value: blackchat_conformation_2
       - key: EMAILJS_TEMPLATE_ID
         value: template_nngetk9
       - key: EMAILJS_PUBLIC_KEY
-        value: your_emailjs_public_key_here
+        value: Zi5I8MmdRUaaatDte
       - key: EMAILJS_PRIVATE_KEY
-        value: your_emailjs_private_key_here
+        value: 2m1Wd-AWA0iuceSRaurt6
       
       # OpenRouter AI API Key
       - key: OPENROUTER_API_KEY
