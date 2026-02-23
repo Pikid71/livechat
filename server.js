@@ -968,7 +968,7 @@ io.on('connection', (socket) => {
       }
       
       const hashedPassword = await bcrypt.hash(password, 10);
-      const userRank = (email === OWNER_EMAIL) ? 'owner' : 'member';
+      let userRank = (email === OWNER_EMAIL) ? 'owner' : 'member';
       
       // Create user in MongoDB if connected
       if (isMongoConnected && User) {
