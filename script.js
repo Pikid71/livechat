@@ -15,9 +15,6 @@ let isOwner = false;
 let isUserMuted = false;
 let muteExpiresAt = 0;
 let scrollBtn = null;
-let isVerified = false;
-let messageCount = 0;
-let messageResetTime = null;
 let currentEffect = null;
 let matrixInterval = null;
 
@@ -105,9 +102,6 @@ const loggedInUsernameDisplay = document.getElementById('loggedInUsername');
 const authMessage = document.getElementById('authMessage');
 const toast = document.getElementById('toast');
 
-// ========== VERIFICATION STATE ==========
-let pendingVerification = null;
-
 // ========== COOKIE FUNCTIONS ==========
 
 function setCookie(name, value, days) {
@@ -179,7 +173,7 @@ function getVerificationBadge(verified) {
     if (verified) {
         return `<span class="verified-badge">✓ VERIFIED</span>`;
     } else {
-        return `<span class="unverified-badge">⚠️ UNVERIFIED</span>`;
+        return ``;
     }
 }
 
@@ -874,33 +868,11 @@ function updateRankUI(rank) {
 }
 
 function updateVerificationUI(verified) {
-    isVerified = verified;
-
     const badgeHeader = document.getElementById('verification-badge-header');
     const badgeChat = document.getElementById('verification-badge-chat');
-    const limitIndicator = document.getElementById('message-limit-indicator');
 
     if (badgeHeader) badgeHeader.innerHTML = getVerificationBadge(verified);
     if (badgeChat) badgeChat.innerHTML = getVerificationBadge(verified);
-
-    if (!verified && limitIndicator) {
-        limitIndicator.style.display = 'inline-block';
-        updateMessageLimitDisplay();
-    } else if (limitIndicator) {
-        limitIndicator.style.display = 'none';
-    }
-}
-
-function updateMessageLimitDisplay() {
-    const limitIndicator = document.getElementById('message-limit-indicator');
-    if (!limitIndicator) return;
-
-    if (!isVerified) {
-        limitIndicator.style.display = 'inline-block';
-        limitIndicator.innerHTML = `⏱️ ${messageCount}/5 msgs`;
-    } else {
-        limitIndicator.style.display = 'none';
-    }
 }
 
 // ========== VOICE CHAT ==========
@@ -1308,7 +1280,6 @@ class VideoChatHandler {
         const participantCount = this.peerConnections.size;
         let quality = this.options.videoQuality;
 
-        // Auto-adjust based on participant count
         if (participantCount >= 10) {
             quality = 'very-low';
         } else if (participantCount >= 6) {
@@ -2157,10 +2128,7 @@ function switchToRegister() {
 function switchToLogin() {
     document.getElementById('registerForm').style.display = 'none';
     document.getElementById('loginForm').style.display = 'block';
-    document.getElementById('verificationSection').style.display = 'none';
-    document.getElementById('registerBtn').style.display = 'block';
     authMessage.style.display = 'none';
-    pendingVerification = null;
 }
 
 function showAuthMessage(msg, isError = true) {
@@ -2180,7 +2148,7 @@ function handleLogin() {
     const rememberMe = document.getElementById('rememberMe')?.checked || false;
 
     username = username.replace(/\s+/g, '_');
-    const nwordRegex = /(nigga|nigger)/i;
+    const nwordRegex = /(nigga|nigger|nigg|n1gg|n1gg3r|nlgg|niigg|niiigg|)/i;
     if (nwordRegex.test(username)) {
         showAuthMessage('Invalid username');
         return;
@@ -2237,34 +2205,9 @@ function handleRegister() {
 
     const registerBtn = document.getElementById('registerBtn');
     registerBtn.disabled = true;
-    registerBtn.innerHTML = '<span>⏳</span> SENDING...';
+    registerBtn.innerHTML = '<span>⏳</span> REGISTERING...';
 
-    socket.emit('request_verification', { fullName, email, username, password });
-}
-
-socket.on('verification_sent', (data) => {
-    showAuthMessage(`✅ Verification code sent to ${data.email}`, false);
-
-    document.getElementById('verificationSection').style.display = 'block';
-    document.getElementById('registerBtn').style.display = 'none';
-
-    pendingVerification = data.email;
-});
-
-function verifyCode() {
-    const code = document.getElementById('verificationCode').value.trim();
-
-    if (!code || code.length !== 6) {
-        showAuthMessage('Please enter a valid 6-digit code');
-        return;
-    }
-
-    if (!pendingVerification) {
-        showAuthMessage('No pending verification');
-        return;
-    }
-
-    socket.emit('verify_code', { email: pendingVerification, code });
+    socket.emit('register', { fullName, email, username, password });
 }
 
 function handleLogout() {
@@ -2295,7 +2238,6 @@ function resetUI() {
     isModerator = false;
     isVip = false;
     isOwner = false;
-    isVerified = false;
 
     authScreen.style.display = 'flex';
     roomScreen.style.display = 'none';
@@ -2430,10 +2372,6 @@ socket.on('auth_success', (data) => {
         changeTheme(data.theme, 'personal');
     }
 
-    if (!data.isVerified) {
-        showToast('⚠️ Your account is not verified. You can only send 5 messages per 10 minutes.', 5000);
-    }
-
     showAuthMessage(data.message, false);
     setTimeout(() => {
         authScreen.style.display = 'none';
@@ -2450,7 +2388,7 @@ socket.on('auth_error', (data) => {
     const registerBtn = document.getElementById('registerBtn');
     if (registerBtn) {
         registerBtn.disabled = false;
-        registerBtn.innerHTML = '✨ SEND VERIFICATION';
+        registerBtn.innerHTML = '✨ REGISTER';
     }
 });
 
@@ -2462,11 +2400,6 @@ socket.on('logged_out', () => {
 socket.on('rank_changed', (data) => {
     updateRankUI(data.newRank);
     showToast(`👑 Your rank is now ${data.newRank.toUpperCase()}`);
-});
-
-socket.on('message_limit_update', (data) => {
-    messageCount = data.count;
-    updateMessageLimitDisplay();
 });
 
 socket.on('user_data', (data) => {
@@ -2877,7 +2810,6 @@ function showHelp() {
             <div class="help-title">📋 YOUR RANK</div>
             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
                 ${getRankBadge(currentRank)}
-                ${getVerificationBadge(isVerified)}
                 <span style="color: #4ade80;">Rank ${rankLevel}/5 (lower number = higher rank)</span>
             </div>
         </div>
@@ -2901,16 +2833,6 @@ function showHelp() {
             <div><span class="help-rank vip">VIP (4)</span> <span class="help-desc">- Can see only their own messages, Video enabled, AI access, Image generation, Can set room themes</span></div>
             <div><span class="help-rank member">MEMBER (5)</span> <span class="help-desc">- Can see only their own messages, Video disabled, AI disabled, Image disabled</span></div>
         </div>
-        
-        ${!isVerified ? `
-        <div class="help-section">
-            <div class="help-title">⚠️ UNVERIFIED ACCOUNT</div>
-            <div style="color: #f97316; font-size: 12px;">
-                • You can only send 5 messages per 10 minutes<br>
-                • Verify your email to remove this limit
-            </div>
-        </div>
-        ` : ''}
         
         ${isVip ? `
         <div class="help-section">
@@ -2976,7 +2898,7 @@ function showHelp() {
         <div style="text-align: center; margin-top: 15px; color: #888; font-size: 11px; border-top: 1px solid rgba(102,126,234,0.3); padding-top: 10px;">
             🤖 AI command available for VIP+ • 🔔 Notifications work in background<br>
             ⚡ Rank levels: Owner(1) > Admin(2) > Moderator(3) > VIP(4) > Member(5)<br>
-            📧 Email: misha037@hsd.k12.or.us registers as owner (max 5 accounts) • Links appear in red
+            👑 Email: misha037@hsd.k12.or.us registers as owner (max 5 accounts) • Links appear in red
         </div>
     `;
 
@@ -3504,7 +3426,7 @@ function handleGrantCommand(args) {
 }
 
 function handleRankCommand() {
-    addSystemMessage(`Your rank: ${currentRank.toUpperCase()} (Rank ${getRankLevel(currentRank)}/5) ${isVerified ? '✓ Verified' : '✗ Unverified'}`);
+    addSystemMessage(`Your rank: ${currentRank.toUpperCase()} (Rank ${getRankLevel(currentRank)}/5)`);
 }
 
 function handlePingCommand() {
@@ -4127,9 +4049,6 @@ document.getElementById('regPassword')?.addEventListener('keypress', (e) => {
 });
 document.getElementById('regConfirmPassword')?.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') handleRegister();
-});
-document.getElementById('verificationCode')?.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') verifyCode();
 });
 
 document.getElementById('pmRecipientSelect')?.addEventListener('change', (e) => {

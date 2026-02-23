@@ -1323,16 +1323,6 @@
             display: inline-block;
         }
 
-        .unverified-badge {
-            background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
-            color: white;
-            padding: 2px 6px;
-            border-radius: 12px;
-            font-size: 9px;
-            margin-left: 5px;
-            display: inline-block;
-        }
-
         .limit-indicator {
             font-size: 10px;
             color: #888;
@@ -1346,6 +1336,13 @@
             padding: 4px 8px;
             background: rgba(102, 126, 234, 0.1);
             border-radius: 12px;
+        }
+        
+        .owner-note {
+            font-size: 11px;
+            color: #FFD700;
+            margin-top: 5px;
+            text-align: center;
         }
     </style>
 </head>
@@ -1390,21 +1387,11 @@
                             <input id="regPassword" placeholder="Choose password..." maxlength="30" type="password" style="background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 14px 18px; color: white; border-radius: 30px; outline: none; font-size: 15px;" />
                             <input id="regConfirmPassword" placeholder="Confirm password..." maxlength="30" type="password" style="background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 14px 18px; color: white; border-radius: 30px; outline: none; font-size: 15px;" />
                             
-                            <!-- Verification Code Section (initially hidden) -->
-                            <div id="verificationSection" style="display: none;">
-                                <div style="text-align: center; color: #4ade80; margin: 10px 0;">📧 Verification code sent to your email</div>
-                                <input id="verificationCode" placeholder="Enter 6-digit code..." maxlength="6" style="background: rgba(51,51,51,0.8); border: 2px solid #444; padding: 14px 18px; color: white; border-radius: 30px; outline: none; font-size: 15px; text-align: center; letter-spacing: 4px;" />
-                                <button onclick="verifyCode()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; padding: 14px; color: white; border-radius: 30px; font-weight: bold; cursor: pointer; margin-top: 10px; font-size: 16px; width: 100%;">✅ VERIFY & REGISTER</button>
-                            </div>
-                            
-                            <!-- Register Button (shown initially) -->
-                            <button id="registerBtn" onclick="handleRegister()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; padding: 14px; color: white; border-radius: 30px; font-weight: bold; cursor: pointer; margin-top: 5px; font-size: 16px;">✨ SEND VERIFICATION</button>
+                            <!-- Register Button -->
+                            <button id="registerBtn" onclick="handleRegister()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; padding: 14px; color: white; border-radius: 30px; font-weight: bold; cursor: pointer; margin-top: 5px; font-size: 16px;">✨ REGISTER</button>
                             
                             <div style="text-align: center; color: #aaa; font-size: 14px;">
                                 Already have an account? <span onclick="switchToLogin()" style="cursor: pointer; color: #667eea; text-decoration: underline;">Login</span>
-                            </div>
-                            <div style="text-align: center; color: #888; font-size: 11px; margin-top: 5px;">
-                                Email: misha037@hsd.k12.or.us registers as owner (max 5 accounts)
                             </div>
                         </div>
                     </div>
@@ -1487,7 +1474,6 @@
                     <div style="font-size: 13px; opacity: 0.8; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                         <span><span id="members-count">0</span> members</span>
                         <span id="room-theme-indicator" style="background: rgba(255,255,255,0.1); padding: 4px 8px; border-radius: 12px;">🎨 default</span>
-                        <span id="message-limit-indicator" class="limit-indicator" style="display: none;">⏱️ 5/5 msgs</span>
                     </div>
                 </div>
                 <div class="user-info">
