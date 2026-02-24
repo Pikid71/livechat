@@ -31,9 +31,9 @@ services:
       - key: UPLOAD_PATH
         value: ./uploads
       
-      # Owner Email (accounts with this email become owner)
-      - key: OWNER_EMAIL
-        value: misha037@hsd.k12.or.us
+      # Owner username is defined via OWNER_USERNAME (email not used)
+      - key: OWNER_USERNAME
+        value: Pi_Kid71
       
       # OpenRouter AI API Key
       - key: OPENROUTER_API_KEY

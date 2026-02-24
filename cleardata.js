@@ -8,8 +8,7 @@ const bcrypt = require('bcryptjs');
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://livechatdb:A%40sh1shmongodb@cluster0.j2qik61.mongodb.net/blackholechat?retryWrites=true&w=majority';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'A@sh1shlivechat';
 const OWNER_USERNAME = process.env.OWNER_USERNAME || 'Pi_Kid71';
-const OWNER_EMAIL = process.env.OWNER_EMAIL || 'misha037@hsd.k12.or.us';
-const OWNER_FULLNAME = process.env.OWNER_FULLNAME || 'Aashish Mishra';
+const OWNER_FULLNAME = process.env.OWNER_FULLNAME || 'Aashish Mishra'; // email no longer used
 
 console.log('\n' + '='.repeat(60));
 console.log('🔄 RESET DATABASE WITH DEFAULTS');
@@ -19,7 +18,7 @@ console.log('='.repeat(60));
 const UserSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   fullName: { type: String, required: true },
-  email: { type: String, required: true, unique: true },
+  // email removed
   password: { type: String, required: true },
   rank: { type: String, enum: ['owner', 'admin', 'moderator', 'vip', 'member'], default: 'member' },
   createdAt: { type: Date, default: Date.now },
@@ -52,6 +51,21 @@ async function resetDatabase() {
     for (let collection of collections) {
       await collection.drop();
       console.log(`   ✅ Dropped: ${collection.collectionName}`);
+    }
+
+    // recreate owner account
+    const User = mongoose.model('User', UserSchema);
+    const existing = await User.findOne({ username: OWNER_USERNAME });
+    if (!existing) {
+      const hashed = await bcrypt.hash(ADMIN_PASSWORD, 10);
+      await User.create({
+        username: OWNER_USERNAME,
+        fullName: OWNER_USERNAME,
+        password: hashed,
+        rank: 'owner',
+        isVerified: false
+      });
+      console.log(`   ✅ Created default owner account: ${OWNER_USERNAME}`);
     }
   } catch (err) {
     console.error('❌ Error:', err.message);

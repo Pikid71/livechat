@@ -25,14 +25,13 @@ const io = new Server(server, {
 // ============================================
 let MONGODB_URI = process.env.MONGODB_URI;
 const PORT = process.env.PORT || 3000;
-const OWNER_EMAIL = 'misha037@hsd.k12.or.us';
 const NODE_ENV = process.env.NODE_ENV || 'development';
-
+const OWNER_USERNAME = 'Pi_Kid71';
 console.log('\n' + '='.repeat(70));
 console.log('🚀 BLACK HOLE CHAT V2 - SERVER STARTING');
 console.log('='.repeat(70));
 console.log(`📡 Port: ${PORT}`);
-console.log(`👑 Owner Email: ${OWNER_EMAIL}`);
+console.log(`👑 Owner Username: ${OWNER_USERNAME}`);
 console.log(`🌍 Environment: ${NODE_ENV}`);
 console.log('='.repeat(70) + '\n');
 
@@ -129,6 +128,8 @@ async function connectToMongoDB() {
     console.log('✅✅✅ MONGODB ATLAS CONNECTED SUCCESSFULLY!');
     
     initializeModels();
+    // ensure owner account exists before loading other data
+    await ensureOwnerAccount();
     setTimeout(() => initializeDefaultRoom(), 2000);
     setTimeout(() => {
       try {
@@ -147,6 +148,42 @@ async function connectToMongoDB() {
   }
 }
 
+async function ensureOwnerAccount() {
+  // create owner user if missing; this runs after models are initialized
+  if (isMongoConnected && User) {
+    const existing = await User.findOne({ username: OWNER_USERNAME });
+    if (!existing) {
+      const defaultPass = process.env.OWNER_PASSWORD || 'A@sh1shlivechat';
+      const hashed = await bcrypt.hash(defaultPass, 10);
+      await User.create({
+        username: OWNER_USERNAME,
+        fullName: OWNER_USERNAME,
+        password: hashed,
+        rank: 'owner',
+        isVerified: true,
+        lastLogin: new Date()
+      });
+      console.log(`✅ Default owner account created (${OWNER_USERNAME})`);
+    }
+  } else {
+    // memory-only mode: ensure user exists in memory
+    if (!memoryStore.users.has(OWNER_USERNAME)) {
+      const defaultPass = process.env.OWNER_PASSWORD || 'A@sh1shlivechat';
+      const hashed = await bcrypt.hash(defaultPass, 10);
+      memoryStore.users.set(OWNER_USERNAME, {
+        username: OWNER_USERNAME,
+        fullName: OWNER_USERNAME,
+        password: hashed,
+        rank: 'owner',
+        theme: 'default',
+        isVerified: true,
+        deviceIds: []
+      });
+      console.log(`✅ Default owner account created in memory (${OWNER_USERNAME})`);
+    }
+  }
+}
+
 function initializeModels() {
   if (!isMongoConnected) return;
 
@@ -154,7 +191,7 @@ function initializeModels() {
     const UserSchema = new mongoose.Schema({
       username: { type: String, required: true, unique: true },
       fullName: { type: String, required: true },
-      email: { type: String, required: true, unique: true },
+      // email field removed; the application no longer tracks addresses
       password: { type: String, required: true },
       rank: { 
         type: String, 
@@ -304,7 +341,6 @@ async function loadInitialData() {
       memoryStore.users.set(u.username, {
         username: u.username,
         fullName: u.fullName,
-        email: u.email,
         password: u.password,
         rank: u.rank || 'member',
         theme: u.theme || 'default',
@@ -507,7 +543,7 @@ app.get('/stats', async (req, res) => {
   if (isMongoConnected && User && Room) {
     try {
       stats.users = await User.countDocuments();
-      stats.owners = await User.countDocuments({ email: OWNER_EMAIL });
+      stats.owners = await User.countDocuments({ rank: 'owner' });
       stats.rooms = await Room.countDocuments();
       stats.messages = await Message.countDocuments();
       stats.files = await FileModel.countDocuments();
@@ -541,7 +577,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     let fileType = req.file.mimetype;
 
     const user = isMongoConnected ? await User.findOne({ username: uploadedBy }) : null;
-    const isOwner = user && user.email === OWNER_EMAIL;
+    const isOwner = user && user.rank === 'owner';
 
     if (req.file.mimetype.startsWith('image/') && !isOwner) {
       try {
@@ -909,7 +945,6 @@ io.on('connection', (socket) => {
             memoryStore.users.set(username, {
               username: user.username,
               fullName: user.fullName,
-              email: user.email,
               password: user.password,
               rank: user.rank,
               theme: user.theme,
@@ -934,78 +969,63 @@ io.on('connection', (socket) => {
   
   socket.on('register', async (data) => {
     try {
-      const { fullName, email, username, password } = data;
-      
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
-        return socket.emit('auth_error', { message: 'Please enter a valid email address' });
+      // accept both casing from client, default to username if missing
+      let { fullName, fullname, username, password } = data;
+      fullName = fullName || fullname || username;
+
+      if (!username || !password) {
+        return socket.emit('auth_error', { message: 'Username and password are required' });
       }
-      
-      // Check if MongoDB is connected
+
+      // Check if MongoDB is connected and username is unique
       if (isMongoConnected && User) {
-        const existingUser = await User.findOne({ email });
-        if (existingUser) {
-          return socket.emit('auth_error', { message: 'Email already registered' });
-        }
-        
         const existingUsername = await User.findOne({ username });
         if (existingUsername) {
           return socket.emit('auth_error', { message: 'Username already taken' });
         }
-        
-        // Check owner email limits
-        if (email === OWNER_EMAIL) {
-          const ownerCount = await User.countDocuments({ email: OWNER_EMAIL });
-          if (ownerCount >= 5) {
-            return socket.emit('auth_error', { message: 'Maximum number of owner accounts (5) reached for this email' });
-          }
-        }
       } else {
-        // Memory-only mode - check if username exists in memory
         if (memoryStore.users.has(username)) {
           return socket.emit('auth_error', { message: 'Username already taken' });
         }
       }
-      
+
       const hashedPassword = await bcrypt.hash(password, 10);
-      let userRank = (email === OWNER_EMAIL) ? 'owner' : 'member';
-      
+      let userRank = (username === OWNER_USERNAME) ? 'owner' : 'member';
+
       // Create user in MongoDB if connected
       if (isMongoConnected && User) {
         await User.create({
           username,
           fullName,
-          email,
           password: hashedPassword,
           rank: userRank,
           isVerified: true,
           lastLogin: new Date()
         });
       }
-      
+
       // Add to memory store
       memoryStore.users.set(username, {
         username,
         fullName,
-        email,
         password: hashedPassword,
         rank: userRank,
         theme: 'default',
         isVerified: true,
         deviceIds: []
       });
-      
+
       // Auto login
       currentUser = username;
       userRank = userRank;
-      
+
       memoryStore.sessions.set(socket.id, { 
         username, 
         rank: userRank, 
         roomName: null,
         deviceId: null 
       });
-      
+
       socket.emit('auth_success', {
         username,
         rank: userRank,
@@ -1013,9 +1033,9 @@ io.on('connection', (socket) => {
         isVerified: true,
         message: 'Registration successful!'
       });
-      
-      console.log(`✅ User registered: ${username} (${email}) - Rank: ${userRank}`);
-      
+
+      console.log(`✅ User registered: ${username} (${fullName}) - Rank: ${userRank}`);
+
     } catch (err) {
       console.error('Registration error:', err);
       socket.emit('auth_error', { message: 'Failed to register: ' + err.message });
@@ -1085,8 +1105,7 @@ io.on('connection', (socket) => {
           users.push({
             username: session.username,
             rank: session.rank || 'member',
-            fullName: userData.fullName || '',
-            email: userData.email || ''
+            fullName: userData.fullName || ''
           });
         }
       }
@@ -1112,8 +1131,7 @@ io.on('connection', (socket) => {
           roomUsers.push({
             username: session.username,
             rank: session.rank || 'member',
-            fullName: userData.fullName || '',
-            email: userData.email || ''
+            fullName: userData.fullName || ''
           });
         }
       }
@@ -1146,15 +1164,13 @@ io.on('connection', (socket) => {
             username,
             rank: userRank,
             room: userRoom,
-            fullName: userData.fullName || '',
-            email: userData.email || ''
+            fullName: userData.fullName || ''
           });
         } else {
           notOnlineUsers.push({
             username,
             rank: userRank,
-            fullName: userData.fullName || '',
-            email: userData.email || ''
+            fullName: userData.fullName || ''
           });
         }
       });
@@ -2296,7 +2312,7 @@ io.on('connection', (socket) => {
         return socket.emit('error', { message: `User ${targetUser} not found` });
       }
       
-      if (targetUserData.email === OWNER_EMAIL && userRank !== 'owner') {
+      if (targetUserData.rank === 'owner' && userRank !== 'owner') {
         return socket.emit('error', { message: 'Cannot delete owner accounts' });
       }
       
@@ -2405,7 +2421,7 @@ io.on('connection', (socket) => {
         return socket.emit('error', { message: `User ${targetUser} not found` });
       }
       
-      if (targetUserData.email === OWNER_EMAIL && userRank !== 'owner') {
+      if (targetUserData.rank === 'owner' && userRank !== 'owner') {
         return socket.emit('error', { message: 'Cannot change owner\'s rank' });
       }
       
@@ -2617,14 +2633,14 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('🚀🚀🚀 BLACK HOLE CHAT V2 - SERVER RUNNING 🚀🚀🚀');
   console.log('='.repeat(70));
   console.log(`\n📡 Port: ${PORT}`);
-  console.log(`👑 Owner Email: ${OWNER_EMAIL} (accounts with this email become owner)`);
+  console.log(`👑 Owner Username: ${OWNER_USERNAME} (this account is owner)`);
   console.log(`📊 Rank System:`);
-  console.log(`   1. 👑 Owner - Email: ${OWNER_EMAIL}`);
+  console.log(`   1. 👑 Owner - assigned to ${OWNER_USERNAME}`);
   console.log(`   2. 👮 Admin - Can be granted by owner`);
   console.log(`   3. 🛡️ Moderator - Can be granted by admin+`);
   console.log(`   4. ⭐ VIP - Can be granted by admin+`);
   console.log(`   5. 👤 Member - Default rank for regular users`);
-  console.log(`📧 Email Registration: Required for new accounts`);
+  console.log(`📧 Email Registration: not used`);
   console.log(`🎥 Video Chat: Dynamic quality adjustment based on participant count`);
   console.log(`⚠️ Warn Command: Available for Moderator+`);
   console.log(`🎮 Effects: Last forever until new effect or /effect off`);

@@ -1,6 +1,6 @@
 # 🕳️ Black Hole Chat V2
 
-💡 **New features:** email verification codes are now sent to the user's address and include a clickable button/link for one‑click verification using `/verify`.
+💡 **Note:** email addresses are no longer collected or verified during registration.
 
 
 A full-featured real-time chat application with private messaging, voice/video chat, file sharing, and advanced moderation tools.
@@ -43,25 +43,7 @@ A full-featured real-time chat application with private messaging, voice/video c
 
 ## ⚙️ Environment Setup
 
-In addition to the existing variables below you can configure SMTP or EmailJS settings to enable outgoing mail for verification codes (optional but recommended):
-
-**SMTP (nodemailer) settings**
-```
-SMTP_HOST=smtp.example.com
-SMTP_PORT=587        # 465 for SSL
-SMTP_SECURE=false    # true if using port 465 or SSL
-SMTP_USER=you@example.com
-SMTP_PASS=your_smtp_password
-EMAIL_FROM="Chat <no-reply@example.com>"  # defaults to OWNER_EMAIL
-```
-
-**EmailJS settings** (preferred when using the EmailJS service)
-```
-EMAILJS_SERVICE_ID=blackchat_conformation   # service ID from EmailJS
-EMAILJS_TEMPLATE_ID=template_verification   # optional, defaults as shown
-EMAILJS_USER_ID=your_public_key            # public key found in EmailJS dashboard
-# (alternatively set EMAILJS_PUBLIC_KEY)
-```
+No email configuration is required; the app no longer sends or verifies email messages.
 
 `SITE_URL` is still honored when building the clickable verify link:
 ```
@@ -155,16 +137,12 @@ PORT=10000 (Render assigns dynamically)
 
 ### Health Check
 - `GET /health` - Server health status
-- `GET /verify?email=<email>&code=<code>` - link endpoint used by the verification email button
 
 ### Authentication & Chat
 - `POST /login` - User login (Socket.IO based)
-- `POST /register` - User registration (Socket.IO based, sends verification email)
+- `POST /register` - User registration (Socket.IO based)
 
-Socket events related to registration:
-  - `request_verification` - client asks server to generate code and send email
-  - `verification_sent` - server emits once the email was successfully queued (client waits up to 10 s for this event before showing a timeout error)
-  - `verification_error` - server emits if sending email failed (you can retry)
+Socket events related to registration are limited to `register`/`login` calls; no email flow is present.
 
 ### File Operations
 - `POST /upload` - Upload file with optional size optimization
