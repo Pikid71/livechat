@@ -1494,7 +1494,7 @@ io.on('connection', (socket) => {
     try {
       if (!currentUser || !currentRoom) return;
       
-      const { targetUser, warnerName } = data;
+      const { targetUser, warnerName, message: reason } = data;
       
       if (targetUser === currentUser) {
         return socket.emit('error', { message: 'Cannot warn yourself' });
@@ -1514,13 +1514,13 @@ io.on('connection', (socket) => {
       
       const warnMsg = {
         username: 'System',
-        message: `⚠️ WARNING: ${targetUser} was warned by ${warnerName}`,
+        message: `⚠️ WARNING: ${targetUser} was warned by ${warnerName}${reason ? ' – ' + reason : ''}`,
         timestamp: new Date(),
         rank: 'system'
       };
       
       io.to(currentRoom).emit('chat message', warnMsg);
-      io.to(currentRoom).emit('user_warned', { targetUser, warnerName, timestamp: new Date() });
+      io.to(currentRoom).emit('user_warned', { targetUser, warnerName, reason, timestamp: new Date() });
       
       console.log(`⚠️ ${targetUser} warned by ${warnerName} in ${currentRoom}`);
       

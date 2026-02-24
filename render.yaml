@@ -34,18 +34,24 @@ services:
       # Owner username is defined via OWNER_USERNAME (email not used)
       - key: OWNER_USERNAME
         value: Pi_Kid71
+      # Default owner password (used to auto-create owner account)
+      - key: OWNER_PASSWORD
+        value: A@sh1shlivechat
+      # Admin password for reset script (cleardata.js)
+      - key: ADMIN_PASSWORD
+        value: A@sh1shlivechat
       
       # OpenRouter AI API Key
       - key: OPENROUTER_API_KEY
-        value: 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
+        value: <your_openrouter_key_here>
       
       # DeAPI.ai Image Generation API Key
       - key: DEAPI_API_KEY
-        value: 3751|uCGk2V1KNsYc1pwOmWAhz2y4IJIt65BsJuXLUYQmfee6809f
+        value: <your_deapi_key_here>
       
-      # Stable Horde API Key (backup)
+      # Stable Horde API Key (optional backup)
       - key: STABLE_HORDE_API_KEY
-        value: 0da65d6c-00fb-4731-8424-9574cc5bf318
+        value: <your_stable_horde_key_here>
     
     disk:
       name: uploads

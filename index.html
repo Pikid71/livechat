@@ -2642,7 +2642,8 @@
             }
             
             handleUserJoined(data) {
-                addSystemMessage(`🎤 ${data.username} joined voice chat`);
+                const badge = getRankBadge(data.rank || 'member');
+                addSystemMessage(`🎤 ${data.username} ${badge} joined voice chat`);
                 this.createPeerConnection(data.userId);
             }
             
@@ -3157,7 +3158,8 @@
                 
                 try {
                     await this.createPeerConnection(data.userId, true, data.username, data.rank);
-                    showToast(`🎥 ${data.username} joined video`);
+                    const badge = getRankBadge(data.rank || 'member');
+                    showToast(`🎥 ${data.username} ${badge} joined video`);
                 } catch (err) {
                     console.error(`Failed to create connection to ${data.userId}:`, err);
                 }
@@ -4137,7 +4139,8 @@
         
         socket.on('user_joined', (data) => {
             document.getElementById('members-count').textContent = data.members;
-            addSystemMessage(`👋 ${data.username} (${data.rank || 'member'}) joined`);
+            const badge = getRankBadge(data.rank || 'member');
+            addSystemMessage(`👋 ${data.username} ${badge} joined`);
             sendNotification('👋 User Joined', `${data.username} joined the room`);
             updateOnlineUsers();
         });
@@ -4661,7 +4664,8 @@
             }
             
             socket.emit('warn_user', {
-                warnedUser: targetUser,
+                targetUser,
+                warnerName: currentUsername,
                 message: reason
             });
         }
@@ -5131,7 +5135,8 @@
             }
             const reason = prompt('Warning reason (optional):', '');
             socket.emit('warn_user', {
-                warnedUser: username,
+                targetUser: username,
+                warnerName: currentUsername,
                 message: reason || ''
             });
             closeModal('userListModal');
@@ -5319,6 +5324,12 @@
                     isVideoActive = false;
                 }
                 setTimeout(() => leaveRoom(), 2000);
+            }
+        });
+        
+        socket.on('user_warned', (data) => {
+            if (data.targetUser === currentUsername) {
+                showToast(`⚠️ You were warned by ${data.warnerName}`);
             }
         });
 
